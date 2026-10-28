@@ -1,3 +1,4 @@
+{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"no streaming session (Speech streaming failed: the backend is not configured.): the listening hears through the interpretation","type":"log"}
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled \"Floppy\"","type":"log"}
 {"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}

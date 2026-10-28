@@ -3,6 +3,7 @@
   "answers": [
     {
       "path": "/vad",
+      "audible": true,
       "status": 200,
       "body": {
         "segments": [
@@ -31,18 +32,24 @@
     },
     {
       "path": "/vad",
+      "audible": true,
       "status": 200,
       "body": {
         "segments": [
           {
             "start": 0.5,
-            "end": 0.6
+            "end": 0.55
+          },
+          {
+            "start": 1.0,
+            "end": 2.1
           }
         ]
       }
     },
     {
       "path": "/vad",
+      "audible": false,
       "status": 200,
       "body": {
         "segments": []

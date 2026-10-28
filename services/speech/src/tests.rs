@@ -159,7 +159,7 @@ fn malformed_parameters_reject_the_start() {
         ),
         (
             base("transcribe"),
-            "speech operation must be decode, encode, detect, diarize, identify, classify, normalize, append, or clip",
+            "speech operation must be decode, encode, stream, detect, diarize, identify, classify, normalize, append, or clip",
         ),
         (
             vec![("operation", text("decode")), ("audio", text("a"))],
@@ -170,7 +170,10 @@ fn malformed_parameters_reject_the_start() {
             "speech takes each parameter once",
         ),
         (
-            with("decode", &[("audio", text("a")), ("language", text("en"))]),
+            with(
+                "decode",
+                &[("audio", text("a")), ("temperature", text("0"))],
+            ),
             "speech takes no parameter of that name",
         ),
         (base("decode"), "speech decode requires an audio parameter"),
@@ -1252,4 +1255,39 @@ fn a_reply_said_in_several_requests_is_joined_without_a_pause() {
     );
     assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
     assert_eq!(written, [1, 0, 2, 0, 3, 0]);
+}
+
+#[test]
+fn a_stream_takes_language_and_chunk_seconds_only() {
+    let stream = |extra: &[(&'static str, Data)]| {
+        let mut parameters = vec![("operation", text("stream"))];
+        parameters.extend(extra.iter().cloned());
+        parse(&parameters)
+    };
+    assert_eq!(
+        stream(&[]),
+        Ok(Operation::Stream(crate::stream::Streaming {
+            language: "en".into(),
+            chunk: "0.56",
+        }))
+    );
+    assert!(matches!(
+        stream(&[("language", text("de")), ("chunk_seconds", Data::Number(scxml_types::FiniteNumber::new(0.16).expect("finite")))]),
+        Ok(Operation::Stream(streaming)) if streaming.language == "de" && streaming.chunk == "0.16"
+    ));
+    assert_eq!(
+        stream(&[("model", text("m"))]),
+        Err("speech stream takes language and chunk_seconds only")
+    );
+    assert_eq!(
+        stream(&[("language", Data::Bool(true))]),
+        Err("speech stream language must be a string")
+    );
+    assert_eq!(
+        parse(&with(
+            "decode",
+            &[("audio", text("media/a")), ("language", text("en"))]
+        )),
+        Err("speech takes language and chunk_seconds only to stream")
+    );
 }

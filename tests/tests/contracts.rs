@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 126] = [
+const ABILITY_EVENTS: [&str; 137] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -190,6 +190,8 @@ const ABILITY_EVENTS: [&str; 126] = [
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
+    // The transcription's turns, handed to the interpretation (D270).
+    "bot.ability.listening.transcription.turn",
     // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -214,6 +216,16 @@ const ABILITY_EVENTS: [&str; 126] = [
     "bot.ability.hearing.voice.identification.output",
     "bot.ability.hearing.speech.decoding.input",
     "bot.ability.hearing.speech.decoding.output",
+    "bot.ability.hearing.speech.stream.audio",
+    "bot.ability.hearing.speech.stream.failed",
+    "bot.ability.hearing.speech.stream.overlap",
+    "bot.ability.hearing.speech.stream.partial",
+    "bot.ability.hearing.speech.stream.producing",
+    "bot.ability.hearing.speech.stream.ready",
+    "bot.ability.hearing.speech.stream.transcript",
+    "bot.ability.hearing.speech.stream.turn_ended",
+    "bot.ability.hearing.speech.stream.voice_ended",
+    "bot.ability.hearing.speech.stream.voice_started",
     "bot.ability.classifying.input",
     "bot.ability.classifying.output",
     // The turn detector (the conversation's turn_detector stage).
@@ -617,10 +629,11 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
         floppy,
         BTreeSet::from([
             "bot.ability.learning.lesson".to_owned(),
+            "bot.ability.listening.transcription.turn".to_owned(),
             "bot.ability.migration.output".to_owned(),
             "bot.ability.ready".to_owned()
         ]),
-        "the floppy-only events: an ability's readiness, the migration ability's output and the learning's lesson"
+        "the floppy-only events: an ability's readiness, the migration ability's output, the learning's lesson and the transcription's turn"
     );
     for event in schemas.keys() {
         assert!(

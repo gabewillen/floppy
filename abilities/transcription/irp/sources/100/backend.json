@@ -1,0 +1,13 @@
+{
+  "clock": "wall",
+  "answers": [],
+  "websocket": [
+    [
+      [
+        {
+          "type": "ready"
+        }
+      ]
+    ]
+  ]
+}

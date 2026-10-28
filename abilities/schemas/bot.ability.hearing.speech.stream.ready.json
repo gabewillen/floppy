@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.ready",
+  "description": "The session can take audio.",
+  "properties": {},
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {}
+  ]
+}

@@ -1348,7 +1348,9 @@ fn speech_encoding_is_bounded_by_its_timeout() {
 /// `POST /v1/audio/speech` answers, after `latency`, a tenth of a second
 /// of raw 24 kHz mono 16-bit PCM (4800 bytes), and its request bodies are
 /// recorded. The answer comes once the whole clip is synthesized, so
-/// `latency` stands for a sentence's synthesis time.
+/// `latency` stands for a sentence's synthesis time. Any other request
+/// (the listening's streaming hearing session, `GET /v1/audio/stream`) is
+/// answered 404 unrecorded, a backend that does not stream.
 fn speech_backend(latency: Duration) -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
     use std::io::{BufRead as _, BufReader, Read as _, Write as _};
     let listener =
@@ -1364,6 +1366,17 @@ fn speech_backend(latency: Duration) -> (String, std::sync::Arc<std::sync::Mutex
             let Ok(mut stream) = stream else { continue };
             let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
             let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            if !line.starts_with("POST ") {
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                );
+                continue;
+            }
+            line.clear();
             let mut length = 0;
             while reader.read_line(&mut line).is_ok() && line != "\r\n" && !line.is_empty() {
                 if let Some((name, value)) = line.trim_end().split_once(':')

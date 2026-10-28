@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!-- The transcription document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/transcription/irp/sources">
+  <assert id="transcription-1" specnum="1" specid="#transcription-1">
+    <![CDATA[It opens a streaming hearing session (the speech service's operation `stream`) and, on the session's first `bot.ability.hearing.speech.stream.ready`, sends `bot.ability.ready` to its parent (decision D242).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="transcription-2" specnum="2" specid="#transcription-2">
+    <![CDATA[Each `bot.ability.listening.sensitivity.output` is streamed; the session's `turn_ended` ends the turn, and a turn with words goes to the parent as `bot.ability.listening.transcription.turn` `{text, confidence, frames, sensed, voice_detection, participants}`: its words, the lowest transcript confidence, its sounds, its loudest scored sound, its voice spans in seconds from the turn's start, and its participants. Scored sounds that arrive before the session is ready are held (`<event:defer/>`) and streamed once it is.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="transcription-3" specnum="3" specid="#transcription-3">
+    <![CDATA[The bot's own voice arriving as predicted (`producing`, with a `perceived_level_db` below `product_threshold_db`) is not streamed and does not join the turn.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+  <assert id="transcription-4" specnum="4" specid="#transcription-4">
+    <![CDATA[A turn without words is let go; what is heard from then on is the next turn's.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+  </assert>
+  <assert id="transcription-5" specnum="5" specid="#transcription-5">
+    <![CDATA[A session lost before its first ready (here, a backend that does not stream) ends the transcription in its final state `unavailable`, logged (`transcription`), so the parent hears through the interpretation; so does `enabled` false, at once and unlogged, and a session that does not open within `open_timeout_ms`.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+  </assert>
+  <assert id="transcription-6" specnum="6" specid="#transcription-6">
+    <![CDATA[A session lost after it was ready is logged, and after the backoff (`first_backoff_ms`, doubling up to `last_backoff_ms`) a new one is opened, with no second `bot.ability.ready`; the turn it was hearing is lost.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+</assertions>

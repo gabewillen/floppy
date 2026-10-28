@@ -18,6 +18,7 @@ telemetry.
 | --- | --- | --- | --- |
 | `decode` | `speech_decoding` | `POST {base}/audio/transcriptions`, or with `provider` `gemini` `POST {base}/interactions` | `bot.ability.hearing.speech.decoding.output {text}` |
 | `encode` | `vocal` | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its streaming `text-to-speech/{voice}/stream` API, or with `gemini` `POST {base}/interactions` (`audio/pcm` or `audio/wav`) | each `bot.ability.vocal.speech.encoding.chunk {audio, sequence, media_type, sample_rate_hz, channels, duration}` as it is encoded, then `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
+| `stream` | `transcription` | WebSocket `GET {base}/audio/stream?sample_rate=16000&language=L&chunk=C&turns=1`, held for the whole invocation | `bot.ability.hearing.speech.stream.ready`, then as the server hears them `voice_started`, `voice_ended`, `partial`, `transcript`, `turn_ended` and `overlap`; `failed {kind}` when it is lost |
 | `detect` | `voice_detection` | `POST {base}/vad` | `bot.ability.hearing.voice.detection.output` |
 | `diarize` | `voice_diarization` | `POST {base}/audio/diarization` | `bot.ability.hearing.voice.diarization.output` |
 | `identify` | `voice_identification` | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |
@@ -56,6 +57,25 @@ the output's are. The output is still the whole reply, written once
 every answer has ended. A failure after some chunks answers
 `bot.ability.failed`, and cancelling the invocation (leaving the
 invoking state) closes the answer's connection mid-stream.
+
+## Streamed hearing
+
+`stream` is mosfet.py's `hearing.speech.stream` session, served as its
+`speech_server` provider serves it, over scxml.rs's `outbound-websocket`:
+the `baseurl` slot's `https` URL names its `wss` form, and the key goes as
+`authorization: Bearer <apikey>`, a reference the component never reads.
+The invoking session sends it `bot.ability.hearing.speech.stream.audio
+{audio, media_type?, sample_rate_hz?, channels?, output?}` for each sound
+heard (by reference; sent on as 16 kHz mono 16-bit PCM, also written to
+`output` when given, held until the server is ready, at most 2 s of it) and `bot.ability.hearing.speech.stream.producing
+{producing}` when the bot's own mouth starts or stops (sent on as
+`{"type":"agent","speaking":B}` only on change). Each server frame is one
+returned event; times are seconds of the audio the session sent. Closing
+the session (leaving the invoking state) sends `{"type":"end"}` and closes
+the connection. Losing it answers `failed {kind}`: `unavailable`,
+`overloaded` (close 1013), `invalid_input` (1003) or `invalid_response`
+(mosfet.py's kinds). The listening's transcription
+(`abilities/transcription/transcription.scx`) invokes it.
 
 ```xml
 <invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"

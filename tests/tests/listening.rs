@@ -36,8 +36,10 @@ use serde_json::{Value as Json, json};
 use support::hearing::{self, Backend, silent_wav, spoken_wav};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
-/// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+/// Bounded wait for any one expected record (scx startup included: the
+/// long-lived stages and the streaming session start with the listening, as
+/// body.rs and environment.rs allow).
+const WAIT: Duration = Duration::from_secs(300);
 
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("the directory is creatable");
@@ -71,7 +73,13 @@ fn layout(edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     support::copy_listening(&dir);
     // These tests pin the words-only pipeline: voices (diarization and
     // identification) and their tone (the affect classifier), the
-    // interpretation's defaults, are on only where a test turns them on.
+    // interpretation's defaults, are on only where a test turns them on,
+    // and so is the transcription's streaming, the listening's default:
+    // the interpretation hears every sound.
+    rewrite(
+        &dir.join("listening/listening.scx"),
+        &[("streams", "false")],
+    );
     rewrite(
         &dir.join("interpretation/interpretation.scx"),
         &[
@@ -176,6 +184,17 @@ fn spelled_seconds(text: &str) -> f64 {
     (text.len() * hearing::SAMPLES_PER_CHAR) as f64 / 16_000.0
 }
 
+/// When the streaming session says a turn spelled as `text` ended: its
+/// samples and the silence that ended it over the rate, as the fake
+/// backend counts them.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "test texts are a few characters"
+)]
+fn streamed_seconds(text: &str) -> f64 {
+    (text.len() * hearing::SAMPLES_PER_CHAR + hearing::stream::ENDING_SAMPLES) as f64 / 16_000.0
+}
+
 #[test]
 fn a_heard_utterance_is_decoded_into_a_speech_product() {
     let harness = layout(&[]);
@@ -217,6 +236,100 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
         vec![speech("what is the weather", &voiced)]
     );
     assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+/// The transcription's speech product of a turn that `sound` opened and
+/// the streaming session heard as `text`, over `seconds` of voice and the
+/// silence that ended it.
+fn streamed_speech(text: &str, sound: &Json, seconds: f64) -> Json {
+    let mut product = speech(text, sound);
+    product["voice_detection"] =
+        json!({"segments": [{"start_seconds": 0, "end_seconds": seconds}]});
+    product["confidence"] = json!(hearing::stream::CONFIDENCE);
+    product
+}
+
+/// Streaming (the listening's default): each sound is streamed to the
+/// streaming hearing session as it is heard, and the turn the session
+/// says has ended is handed on as its words, with no voice detection or
+/// decoding afterwards.
+#[test]
+fn a_streamed_turn_is_handed_on_as_its_words() {
+    let test = "a_streamed_turn_is_handed_on_as_its_words";
+    let harness = layout(&[("listening/listening.scx", &[("streams", "true")])]);
+    let (mut run, backend) = started(
+        &harness,
+        test,
+        &[
+            ("weather.wav", spoken_wav("what is the weather")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    let voiced = sound("weather.wav", &json!({}));
+    utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, test);
+    let streams = backend.streams();
+    assert_eq!(streams.len(), 1, "one session hears every sound");
+    assert_eq!(streams[0]["keyed"], true, "the env-file key is the bearer");
+    assert_eq!(
+        streams[0]["request_line"],
+        "GET /v1/audio/stream?sample_rate=16000&language=en&chunk=0.56&turns=1 HTTP/1.1"
+    );
+    assert_eq!(streams[0]["heard"], json!(["what is the weather"]));
+    assert_eq!(
+        streams[0]["agent"],
+        json!([false]),
+        "told once that the bot is not producing"
+    );
+    assert!(
+        backend.received_at("/vad").is_empty(),
+        "nothing is voice-detected afterwards"
+    );
+    assert!(
+        backend.decoded().is_empty(),
+        "nothing is decoded afterwards"
+    );
+    let seconds = streamed_seconds("what is the weather");
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![streamed_speech("what is the weather", &voiced, seconds)]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+/// A backend that does not stream: the listening hears through the
+/// interpretation, which decodes the utterance once it has ended.
+#[test]
+fn without_a_streaming_session_the_utterance_is_decoded() {
+    let test = "without_a_streaming_session_the_utterance_is_decoded";
+    let harness = layout(&[("listening/listening.scx", &[("streams", "true")])]);
+    let backend = Backend::start_without_stream();
+    let files = [
+        ("weather.wav", spoken_wav("what is the weather")),
+        ("silence.wav", silent_wav()),
+    ];
+    let mut args = hearing::granted(test, &backend, &files).args;
+    args.push(harness.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    run.until(WAIT, label_is("harness.ready"));
+    let voiced = sound("weather.wav", &json!({}));
+    utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, test);
+    assert_eq!(backend.streams().len(), 1, "the session was asked for once");
+    assert_eq!(
+        texts(&finished.all, "transcription"),
+        vec![
+            "no streaming session (unavailable): the listening hears through the interpretation"
+                .to_owned()
+        ]
+    );
+    assert_eq!(backend.decoded(), vec!["what is the weather".to_owned()]);
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![speech("what is the weather", &voiced)]
+    );
 }
 
 /// With the affect classifier, decoded speech carries the tone the

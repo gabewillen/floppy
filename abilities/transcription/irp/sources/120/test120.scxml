@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- transcription-3: the bot's own voice arriving as predicted is not streamed; the next sound is. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="transcription" type="scxml" src="../../../transcription.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/own.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 0, "producing": true}'/></send>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced2.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+    </onentry>
+    <transition event="bot.ability.listening.transcription.turn" cond="_event.data.text === &quot;cut in&quot; &amp;&amp; _event.data.confidence === 0.9 &amp;&amp; _event.data.frames.length === 1 &amp;&amp; _event.data.frames[0].audio === 'media/floppy-heard-0.pcm' &amp;&amp; _event.data.frames[0].media_type === 'audio/pcm' &amp;&amp; _event.data.frames[0].sample_rate_hz === 16000 &amp;&amp; _event.data.frames[0].channels === 1 &amp;&amp; _event.data.sensed.sound.audio === 'media/voiced2.wav' &amp;&amp; _event.data.participants.length === 0" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

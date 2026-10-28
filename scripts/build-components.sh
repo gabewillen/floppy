@@ -213,7 +213,8 @@ expected_imports() {
                 'wasi:filesystem/preopens@0.2.9'
             ;;
         # The speech service: one async `invoke` export, one request through
-        # outbound-http's async `fetch`, and the media files in the directory
+        # outbound-http's async `fetch` (or, to stream, one connection
+        # through outbound-websocket), and the media files in the directory
         # the run grants. It keeps exactly the filesystem it imports for the
         # host (which links it only under `--dir`): the filesystem
         # interfaces, the wasi:io interfaces they use, and
@@ -224,6 +225,7 @@ expected_imports() {
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0' \
+                'stateforward:scxml/outbound-websocket@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
                 'wasi:io/poll@0.2.12' \
                 'wasi:clocks/wall-clock@0.2.12' \

@@ -22,14 +22,23 @@
 //!   floppy `.scx` document is held to (`contracts.rs`, `defaults.rs`);
 //! * `irp/sources/<id>/backend.json` (optional) scripts the fake HTTP
 //!   backend of the services the run reaches: `{"clock": "wall" |
-//!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON},
-//!   ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
+//!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON,
+//!   "audible": BOOL?}, ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
 //!   `true` (decision D101). A request takes the first unused answer whose `path` ends its
-//!   target (the last one for a path repeats); a request no answer matches
+//!   target and, when the answer names `audible`, whose JSON body's
+//!   `audio` samples are (or are not) all silent, so voice detections
+//!   asked concurrently each take their own sound's answer (the last one
+//!   for a path repeats); a request no answer matches
 //!   is answered 404; a 200 completion answers a request that requires a
 //!   function call as that call, its content the arguments, and a streamed
 //!   request (`"stream": true`) as its server-sent-event stream
-//!   ([`support::answer_as_asked`]). Every service's base URL points at it;
+//!   ([`support::answer_as_asked`]). With `"websocket": [SESSION, ...]`
+//!   it also accepts WebSocket upgrades (a streaming hearing session,
+//!   `GET .../audio/stream`), each connection taking the next SESSION (the
+//!   last one repeats), a list of rounds of text frames: the first round
+//!   is sent once it opens, and round `n` once its `n`th binary frame
+//!   arrives (none after the last); without it an upgrade is answered 404.
+//!   Every service's base URL points at it;
 //! * `irp/sources/<id>/logs.json` (optional), `{LABEL: [TEXT, ...]}`:
 //!   the run's logs of each label are exactly those texts, in order;
 //! * `irp/sources/<id>/media/` (optional) is the media the generate and
@@ -126,6 +135,17 @@ struct Answer {
     path: String,
     status: u16,
     body: String,
+    /// Whether the request's `audio` samples must hold sound (none: any).
+    audible: Option<bool>,
+}
+
+/// Whether a request's JSON `audio` samples hold any sound.
+fn is_audible(request: &Json) -> bool {
+    request["audio"].as_array().is_some_and(|samples| {
+        samples
+            .iter()
+            .any(|sample| sample.as_f64().is_some_and(|value| value != 0.0))
+    })
 }
 
 /// The fake backend of every service a case reaches.
@@ -133,8 +153,15 @@ struct Backend {
     origin: String,
 }
 
+/// One scripted WebSocket session's rounds: the text frames sent on
+/// opening, then after each binary frame.
+type Rounds = Vec<Vec<Json>>;
+
+/// A case's scripted WebSocket sessions, and how many have opened.
+type Sessions = Arc<(Vec<Rounds>, AtomicUsize)>;
+
 impl Backend {
-    fn start(answers: Vec<Answer>) -> Self {
+    fn start(answers: Vec<Answer>, sessions: Option<Vec<Rounds>>) -> Self {
         let listener =
             TcpListener::bind("127.0.0.1:0").expect("the fake backend binds a loopback port");
         let origin = format!(
@@ -144,10 +171,13 @@ impl Backend {
                 .expect("the fake backend has an address")
         );
         let state = Arc::new(Mutex::new((answers, BTreeMap::<usize, bool>::new())));
+        let sessions: Option<Sessions> =
+            sessions.map(|sessions| Arc::new((sessions, AtomicUsize::new(0))));
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let state = Arc::clone(&state);
-                std::thread::spawn(move || serve(stream, &state));
+                let sessions = sessions.clone();
+                std::thread::spawn(move || serve(stream, &state, sessions.as_ref()));
             }
         });
         Self { origin }
@@ -156,23 +186,72 @@ impl Backend {
 
 type Script = Mutex<(Vec<Answer>, BTreeMap<usize, bool>)>;
 
-fn serve(mut stream: TcpStream, state: &Arc<Script>) {
+/// Serves one scripted WebSocket session on `stream`.
+fn serve_socket(mut stream: TcpStream, key: &str, rounds: &Rounds) {
+    use support::hearing::stream::{accept_key, read_frame, write_frame};
+    let say = |stream: &mut TcpStream, round: usize| {
+        rounds.get(round).is_none_or(|frames| {
+            frames
+                .iter()
+                .all(|frame| write_frame(stream, 1, frame.to_string().as_bytes()))
+        })
+    };
+    if write!(
+        stream,
+        "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: {}\r\n\r\n",
+        accept_key(key)
+    )
+    .is_err()
+        || !say(&mut stream, 0)
+    {
+        return;
+    }
+    let mut heard = 0;
+    while let Some((opcode, payload)) = read_frame(&mut stream) {
+        match opcode {
+            2 => {
+                heard += 1;
+                if !say(&mut stream, heard) {
+                    return;
+                }
+            }
+            8 => {
+                let _ = write_frame(&mut stream, 8, &payload);
+                return;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn serve(mut stream: TcpStream, state: &Arc<Script>, sessions: Option<&Sessions>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
         return;
     }
     let mut length = 0;
+    let mut socket_key = None;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
             break;
         }
-        if let Some((name, value)) = line.trim_end().split_once(':')
-            && name.trim().eq_ignore_ascii_case("content-length")
-        {
-            length = value.trim().parse().unwrap_or(0);
+        if let Some((name, value)) = line.trim_end().split_once(':') {
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                length = value.trim().parse().unwrap_or(0);
+            } else if name.trim().eq_ignore_ascii_case("sec-websocket-key") {
+                socket_key = Some(value.trim().to_owned());
+            }
         }
+    }
+    if let (Some(key), Some(sessions)) = (&socket_key, sessions) {
+        let (scripted, opened) = &**sessions;
+        let index = opened.fetch_add(1, Ordering::SeqCst);
+        if let Some(rounds) = scripted.get(index).or_else(|| scripted.last()) {
+            serve_socket(stream, key, rounds);
+        }
+        return;
     }
     let mut body = vec![0; length];
     if reader.read_exact(&mut body).is_err() {
@@ -183,8 +262,14 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
     let (status, text) = {
         let mut guard = state.lock().expect("the script lock");
         let (answers, used) = &mut *guard;
+        let audible = is_audible(&request);
         let matching: Vec<usize> = (0..answers.len())
-            .filter(|index| target.ends_with(&answers[*index].path))
+            .filter(|index| {
+                target.ends_with(&answers[*index].path)
+                    && answers[*index]
+                        .audible
+                        .is_none_or(|wanted| wanted == audible)
+            })
             .collect();
         let chosen = matching
             .iter()
@@ -216,6 +301,28 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
     );
 }
 
+/// The case's scripted WebSocket sessions, or none.
+fn socket_sessions(case: &Path) -> Option<Vec<Rounds>> {
+    let text = std::fs::read_to_string(case.join("backend.json")).ok()?;
+    let script: Json = serde_json::from_str(&text).ok()?;
+    script["websocket"].as_array().map(|sessions| {
+        sessions
+            .iter()
+            .map(|rounds| {
+                rounds
+                    .as_array()
+                    .map(|rounds| {
+                        rounds
+                            .iter()
+                            .map(|round| round.as_array().cloned().unwrap_or_default())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect()
+    })
+}
+
 /// The case's backend script, or none.
 fn script(case: &Path) -> (bool, Vec<Answer>) {
     let path = case.join("backend.json");
@@ -242,6 +349,7 @@ fn script(case: &Path) -> (bool, Vec<Answer>) {
                         Json::String(text) => text.clone(),
                         other => other.to_string(),
                     },
+                    audible: answer["audible"].as_bool(),
                 })
                 .collect()
         })
@@ -281,7 +389,7 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
         .ok()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok())
         .is_some_and(|script| script["stream"] == true);
-    let backend = Backend::start(answers);
+    let backend = Backend::start(answers, socket_sessions(case));
     let env = unique_scratch("irp-env").join("fake.env");
     std::fs::write(
         &env,

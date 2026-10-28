@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.failed",
+  "description": "The session lost what serves it.",
+  "properties": {
+    "kind": {
+      "description": "Why, in existing FAILURE_KINDS.md strings.",
+      "enum": [
+        "unavailable",
+        "overloaded",
+        "invalid_input",
+        "invalid_response",
+        "timeout"
+      ],
+      "examples": [
+        "unavailable"
+      ],
+      "type": "string",
+      "title": "Kind"
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "kind": "unavailable"
+    }
+  ]
+}

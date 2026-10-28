@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- transcription-6: a session lost after it was ready is reopened after the backoff, with no second ready; the lost turn's sound is not handed on. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="transcription" type="scxml" src="../../../transcription.scx">
+    <param name="first_backoff_ms" expr="10"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+      <send event="harness.waited" delay="1s"/>
+    </onentry>
+    <transition event="harness.waited" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced2.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+    </onentry>
+    <transition event="bot.ability.listening.transcription.turn" cond="_event.data.text === &quot;again&quot; &amp;&amp; _event.data.confidence === 0.9 &amp;&amp; _event.data.frames.length === 1 &amp;&amp; _event.data.frames[0].audio === 'media/floppy-heard-1.pcm' &amp;&amp; _event.data.frames[0].media_type === 'audio/pcm' &amp;&amp; _event.data.frames[0].sample_rate_hz === 16000 &amp;&amp; _event.data.frames[0].channels === 1 &amp;&amp; _event.data.sensed.sound.audio === 'media/voiced2.wav' &amp;&amp; _event.data.participants.length === 0" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

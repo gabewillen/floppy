@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.producing",
+  "description": "Whether the bot's own mouth is producing sound now.",
+  "properties": {
+    "producing": {
+      "description": "True while the bot's own mouth is producing sound (its efference window is open).",
+      "examples": [
+        true,
+        false
+      ],
+      "type": "boolean",
+      "title": "Producing"
+    }
+  },
+  "required": [
+    "producing"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "producing": true
+    }
+  ]
+}

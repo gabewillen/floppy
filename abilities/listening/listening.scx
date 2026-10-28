@@ -11,26 +11,42 @@
              Sensing -sensitivity output or failure-> Listening } }
 
   Children: live holds <invoke id="sensitivity">
-  (abilities/sensitivity/sensitivity.scx, the body's prediction) and
+  (abilities/sensitivity/sensitivity.scx, the body's prediction),
   <invoke id="interpretation">
-  (abilities/interpretation/interpretation.scx, the slow half). Each
-  is ready when it sends bot.ability.ready; initializing waits for both.
-  A child that cannot start, or ends, ends this ability in its final state
-  degraded (the body then degrades the bot).
+  (abilities/interpretation/interpretation.scx, the slow half) and
+  <invoke id="transcription"> (abilities/transcription/transcription.scx,
+  the streaming hearing path, mosfet.py's Transcription; the <data>
+  streams, true, is its <param> enabled). Each is ready when it
+  sends bot.ability.ready; initializing waits for the sensitivity and the
+  interpretation only, so a streaming session that is slow to open (or
+  never opens) never holds the listening back.
+  The sensitivity or the interpretation that cannot start, or ends, ends
+  this ability in its final state degraded (the body then degrades the
+  bot); the transcription's end only stops it streaming.
 
   Sensing: environment.sound {audio, ...} from the body goes to the
   sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
   sound's envelope {event, data, source}: source is the sound's own, the
   transducer it came off, and absent when it names none), bounded by a 30 s stage
   operation timeout (sensitivity_timeout_ms): the sensitivity's
-  bot.ability.listening.sensitivity.output goes on to the interpretation
-  and Sensing returns to Listening; the timer,
+  bot.ability.listening.sensitivity.output is held (held) while the
+  transcription's session may still open (opening: it is neither ready
+  nor ended), and Sensing returns to Listening; held sounds go on in
+  order once it is ready or ended: to the transcription while it streams
+  (transcribing: its session was ready and it has not ended), else to the
+  interpretation; a sound labelled with a kind (non-speech, which only
+  the interpretation classifies) always goes to the interpretation; the timer,
   bot.ability.listening.sensitivity.failed {stage: "sensitivity",
   message: "Listening sensitivity timed out."} sent to this session with
   that delay, answers the body with bot.ability.listening.failed. Sounds
   that arrive outside Listening are held by <event:defer/> (scxml.rs
   namespaces/event) and taken by Listening, in order:
   scoring is the only stop between the ear and the prediction.
+
+  Turns: the transcription's bot.ability.listening.transcription.turn
+  (a turn its session heard end, with its words and sounds) goes to the
+  interpretation, which identifies who spoke and hears its tone, and
+  hands on its words as speech.
 
   Products: the interpretation's bot.ability.listening.speech.output
   (decoded speech, diarized or identified voice
@@ -82,6 +98,16 @@
          interpretation remembers the voices heard in; null: none. -->
     <data id="memory" expr="null"/>
     <data id="sensitivity_timeout_ms" expr="30000"/>
+    <!-- Whether the transcription streams what is heard (mosfet.py's
+         Listening(transcription=)), and whether it does now: after its
+         streaming session ends, the interpretation hears every scored
+         sound. -->
+    <data id="streams" expr="true"/>
+    <data id="transcribing" expr="false"/>
+    <!-- Whether its streaming session may still open (it is neither ready
+         nor ended), and the scored sounds held for it meanwhile. -->
+    <data id="opening" expr="streams"/>
+    <data id="held" expr="[]"/>
     <data id="children" expr="['sensitivity', 'interpretation']"/>
     <data id="ready" expr="({})"/>
     <!-- The sound being scored. -->
@@ -96,10 +122,38 @@
     <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx">
       <param name="memory" expr="memory"/>
     </invoke>
+    <invoke id="transcription" type="scxml" src="../transcription/transcription.scx">
+      <param name="enabled" expr="streams"/>
+    </invoke>
 
     <!-- A child's readiness, once (decision D242), named by its invoke id. -->
     <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
       <assign location="ready[_event.invokeid]" expr="true"/>
+      <assign location="transcribing" expr="transcribing || isTranscription(_event)"/>
+      <assign location="opening" expr="opening &amp;&amp; !isTranscription(_event)"/>
+    </transition>
+    <!-- The transcription ends when it has no streaming session to hear
+         through: the interpretation hears every sound from then on. -->
+    <transition event="done.invoke.transcription">
+      <assign location="transcribing" expr="false"/>
+      <assign location="opening" expr="false"/>
+    </transition>
+    <!-- The scored sounds held while the streaming session might open go
+         on, in order, once it is ready or ended: to the transcription
+         while it streams, else to the interpretation. -->
+    <transition cond="!opening &amp;&amp; held.length > 0">
+      <foreach array="held" item="scored">
+        <if cond="streamsSound(scored)">
+          <send event="bot.ability.listening.sensitivity.output" target="#_transcription">
+            <content expr="scored"/>
+          </send>
+        <else/>
+          <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
+            <content expr="scored"/>
+          </send>
+        </if>
+      </foreach>
+      <assign location="held" expr="[]"/>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
     <transition event="error.*" target="degraded">
@@ -162,6 +216,13 @@
           <content expr="_event.data"/>
         </send>
       </transition>
+      <!-- A turn the transcription heard end: the interpretation finds
+           who spoke and hands on its words. -->
+      <transition event="bot.ability.listening.transcription.turn" event:schema="../schemas/bot.ability.listening.transcription.turn.json">
+        <send event="bot.ability.listening.transcription.turn" target="#_interpretation">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
 
       <state id="Listening">
         <transition event="environment.sound" event:schema="../schemas/environment.sound.json" target="Sensing">
@@ -186,9 +247,7 @@
           <event:defer/>
         </transition>
         <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
-          <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
-            <content expr="_event.data"/>
-          </send>
+          <assign location="held[held.length]" expr="_event.data"/>
         </transition>
         <transition event="bot.ability.listening.sensitivity.failed" event:schema="../schemas/bot.ability.listening.sensitivity.failed.json" target="Listening">
           <send event="bot.ability.listening.failed" target="#_parent">

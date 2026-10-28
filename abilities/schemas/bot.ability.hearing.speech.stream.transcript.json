@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.transcript",
+  "description": "One finalized utterance.",
+  "properties": {
+    "text": {
+      "description": "The finalized words of the utterance.",
+      "examples": [
+        "hello there"
+      ],
+      "type": "string",
+      "title": "Text"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number",
+          "maximum": 1.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The hearing model's confidence in the words, when it gives one.",
+      "examples": [
+        0.92
+      ],
+      "title": "Confidence"
+    },
+    "start_seconds": {
+      "description": "Start of the utterance, in session seconds.",
+      "examples": [
+        1.6
+      ],
+      "minimum": 0.0,
+      "type": "number",
+      "title": "Start Seconds"
+    },
+    "end_seconds": {
+      "description": "End of the utterance, in session seconds.",
+      "examples": [
+        2.1
+      ],
+      "minimum": 0.0,
+      "type": "number",
+      "title": "End Seconds"
+    }
+  },
+  "required": [
+    "text",
+    "start_seconds",
+    "end_seconds"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "text": "hello there",
+      "confidence": 0.92,
+      "start_seconds": 1.6,
+      "end_seconds": 2.1
+    }
+  ]
+}

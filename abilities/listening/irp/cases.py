@@ -6,7 +6,9 @@
 # non-zero samples, silence.wav and ring.wav 0.1 s of zeros, said.pcm 2 s
 # of the voiced samples, raw); the fake
 # backend answers voice detection, diarization, speech decoding and voice
-# identification in order (the interpretation's defaults).
+# identification in order (the interpretation's defaults), and answers the
+# transcription's streaming session 404 unless a case scripts it, so the
+# listening hears through the interpretation.
 
 S = suite
 S.media({"voiced.wav": wav(1000), "voiced2.wav": wav(1000), "silence.wav": wav(), "ring.wav": wav(),
@@ -18,8 +20,8 @@ FAILED = "bot.ability.listening.failed"
 READY = expect("bot.ability.ready")
 PATIENT = [("sensitivity_timeout_ms", "600000")]
 
-VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
-SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
+VOICED = {"path": "/vad", "audible": True, "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
+SILENT = {"path": "/vad", "audible": False, "status": 200, "body": {"segments": []}}
 
 
 DIARIZED = {"path": "/audio/diarization", "status": 200,
@@ -54,7 +56,7 @@ def speech(text, parent="voiced.wav", extra=""):
                   f" && {product}.parent.event === 'environment.sound' && {product}.parent.data.audio === 'media/{parent}'" + extra)
 
 
-S.statement(1, "It waits for both children, the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.")
+S.statement(1, "It waits for its children the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`; the transcription, invoked beside them, is not waited for), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.")
 S.statement(2, "Each `environment.sound` is scored by the sensitivity (`bot.ability.listening.sensitivity.score` `{stimulus: {event: \"environment.sound\", data: <the sound>}}`) and the score goes on to the interpretation; the interpretation's speech product is handed to the parent as `bot.ability.cognition.input` `{stimulus: {event: \"bot.ability.listening.speech.output\", data: <the product>, source: \"listening\"}}`, the product's parent the sound's envelope.")
 S.statement(3, "A sound is scored at its `received_level_db`: a product the interpretation finds below its threshold is dropped, a louder one handed on.")
 S.statement(4, "The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.")
@@ -62,6 +64,7 @@ S.statement(5, "`bot.ability.speaking.efference` goes to the sensitivity from wh
 S.statement(6, "Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.")
 S.statement(7, "Scoring is bounded by `sensitivity_timeout_ms` (30 s): its timer answers `bot.ability.listening.failed` `{stage: \"sensitivity\", message: \"Listening sensitivity timed out.\"}` and returns to `Listening`.")
 S.statement(8, "A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.")
+S.statement(9, "While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.")
 
 S.case(100, 1, "the listening is ready once its children are ready.", [READY])
 
@@ -126,3 +129,13 @@ S.case(170, 8, "a sound without an audio reference is refused at the send; the n
         hear("ring.wav", kind="knock"),
         expect(COGNITION, "_event.data.stimulus.event === 'environment.sound' && _event.data.stimulus.data.kind === 'knock'")],
        params=PATIENT, backend=[SILENT])
+
+S.case(180, 9, "a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words, without decoding.",
+       [READY, hear("voiced.wav"),
+        expect(COGNITION, "_event.data.stimulus.event === 'bot.ability.listening.speech.output'"
+                          " && _event.data.stimulus.data.content === 'what is the weather' && _event.data.stimulus.data.confidence === 0.9")],
+       params=PATIENT, backend=[DIARIZED, EMBEDDED],
+       websocket=[[[{"type": "ready"}],
+                   [{"type": "speech_start", "t": 0.0}, {"type": "speech_end", "t": 0.1},
+                    {"type": "final", "text": "what is the weather", "confidence": 0.9, "words": [], "t": 0.1},
+                    {"type": "turn_end", "reason": "eot", "p": 0.9, "text": "what is the weather", "t": 0.1}]]])
