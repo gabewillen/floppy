@@ -1329,6 +1329,9 @@ fn the_listenings_products_are_turn_stimuli() {
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
     event(&mut run, "environment.sound", &silence);
     run.until(WAIT, label_is("bot.processing.completed"));
+    // The reply can start just after the turn completes: read the run until
+    // it is quiet, so the ring waits for it to finish.
+    run.quiesce(Duration::from_millis(500));
     // Labelled non-speech: a turn whose stimulus is the environment.sound.
     let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
     event(&mut run, "environment.sound", &ring);
