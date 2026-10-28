@@ -5,7 +5,7 @@ The floppy bot is the body: an SCXML machine,
 [`../../abilities/`](../../abilities/). The body runs
 its lifecycle and processing turns, and its abilities are the
 [cognition](../../abilities/cognition/cognition.scx), the cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (the
+it holds for its lifetime and hands each turn: [autonomy](../../abilities/autonomy/autonomy.scx) (the
 SpeechHeard seed, then the learned turn behaviors the stimulus triggers,
 kept by memory), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service selects every event it can ground, each with its

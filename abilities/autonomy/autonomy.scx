@@ -1,18 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   floppy's Autonomy stage: the cognition (abilities/cognition/cognition.scx)
-  invokes it first in each turn. It
+  invokes it once and holds it for its lifetime, as mosfet.py's Cognition
+  holds its Autonomy (decision D272), and hands it each turn first. It
   runs the trusted seeds the turn's stimulus triggers, then recalls the
   learned turn behaviors whose triggers name the stimulus, and runs them
   one at a time as candidates; the first that handles the turn answers it,
   and otherwise the cascade goes on to intuition.
 
+    idle -bot.ability.autonomy.input-> working {
     percept { matching -> [seeding] -> inventory -> loading -> matched -> running }
        |  (each percept, in arrival order)
        v
     percept_handled | percept_unhandled -> next_percept -> percept (the next one)
                                                        -> answered | unhandled | done
     percept -> failed
+    } -> answering -> idle
+    working -bot.ability.processing.cancel-> idle
 
   (seeding runs only when the percept triggers a seed; inventory ends at
   once without memory.)
@@ -29,10 +33,17 @@
   selections). A selection that names no target (the trusted seed's) is not sent here: it reaches the body only when the
   cognition carries acted.acts into the turn's output.
 
-  Input: the <param>s turn, input (focus and focus_candidates,
-  bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope) and memory (the address of the bot's memory; null means no learned inventory,
-  and only the seeds run).
+  Input: each turn is one bot.ability.autonomy.input
+  (schemas/bot.ability.autonomy.input.json) {turn, input (focus and
+  focus_candidates), stimulus (the turn's stimulus envelope)}; one that
+  arrives during a turn waits for its answer. The <param> memory is the
+  address of the bot's memory (null means no learned inventory, and only
+  the seeds run).
+
+  Output: each turn ends with one bot.ability.autonomy.output
+  (schemas/bot.ability.autonomy.output.json) to the cognition, the
+  answers below. bot.ability.processing.cancel (the cognition left the
+  turn) ends a turn in flight, with no answer, and cancels what it runs.
 
   Seeds (the seeded behaviors run before the learned inventory, with or
   without memory): SpeechHeard (abilities/behaviors/speech_heard/speech_heard.scx),
@@ -99,7 +110,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="autonomy" initial="percept">
+       version="1.0" datamodel="ecmascript" name="autonomy" initial="idle">
   <datamodel>
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
@@ -123,179 +134,217 @@
     <data id="view" expr="null"/>
     <data id="handled" expr="[]"/>
     <data id="selected" expr="[]"/>
+    <!-- The turn's answer, sent to the cognition. -->
+    <data id="result" expr="null"/>
     <data id="select_sql">SELECT b.name, b.source FROM bot_behavior AS b JOIN bot_behavior_trigger AS t ON t.behavior_name = b.name WHERE b.status = 'ACTIVE' AND b.lifetime = 'turn' AND t."trigger" = ? ORDER BY b.name</data>
   </datamodel>
   <script src="autonomy.js"/>
 
-  <!-- One percept: the seeds it triggers, then the learned inventory. -->
-  <state id="percept" initial="matching">
-    <onentry>
-      <assign location="percepts" expr="perceptsOf(stimulus)"/>
-      <assign location="view" expr="currentPercept()"/>
+  <!-- Between turns: each bot.ability.autonomy.input is one turn, with
+       nothing of the turn before. -->
+  <state id="idle">
+    <transition event="bot.ability.autonomy.input" event:schema="../schemas/bot.ability.autonomy.input.json"
+                target="percept">
+      <assign location="turn" expr="_event.data.turn"/>
+      <assign location="input" expr="_event.data.input"/>
+      <assign location="stimulus" expr="_event.data.stimulus"/>
       <assign location="rows" expr="[]"/>
-    </onentry>
-
-    <!-- The seeds the percept triggers run first. -->
-    <state id="matching">
-      <transition cond="triggersSpeechHeard()" target="seeding"/>
-      <transition target="inventory"/>
-    </state>
-
-    <!-- The SpeechHeard seed. -->
-    <state id="seeding">
-      <onentry>
-        <assign location="tried" expr="triedWithSeed()"/>
-        <log label="autonomy.candidate" expr="'SpeechHeard'"/>
-        <send id="seed-silence" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
-      </onentry>
-      <onexit>
-        <cancel sendid="seed-silence"/>
-      </onexit>
-      <invoke id="seed" type="scxml" src="../behaviors/speech_heard/speech_heard.scx">
-        <param name="turn" expr="turn"/>
-        <param name="input" expr="input"/>
-        <param name="stimulus" expr="view"/>
-      </invoke>
-      <transition event="done.invoke.seed" cond="isBehaviorHandled(_event)" target="percept_handled">
-        <assign location="answer" expr="_event.data.selected"/>
-      </transition>
-      <transition event="done.invoke.seed" target="inventory">
-        <log label="autonomy.candidate.advance" expr="seedAdvanceLog(_event)"/>
-      </transition>
-      <transition event="bot.ability.autonomy.candidate.silent" target="inventory">
-        <log label="autonomy.candidate.silent" expr="seedSilentLog()"/>
-      </transition>
-      <transition event="error.*" target="failed">
-        <assign location="answer" expr="seedFailedReason(_event)"/>
-      </transition>
-    </state>
-
-    <!-- Then the learned inventory, when there is memory. -->
-    <state id="inventory">
-      <onentry>
-        <if cond="hasNoMemory()">
-          <log label="autonomy" expr="noMemoryLog()"/>
-        </if>
-      </onentry>
-      <transition cond="hasNoMemory()" target="percept_unhandled"/>
-      <transition target="loading"/>
-    </state>
-
-    <!-- The inventory: the ACTIVE turn behaviors the percept triggers. -->
-    <state id="loading">
-      <onentry>
-        <send id="load-timeout" event="bot.ability.autonomy.behaviors.load.failed" delayexpr="memoryTimeoutDelay()"/>
-      </onentry>
-      <onexit>
-        <cancel sendid="load-timeout"/>
-      </onexit>
-      <onentry>
-        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.load">
-          <param name="id" expr="memory_requests.load"/>
-          <param name="statements" expr="behaviorSelectStatements()"/>
-        </send>
-      </onentry>
-      <transition event="bot.ability.memory.output" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.memory.output.json" target="matched">
-        <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
-      </transition>
-      <!-- A failed load is a warning, and the turn goes on with no inventory rows. -->
-      <transition event="bot.ability.failed" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.failed.json" target="matched">
-        <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
-        <assign location="rows" expr="[]"/>
-      </transition>
-      <transition event="error.*" target="matched">
-        <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.name)"/>
-        <assign location="rows" expr="[]"/>
-      </transition>
-      <transition event="bot.ability.autonomy.behaviors.load.failed" target="matched">
-        <log label="autonomy.behaviors.load.failed" expr="loadTimedOutReason()"/>
-        <assign location="rows" expr="[]"/>
-      </transition>
-    </state>
-
-    <state id="matched">
-      <onentry>
-        <log label="autonomy" expr="matchedLog()"/>
-      </onentry>
-      <transition cond="hasNoMatch()" target="percept_unhandled"/>
-      <transition target="running"/>
-    </state>
-
-    <!-- The candidates, one at a time, as a chain of runners. -->
-    <state id="running">
-      <onentry>
-        <autonomy:behavior_input_payload location="behavior_input" stimulus="view"
-            focus="input.focus" focus_candidates="input.focus_candidates"/>
-      </onentry>
-      <invoke id="candidates" type="scxml" src="../candidates_runner/candidates_runner.scx">
-        <param name="turn" expr="turn"/>
-        <param name="input" expr="behavior_input"/>
-        <param name="candidates" expr="candidateRows()"/>
-        <param name="memory" expr="memory"/>
-        <param name="silence_ms" expr="silence_ms"/>
-        <param name="memory_timeout_ms" expr="memory_timeout_ms"/>
-      </invoke>
-      <transition event="done.invoke.candidates" cond="isRunHandled(_event)" target="percept_handled">
-        <assign location="tried" expr="triedWithRun(_event)"/>
-        <assign location="answer" expr="_event.data.selected"/>
-      </transition>
-      <transition event="done.invoke.candidates" cond="isRunRejected(_event)" target="failed">
-        <assign location="tried" expr="triedWithRun(_event)"/>
-        <assign location="answer" expr="_event.data.rejection"/>
-      </transition>
-      <transition event="done.invoke.candidates" target="percept_unhandled">
-        <assign location="tried" expr="triedWithRun(_event)"/>
-      </transition>
-      <transition event="error.*" target="percept_unhandled">
-        <log label="autonomy.candidate.failed" expr="runFailedLog(_event)"/>
-      </transition>
-    </state>
-  </state>
-
-  <!-- A behavior handled the percept: it is settled. -->
-  <state id="percept_handled">
-    <onentry>
-      <assign location="handled" expr="handledWithPercept()"/>
-      <assign location="selected" expr="selectedWithAnswer()"/>
-    </onentry>
-    <transition target="next_percept"/>
-  </state>
-  <state id="percept_unhandled">
-    <transition target="next_percept"/>
-  </state>
-
-  <!-- The next percept, or the turn's answer: handled only when every
-       percept was. -->
-  <state id="next_percept">
-    <transition cond="hasNextPercept()" target="percept">
-      <assign location="position" expr="nextPosition()"/>
+      <assign location="tried" expr="[]"/>
+      <assign location="behavior_input" expr="null"/>
+      <assign location="answer" expr="null"/>
+      <assign location="position" expr="0"/>
+      <assign location="handled" expr="[]"/>
+      <assign location="selected" expr="[]"/>
+      <assign location="result" expr="null"/>
     </transition>
-    <transition cond="everyPerceptHandled()" target="answered"/>
-    <transition cond="hasNoCandidates()" target="done"/>
-    <transition target="unhandled"/>
   </state>
 
-  <final id="done">
-    <donedata>
-      <content expr="noBehaviorsOutput()"/>
-    </donedata>
-  </final>
+  <!-- One turn; leaving it (the cognition left the turn) cancels what it
+       runs. -->
+  <state id="working" initial="percept">
+    <transition event="bot.ability.autonomy.input" event:schema="../schemas/bot.ability.autonomy.input.json">
+      <event:defer/>
+    </transition>
+    <!-- The cognition left the turn (cancelled or timed out). -->
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
 
-  <final id="unhandled">
-    <donedata>
-      <content expr="unhandledOutput()"/>
-    </donedata>
-  </final>
+    <!-- One percept: the seeds it triggers, then the learned inventory. -->
+    <state id="percept" initial="matching">
+      <onentry>
+        <assign location="percepts" expr="perceptsOf(stimulus)"/>
+        <assign location="view" expr="currentPercept()"/>
+        <assign location="rows" expr="[]"/>
+      </onentry>
 
-  <final id="answered">
-    <donedata>
-      <content expr="answeredOutput()"/>
-    </donedata>
-  </final>
+      <!-- The seeds the percept triggers run first. -->
+      <state id="matching">
+        <transition cond="triggersSpeechHeard()" target="seeding"/>
+        <transition target="inventory"/>
+      </state>
 
-  <final id="failed">
-    <donedata>
-      <content expr="failedOutput()"/>
-    </donedata>
-  </final>
+      <!-- The SpeechHeard seed. -->
+      <state id="seeding">
+        <onentry>
+          <assign location="tried" expr="triedWithSeed()"/>
+          <log label="autonomy.candidate" expr="'SpeechHeard'"/>
+          <send id="seed-silence" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="seed-silence"/>
+        </onexit>
+        <invoke id="seed" type="scxml" src="../behaviors/speech_heard/speech_heard.scx">
+          <param name="turn" expr="turn"/>
+          <param name="input" expr="input"/>
+          <param name="stimulus" expr="view"/>
+        </invoke>
+        <transition event="done.invoke.seed" cond="isBehaviorHandled(_event)" target="percept_handled">
+          <assign location="answer" expr="_event.data.selected"/>
+        </transition>
+        <transition event="done.invoke.seed" target="inventory">
+          <log label="autonomy.candidate.advance" expr="seedAdvanceLog(_event)"/>
+        </transition>
+        <transition event="bot.ability.autonomy.candidate.silent" target="inventory">
+          <log label="autonomy.candidate.silent" expr="seedSilentLog()"/>
+        </transition>
+        <transition event="error.*" target="failed">
+          <assign location="answer" expr="seedFailedReason(_event)"/>
+        </transition>
+      </state>
+
+      <!-- Then the learned inventory, when there is memory. -->
+      <state id="inventory">
+        <onentry>
+          <if cond="hasNoMemory()">
+            <log label="autonomy" expr="noMemoryLog()"/>
+          </if>
+        </onentry>
+        <transition cond="hasNoMemory()" target="percept_unhandled"/>
+        <transition target="loading"/>
+      </state>
+
+      <!-- The inventory: the ACTIVE turn behaviors the percept triggers. -->
+      <state id="loading">
+        <onentry>
+          <send id="load-timeout" event="bot.ability.autonomy.behaviors.load.failed" delayexpr="memoryTimeoutDelay()"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="load-timeout"/>
+        </onexit>
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.load">
+            <param name="id" expr="memory_requests.load"/>
+            <param name="statements" expr="behaviorSelectStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.memory.output.json" target="matched">
+          <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
+        </transition>
+        <!-- A failed load is a warning, and the turn goes on with no inventory rows. -->
+        <transition event="bot.ability.failed" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.failed.json" target="matched">
+          <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
+          <assign location="rows" expr="[]"/>
+        </transition>
+        <transition event="error.*" target="matched">
+          <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.name)"/>
+          <assign location="rows" expr="[]"/>
+        </transition>
+        <transition event="bot.ability.autonomy.behaviors.load.failed" target="matched">
+          <log label="autonomy.behaviors.load.failed" expr="loadTimedOutReason()"/>
+          <assign location="rows" expr="[]"/>
+        </transition>
+      </state>
+
+      <state id="matched">
+        <onentry>
+          <log label="autonomy" expr="matchedLog()"/>
+        </onentry>
+        <transition cond="hasNoMatch()" target="percept_unhandled"/>
+        <transition target="running"/>
+      </state>
+
+      <!-- The candidates, one at a time, as a chain of runners. -->
+      <state id="running">
+        <onentry>
+          <autonomy:behavior_input_payload location="behavior_input" stimulus="view"
+              focus="input.focus" focus_candidates="input.focus_candidates"/>
+        </onentry>
+        <invoke id="candidates" type="scxml" src="../candidates_runner/candidates_runner.scx">
+          <param name="turn" expr="turn"/>
+          <param name="input" expr="behavior_input"/>
+          <param name="candidates" expr="candidateRows()"/>
+          <param name="memory" expr="memory"/>
+          <param name="silence_ms" expr="silence_ms"/>
+          <param name="memory_timeout_ms" expr="memory_timeout_ms"/>
+        </invoke>
+        <transition event="done.invoke.candidates" cond="isRunHandled(_event)" target="percept_handled">
+          <assign location="tried" expr="triedWithRun(_event)"/>
+          <assign location="answer" expr="_event.data.selected"/>
+        </transition>
+        <transition event="done.invoke.candidates" cond="isRunRejected(_event)" target="failed">
+          <assign location="tried" expr="triedWithRun(_event)"/>
+          <assign location="answer" expr="_event.data.rejection"/>
+        </transition>
+        <transition event="done.invoke.candidates" target="percept_unhandled">
+          <assign location="tried" expr="triedWithRun(_event)"/>
+        </transition>
+        <transition event="error.*" target="percept_unhandled">
+          <log label="autonomy.candidate.failed" expr="runFailedLog(_event)"/>
+        </transition>
+      </state>
+    </state>
+
+    <!-- A behavior handled the percept: it is settled. -->
+    <state id="percept_handled">
+      <onentry>
+        <assign location="handled" expr="handledWithPercept()"/>
+        <assign location="selected" expr="selectedWithAnswer()"/>
+      </onentry>
+      <transition target="next_percept"/>
+    </state>
+    <state id="percept_unhandled">
+      <transition target="next_percept"/>
+    </state>
+
+    <!-- The next percept, or the turn's answer: handled only when every
+         percept was. -->
+    <state id="next_percept">
+      <transition cond="hasNextPercept()" target="percept">
+        <assign location="position" expr="nextPosition()"/>
+      </transition>
+      <transition cond="everyPerceptHandled()" target="answered"/>
+      <transition cond="hasNoCandidates()" target="done"/>
+      <transition target="unhandled"/>
+    </state>
+
+    <state id="done">
+      <onentry><assign location="result" expr="noBehaviorsOutput()"/></onentry>
+      <transition target="answering"/>
+    </state>
+
+    <state id="unhandled">
+      <onentry><assign location="result" expr="unhandledOutput()"/></onentry>
+      <transition target="answering"/>
+    </state>
+
+    <state id="answered">
+      <onentry><assign location="result" expr="answeredOutput()"/></onentry>
+      <transition target="answering"/>
+    </state>
+
+    <state id="failed">
+      <onentry><assign location="result" expr="failedOutput()"/></onentry>
+      <transition target="answering"/>
+    </state>
+  </state>
+
+  <!-- The turn's answer to the cognition, then the next turn. -->
+  <state id="answering">
+    <onentry>
+      <send event="bot.ability.autonomy.output" target="#_parent">
+        <content expr="result"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
 </scxml>

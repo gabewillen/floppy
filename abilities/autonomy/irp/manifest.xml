@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/autonomy/irp/sources">
   <assert id="autonomy-1" specnum="1" specid="#autonomy-1">
-    <![CDATA[Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it ends with donedata `{turn, handled: false, candidates: [], reason: "no-behaviors"}`. Its donedata is its only answer: it sends its parent no event.]]>
+    <![CDATA[Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it answers `bot.ability.autonomy.output` `{turn, handled: false, candidates: [], reason: "no-behaviors"}`, once.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="autonomy-2" specnum="2" specid="#autonomy-2">
-    <![CDATA[A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, candidates: ["SpeechHeard"], reason: "behavior"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`), trusted and naming no target (the body sends it to itself).]]>
+    <![CDATA[A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, candidates: ["SpeechHeard"], reason: "behavior"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`, and `parent`, the speech itself), trusted and naming no target (the body sends it to itself).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -54,6 +54,15 @@
     </test>
     <test id="162" conformance="mandatory" manual="false">
       <start uri="162/test162.scxml"/>
+    </test>
+  </assert>
+  <assert id="autonomy-7" specnum="7" specid="#autonomy-7">
+    <![CDATA[It is long-lived (mosfet.py's Cognition holds its Autonomy, decision D272): it answers each `bot.ability.autonomy.input` in turn, and a `bot.ability.processing.cancel` ends the turn in flight unanswered, so the next input is the next turn.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
     </test>
   </assert>
 </assertions>
