@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/intuition/irp/sources">
   <assert id="intuition-1" specnum="1" specid="#intuition-1">
-    <![CDATA[It asks the decision service for a choice over the `choices` <param> with the stimulus's model-facing text as its state, so the service leaves out `bot.ability.reasoning.input` and takes the stimulus's object data as evidence: each event's required data is filled from it. The service returns only the chosen event. A confident product is handled: it sends its selection to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], acted, reason: "none", confidence_tuner, bytes_per_token}`, `acted` what it sent.]]>
+    <![CDATA[Each `bot.ability.intuition.input` is one turn: it asks the decision service for a choice over its `choices` with the stimulus's model-facing text as its state, so the service leaves out `bot.ability.reasoning.input` and takes the stimulus's object data as evidence: each event's required data is filled from it. The service returns only the chosen event. A confident product is handled: it sends its selection to its target and answers `bot.ability.intuition.output` `{turn, handled: true, selected: [{event, data, target}], acted, reason: "none", confidence_tuner, bytes_per_token}`, `acted` what it sent.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="intuition-2" specnum="2" specid="#intuition-2">
-    <![CDATA[The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (`<intuition:observe>`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`<intuition:escalate>`: the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
+    <![CDATA[The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The input's `confidence_tuner` `{mean, var, n}` observes it (`<intuition:observe>`) and comes back updated in every output; the turn is low-confidence when the confidence is below the updated threshold (`<intuition:escalate>`: the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="intuition-3" specnum="3" specid="#intuition-3">
-    <![CDATA[A low-confidence product is unhandled and escalates: it sends its environment actions (dispatched before the next tier runs), never the ignore or the deliberate handoff, and ends with `{turn, handled: false, reason: "low_confidence", acted, confidence_tuner, bytes_per_token}`, `acted` what it sent.]]>
+    <![CDATA[A low-confidence product is unhandled and escalates: it sends its environment actions (dispatched before the next tier runs), never the ignore or the deliberate handoff, and answers `{turn, handled: false, reason: "low_confidence", acted, confidence_tuner, bytes_per_token}`, `acted` what it sent.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -39,7 +39,7 @@
     </test>
   </assert>
   <assert id="intuition-4" specnum="4" specid="#intuition-4">
-    <![CDATA[When the service abstains (a pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: "empty_product", acted: [], confidence_tuner, bytes_per_token}` with no `selected`, and the tuner observes nothing. The service offers one pass per tier of the `hand_ons` <param> (`["reasoning"]` by default), and a pass names its tier as `hand_to`.]]>
+    <![CDATA[When the service abstains (a pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: "empty_product", acted: [], confidence_tuner, bytes_per_token}` with no `selected`, and the tuner observes nothing. The service offers one pass per tier of the input's `hand_ons` (`["reasoning"]` by default), and a pass names its tier as `hand_to`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="intuition-7" specnum="7" specid="#intuition-7">
-    <![CDATA[The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the <param>, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every donedata; with a `max_context_tokens` <param> the request is fitted to it and still sent.]]>
+    <![CDATA[The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the input's, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every output; with a `max_context_tokens` in the input the request is fitted to it and still sent.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
@@ -90,6 +90,15 @@
     </test>
     <test id="162" conformance="mandatory" manual="false">
       <start uri="162/test162.scxml"/>
+    </test>
+  </assert>
+  <assert id="intuition-8" specnum="8" specid="#intuition-8">
+    <![CDATA[It is long-lived (mosfet.py's Cognition holds its Decision): it answers each `bot.ability.intuition.input` in turn, and a `bot.ability.processing.cancel` ends the turn's decision unanswered, so the next input is the next turn.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
     </test>
   </assert>
 </assertions>

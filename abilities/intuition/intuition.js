@@ -4,6 +4,11 @@
 
 // deciding
 
+// An event of the decision service call in hand, not of a cancelled one.
+function isCurrent(_event) {
+  return _event.invokeid === decision;
+}
+
 function decisionTimeoutDelay() {
   return decision_timeout_ms + 'ms';
 }
