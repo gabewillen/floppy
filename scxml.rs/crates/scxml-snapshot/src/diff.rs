@@ -542,7 +542,7 @@ fn strip_session(session: &mut Session) {
             if let Some(event) = &mut send.event {
                 strip(event);
             }
-            if let Some(message) = &mut send.basichttp {
+            if let Some(message) = &mut send.message {
                 message.trace_context = None;
             }
         }

@@ -7,11 +7,11 @@
 use std::fmt::Write as _;
 
 use scxml_snapshot::{
-    BaggagePolicy, BasicHttpMessage, Capture, ComponentIdentity, ComponentRole, DataModelCapture,
-    Document, Event, EventType, HistoryValue, Invocation, InvokedBy, MAX_BASICHTTP_PARAMS,
-    MAX_COND_BYTES, MAX_CONFIGURATION_STATES, MAX_DOCUMENT_BYTES, MAX_INVOKED_SESSIONS,
-    MAX_PENDING_SENDS, MAX_QUEUE_ENTRIES, MAX_SESSION_ID_BYTES, MAX_TRANSITIONS, MAX_TYPEOF_BYTES,
-    MAX_VALUE_BYTES, MAX_VARIABLES, MachineCapture, Options, OversizedValue, Param, PendingSend,
+    BaggagePolicy, Capture, ComponentIdentity, ComponentRole, DataModelCapture, Document, Event,
+    EventType, HistoryValue, Invocation, InvokedBy, MAX_COND_BYTES, MAX_CONFIGURATION_STATES,
+    MAX_DOCUMENT_BYTES, MAX_INVOKED_SESSIONS, MAX_PENDING_SENDS, MAX_PROCESSOR_SEND_PARAMS,
+    MAX_QUEUE_ENTRIES, MAX_SESSION_ID_BYTES, MAX_TRANSITIONS, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES,
+    MAX_VARIABLES, MachineCapture, Options, OversizedValue, Param, PendingSend, ProcessorMessage,
     SessionCapture, SnapshotError, SnapshotErrorCode, Status, System, TextValue, TraceContext,
     TransitionCapture, TransitionType, Value, Variable, VariableValue, check, decode, encode,
 };
@@ -194,7 +194,7 @@ fn send(id: &str) -> PendingSend {
     PendingSend {
         sendid: id.into(),
         event: Some(event("timeout")),
-        basichttp: None,
+        message: None,
         target: None,
         send_type: None,
         delay_ms: 0,
@@ -526,24 +526,24 @@ fn pending_send_bounds() {
         },
     );
     assert_bound(
-        "basichttp event",
-        scxml_types::MAX_BASICHTTP_EVENT_NAME_BYTES,
-        "/snapshot/root/pending_sends/0/basichttp/event",
+        "processor message event",
+        scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
+        "/snapshot/root/pending_sends/0/message/event",
         &|d, n| {
             let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.basichttp {
+            if let Some(message) = &mut entry.message {
                 message.event = Some("e".repeat(n));
             }
             *pending(d) = vec![entry];
         },
     );
     assert_bound(
-        "basichttp params",
-        MAX_BASICHTTP_PARAMS,
-        "/snapshot/root/pending_sends/0/basichttp/params",
+        "processor message params",
+        MAX_PROCESSOR_SEND_PARAMS,
+        "/snapshot/root/pending_sends/0/message/params",
         &|d, n| {
             let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.basichttp {
+            if let Some(message) = &mut entry.message {
                 message.params = (0..n)
                     .map(|_| Param {
                         name: "p".into(),
@@ -555,12 +555,12 @@ fn pending_send_bounds() {
         },
     );
     assert_bound(
-        "basichttp param name",
+        "processor message param name",
         NAME,
-        "/snapshot/root/pending_sends/0/basichttp/params/0/name",
+        "/snapshot/root/pending_sends/0/message/params/0/name",
         &|d, n| {
             let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.basichttp {
+            if let Some(message) = &mut entry.message {
                 message.params = vec![Param {
                     name: "p".repeat(n),
                     value: Value::Null,
@@ -575,7 +575,7 @@ fn pending_send_bounds() {
 fn post(id: &str) -> PendingSend {
     PendingSend {
         event: None,
-        basichttp: Some(BasicHttpMessage {
+        message: Some(ProcessorMessage {
             event: Some("ready".into()),
             params: vec![Param {
                 name: "k".into(),
@@ -607,7 +607,7 @@ fn a_pending_send_holds_exactly_one_message() {
         ..post("sendid_0")
     };
     let neither = PendingSend {
-        basichttp: None,
+        message: None,
         ..post("sendid_0")
     };
     for entry in [both, neither] {

@@ -525,7 +525,10 @@ fn the_next_sound_is_detected_while_the_one_in_hand_is() {
     let (mut run, backend) = started(
         &harness,
         "the_next_sound_is_detected_while_the_one_in_hand_is",
-        &[("slow.wav", spoken_wav("slow")), ("silence.wav", silent_wav())],
+        &[
+            ("slow.wav", spoken_wav("slow")),
+            ("silence.wav", silent_wav()),
+        ],
     );
     let slow = sound("slow.wav", &json!({"received_level_db": 54}));
     let silent = sound("silence.wav", &json!({"received_level_db": 54}));

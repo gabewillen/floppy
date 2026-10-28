@@ -13,7 +13,8 @@
 //! `scripts/verify-wasm-capabilities.sh` into `target/cli-components`; set
 //! `SCXML_COMPONENTS_DIR` and `SCXML_COMPONENTS_MANIFEST_SHA256` to use an
 //! already verified release instead (it must hold
-//! `scxml_service_example.virtualized.wasm` too).
+//! `scxml_service_example.virtualized.wasm` and
+//! `scxml_ioprocessor_websocket.virtualized.wasm` too).
 
 use std::fs;
 use std::io::{BufRead as _, BufReader, Write as _};
@@ -35,6 +36,7 @@ const COMPONENTS: &[&str] = &[
     "scxml_data_model_xpath",
     "scxml_ioprocessor_scxml",
     "scxml_ioprocessor_basichttp",
+    "scxml_ioprocessor_websocket",
     "scxml_compiler",
     "scxml_machine",
 ];
@@ -1770,4 +1772,98 @@ fn a_wasi_service_runs_only_with_its_dir_granted() {
         fs::read_to_string(workspace_dir.join("out.txt")).expect("the file is written"),
         "hi"
     );
+}
+
+/// The WebSocket Event I/O Processor's type URI.
+const WEBSOCKET: &str = "https://github.com/stateforward/scxml.rs/processors/websocket";
+
+/// A loopback WebSocket server that sends back every message of each
+/// connection until the client closes it; its port.
+fn websocket_echo() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(stream) = stream else { return };
+            std::thread::spawn(move || {
+                let Ok(mut socket) = tungstenite::accept(stream) else {
+                    return;
+                };
+                while let Ok(message) = socket.read() {
+                    if (message.is_text() || message.is_binary()) && socket.send(message).is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    port
+}
+
+/// `run` binds the WebSocket processor from its package (admitting the
+/// echo server's origin), greets the server, logs what comes back, closes
+/// the connection, ends on the close, and replays the record without the
+/// network.
+#[test]
+fn a_websocket_processor_package_talks_closes_and_replays() {
+    let port = websocket_echo();
+    let directory = scratch("websocket");
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_ioprocessor_websocket.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the processor component is readable"))
+    );
+    let checked_in: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            workspace()
+                .join("components/scxml-ioprocessor-websocket/package/websocket.processor.json"),
+        )
+        .expect("the package is readable"),
+    )
+    .expect("the package is JSON");
+    let mut package = checked_in;
+    package["origins"] = serde_json::json!([format!("http://127.0.0.1:{port}")]);
+    let manifest = directory.join("websocket.processor.json");
+    fs::write(&manifest, package.to_string()).expect("the package is writable");
+    let doc = document(
+        &directory,
+        &format!(
+            r#"<state id="s0"><onentry><send type="websocket" target="ws://127.0.0.1:{port}/echo" event="hello"><param name="n" expr="1"/></send></onentry><transition event="hello"><log label="hello" expr="_event.origintype + ' ' + _event.data.n"/><send type="websocket" targetexpr="_event.origin"><content expr="'plain'"/></send></transition><transition event="websocket.message"><log label="message" expr="_event.data"/><send type="websocket" targetexpr="_event.origin" event="websocket.close"/></transition><transition event="websocket.close" target="done"><log label="close" expr="_event.data.code"/></transition></state><final id="done"/>"#
+        ),
+    );
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let manifest_arg = manifest.display().to_string();
+    let component_arg = format!("{WEBSOCKET}={}", component.display());
+    let digest_arg = format!("{WEBSOCKET}={digest}");
+    let binding = [
+        "--processor-package",
+        &manifest_arg,
+        "--processor-component",
+        &component_arg,
+        "--processor-component-sha256",
+        &digest_arg,
+    ];
+    let mut args = binding.to_vec();
+    args.extend(["--clock", "logical", "--record", &log_arg]);
+    let output = run(&doc, &args, "");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let expected = [
+        format!("hello: {WEBSOCKET} 1"),
+        "message: plain".to_owned(),
+        // The echo server answers the close without a status code.
+        "close: 1005".to_owned(),
+    ];
+    assert_eq!(log_lines(&parse_records(&output)), expected);
+    let log_text = fs::read_to_string(&log).expect("the log is readable");
+    assert!(log_text.contains("\"type\":\"websocket\""), "{log_text}");
+
+    // Replay: the server is not asked again; the same bindings, the same
+    // logs.
+    let mut args = binding.to_vec();
+    args.extend(["--replay", &log_arg]);
+    let replay = run(&doc, &args, "");
+    assert_eq!(replay.status.code(), Some(0), "{}", stderr(&replay));
+    assert_eq!(log_lines(&parse_records(&replay)), expected);
 }

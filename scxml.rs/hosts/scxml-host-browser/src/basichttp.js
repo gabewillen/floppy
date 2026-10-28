@@ -78,7 +78,7 @@ export function isHttpOption(value) {
   );
 }
 
-/** The processor's `outbound-send` of one machine `basichttp-send`. */
+/** The processor's `outbound-send` of one machine `processor-send`. */
 function outboundSend(request) {
   return {
     eventName: request.eventName,
@@ -337,6 +337,15 @@ export class BasicHttpLink {
   }
 
   /**
+   * Whether a send's type names this processor: its type URI or one of its
+   * aliases, exactly (SCXML 6.2, C.2).
+   * @internal
+   */
+  answers(processorType) {
+    return processorType === this.typeUri || this.aliases.includes(processorType);
+  }
+
+  /**
    * Sets how a post into the loopback address space (`LOOPBACK_ORIGIN`)
    * reaches the session it addresses: `route(uri, sender)` names the live
    * session (`{tag: 'own' | 'parent' | 'child', invokeId?}`, or
@@ -378,7 +387,7 @@ export class BasicHttpLink {
   }
 
   /**
-   * Encodes and performs one machine `basichttp-send` of session `sender`
+   * Encodes and performs one machine `processor-send` of session `sender`
    * (an opaque token) through the sender instance. While the page's `send`
    * runs, the first inbound request the page routes straight back into the
    * session is the send's loopback delivery (see `takeLoopback`), which the
@@ -404,7 +413,7 @@ export class BasicHttpLink {
   }
 
   /**
-   * Validates and encodes one machine `basichttp-send` exactly as `send`
+   * Validates and encodes one machine `processor-send` exactly as `send`
    * does, without posting it (`basichttp-api.check`; a missing target is
    * not checked). The host checks a delayed send before scheduling it
    * (SCXML 6.2: "The Processor MUST evaluate all arguments to <send> when

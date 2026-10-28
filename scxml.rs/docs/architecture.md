@@ -89,6 +89,11 @@ Executable product semantics are Wasm components:
   guest (SCXML C.2); it reaches a network only through the embedder-supplied
   `stateforward:scxml-basichttp/http-transport` import and imports no WASI
   socket or HTTP capability;
+- `components/scxml-ioprocessor-websocket`: the WebSocket Event I/O
+  Processor, a component of the `stateforward:scxml/event-processor` world
+  that a package binds to its type URI
+  ([event-io-processors.md](event-io-processors.md)); it reaches a network
+  only through host-admitted `outbound-websocket` connections;
 - `components/scxml-validator`: validation guest; its parse-only
   `expression-syntax` import is answered by a data-model component (the
   Wasmtime host's `ComponentValidator`), and its build composes the fixed
@@ -147,7 +152,9 @@ IR. Rust libraries have native builds only for fast tests and CLI composition.
 The canonical WIT (under [`crates/scxml-wit/wit`](../crates/scxml-wit/wit)) is split by independent versioning boundary; the
 version of every contract is in the [README](../README.md#versions):
 
-- `stateforward:scxml@0.2.0`: runtime/capability and machine lifecycle;
+- `stateforward:scxml@0.2.0`: runtime/capability and machine lifecycle,
+  and the worlds of invoked services and Event I/O Processor components
+  (`event-processor`, with `outbound-http` and `outbound-websocket`);
 - `stateforward:scxml-clock@0.2.0`: logical time, scheduling, cancellation, and due draining;
 - `stateforward:scxml-basichttp@0.2.0`: the `BasicHTTP` Event I/O Processor
   (`basichttp-api`) and the narrow `http-transport` capability it imports;
@@ -442,8 +449,9 @@ session starts (`machine-capabilities.load-extensions`) through the embedder's
 namespace of the document and of each literal `<invoke src>` document it
 loads before the session starts, so its runs never need the resolver. Extension components do no
 I/O: they import no WASI interface and no `outbound-http` (the host links
-neither into them; WASI and `outbound-http` are linked into invoked-service
-components only, WASI as each component's own `wasi:*` imports with the
+neither into them; WASI is linked into invoked-service components only, and
+`outbound-http` and `outbound-websocket` into invoked-service and Event I/O
+Processor components; WASI as each component's own `wasi:*` imports with the
 runtime resources the run grants, through `wasmtime-wasi` inside the host
 adapter; see [invoked-services.md](invoked-services.md)), and they receive
 no `env` value or reference: only an invoked service's `<invoke>` binds

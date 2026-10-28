@@ -33,11 +33,11 @@ mod guest {
     };
     use stateforward::scxml::telemetry;
     use stateforward::scxml::types::{
-        BaggagePolicy as WitBaggagePolicy, BasichttpSend as WitBasichttpSend, ComponentError,
-        DataValue as WitDataValue, ErrorCode, ErrorVersion, Event as WitEvent,
-        EventType as WitEventType, NamedValue as WitNamedValue, RoutedEvent,
-        SendMessage as WitSendMessage, SendRequest as WitSendRequest, SendTarget as WitSendTarget,
-        Sender, TraceContext as WitTraceContext,
+        BaggagePolicy as WitBaggagePolicy, ComponentError, DataValue as WitDataValue, ErrorCode,
+        ErrorVersion, Event as WitEvent, EventType as WitEventType, NamedValue as WitNamedValue,
+        ProcessorSend as WitProcessorSend, RoutedEvent, SendMessage as WitSendMessage,
+        SendRequest as WitSendRequest, SendTarget as WitSendTarget, Sender,
+        TraceContext as WitTraceContext,
     };
     use stateforward::scxml_clock::clock_api;
     use stateforward::scxml_clock::types::{
@@ -184,14 +184,14 @@ mod guest {
             }
         }
 
-        fn schedule_basichttp(mut request: WitBasichttpSend) -> Result<(), ComponentError> {
+        fn schedule_processor(mut request: WitProcessorSend) -> Result<(), ComponentError> {
             let mut context = None;
             let result = (|| {
                 context = validate_wit_context(request.trace_context.take())?;
                 request.trace_context.clone_from(&context);
-                let send = to_native_basichttp(request)?;
+                let send = to_native_processor(request)?;
                 let scheduled = super::ScxmlIoProcessor
-                    .plan_basichttp(&send)
+                    .plan_processor(&send)
                     .map_err(processor_error)?;
                 let clock_context = context.as_ref().map(to_clock_context);
                 clock_api::schedule(
@@ -212,13 +212,13 @@ mod guest {
                 )
             };
             telemetry::observe(
-                telemetry::Operation::ScheduleBasichttp,
+                telemetry::Operation::ScheduleProcessor,
                 outcome,
                 None,
                 context.as_ref(),
             );
             telemetry::event(
-                telemetry::Operation::ScheduleBasichttp,
+                telemetry::Operation::ScheduleProcessor,
                 event,
                 context.as_ref(),
             );
@@ -490,16 +490,17 @@ mod guest {
         }
     }
 
-    fn to_native_basichttp(
-        request: WitBasichttpSend,
-    ) -> Result<scxml_types::BasicHttpSend, ComponentError> {
-        if request.params.len() > scxml_types::MAX_BASICHTTP_PARAMS {
+    fn to_native_processor(
+        request: WitProcessorSend,
+    ) -> Result<scxml_types::ProcessorSend, ComponentError> {
+        if request.params.len() > scxml_types::MAX_PROCESSOR_SEND_PARAMS {
             return Err(error(
                 ErrorCode::PayloadTooLarge,
-                "basichttp send has too many fields",
+                "processor send has too many fields",
             ));
         }
-        Ok(scxml_types::BasicHttpSend {
+        Ok(scxml_types::ProcessorSend {
+            processor_type: request.processor_type,
             send_id: scxml_types::SendId::new(request.send_id)
                 .map_err(|_| error(ErrorCode::InvalidInput, "send id is invalid"))?,
             event_name: request.event_name,
@@ -539,8 +540,9 @@ mod guest {
             scxml_types::DelayedSend::Scxml(request) => {
                 WitDelayedSend::Scxml(from_native_request(request))
             }
-            scxml_types::DelayedSend::BasicHttp(send) => {
-                WitDelayedSend::Basichttp(WitBasichttpSend {
+            scxml_types::DelayedSend::Processor(send) => {
+                WitDelayedSend::Processor(WitProcessorSend {
+                    processor_type: send.processor_type,
                     send_id: send.send_id.as_str().to_owned(),
                     event_name: send.event_name,
                     target: send.target,
@@ -695,7 +697,7 @@ mod guest {
             ),
             super::ProcessorError::NotDelayed => (
                 ErrorCode::InvalidInput,
-                "a scheduled basichttp send requires a delay",
+                "a scheduled processor send requires a delay",
             ),
             super::ProcessorError::InvalidSend => {
                 (ErrorCode::InvalidInput, "the send is not canonical")
@@ -747,7 +749,7 @@ mod guest {
 }
 
 use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent, observe};
-use scxml_types::{BasicHttpSend, DelayedSend, Event, SendRequest};
+use scxml_types::{DelayedSend, Event, ProcessorSend, SendRequest};
 
 // Processor-type and invoke-type spelling lives in `scxml-types` so the
 // engine's `<send>`/`<invoke>` interpreter classifies exactly as this
@@ -1117,12 +1119,12 @@ impl ScxmlIoProcessor {
         }))
     }
 
-    /// Plans the clock timer of one delayed `BasicHTTP` send (WIT
-    /// `io-processor-api.schedule-basichttp`): the processor holds it on
+    /// Plans the clock timer of one delayed send of another processor (WIT
+    /// `io-processor-api.schedule-processor`): the processor holds it on
     /// the clock under its send id until the delay elapses (SCXML 6.2: "It
     /// MUST dispatch the message only when the delay interval elapses."),
     /// so it is cancelled (6.3) and discarded (6.2) like every delayed send
-    /// of the session. The `BasicHTTP` processor validated the send.
+    /// of the session. The processor its type names validated the send.
     ///
     /// # Errors
     ///
@@ -1130,11 +1132,11 @@ impl ScxmlIoProcessor {
     /// [`ProcessorError::PayloadTooLarge`] when the canonical encoding
     /// exceeds [`scxml_types::MAX_DELAYED_SEND_BYTES`] or a field bound, and
     /// [`ProcessorError::InvalidSend`] for a value the encoding rejects.
-    pub fn plan_basichttp(&self, send: &BasicHttpSend) -> Result<ScheduledSend, ProcessorError> {
+    pub fn plan_processor(&self, send: &ProcessorSend) -> Result<ScheduledSend, ProcessorError> {
         if send.delay_ms == 0 {
             return Err(ProcessorError::NotDelayed);
         }
-        let payload = scxml_types::encode_delayed_send(&DelayedSend::BasicHttp(send.clone()))
+        let payload = scxml_types::encode_delayed_send(&DelayedSend::Processor(send.clone()))
             .map_err(|error| match error {
                 scxml_types::SendCodecError::TooLarge => ProcessorError::PayloadTooLarge,
                 scxml_types::SendCodecError::Invalid
@@ -1256,9 +1258,9 @@ pub enum ProcessorError {
     /// The target is `#_internal` or not a target this processor accepts
     /// (SCXML 6.2: `error.execution`).
     InvalidTarget,
-    /// A `BasicHTTP` send handed to the clock carries no delay.
+    /// Another processor's send handed to the clock carries no delay.
     NotDelayed,
-    /// A send holds a value its canonical form rejects: a `BasicHTTP` send
+    /// A send holds a value its canonical form rejects: another processor's send
     /// handed to the clock, or an SCXML send whose stamped event is not a
     /// valid `types.event`.
     InvalidSend,
@@ -1276,7 +1278,7 @@ impl std::fmt::Display for ProcessorError {
             Self::PayloadTooLarge => "send request exceeds the byte bound",
             Self::InvalidTarget => "send target is invalid for this processor",
             Self::UnreachableTarget => "send target session is unreachable",
-            Self::NotDelayed => "a scheduled basichttp send requires a delay",
+            Self::NotDelayed => "a scheduled processor send requires a delay",
             Self::InvalidSend => "the send is not canonical",
         })
     }
@@ -1302,8 +1304,9 @@ mod tests {
             .expect("fixture request encodes")
     }
 
-    fn basichttp(id: &str, delay_ms: u64) -> BasicHttpSend {
-        BasicHttpSend {
+    fn basichttp(id: &str, delay_ms: u64) -> ProcessorSend {
+        ProcessorSend {
+            processor_type: "basichttp".into(),
             send_id: SendId::new(id).expect("test send id is valid"),
             event_name: Some("due".into()),
             target: Some("http://example.test/in".into()),
@@ -1408,32 +1411,32 @@ mod tests {
         // interval elapses." The processor holds the send on the clock.
         let send = basichttp("post", 250);
         let scheduled = ScxmlIoProcessor
-            .plan_basichttp(&send)
+            .plan_processor(&send)
             .expect("a delayed BasicHTTP send plans");
         assert_eq!(scheduled.send_id, "post");
         assert_eq!(scheduled.delay_ms, 250);
         let batch = decode_due_batch([("post".to_owned(), scheduled.payload.clone())]);
-        assert_eq!(batch.delivered, vec![DelayedSend::BasicHttp(send)]);
+        assert_eq!(batch.delivered, vec![DelayedSend::Processor(send)]);
         let mismatched = decode_due_batch([("other".to_owned(), scheduled.payload)]);
         assert_eq!(
             mismatched.rejected,
             vec![("other".to_owned(), DueRejection::IdentityMismatch)]
         );
         assert_eq!(
-            ScxmlIoProcessor.plan_basichttp(&basichttp("now", 0)),
+            ScxmlIoProcessor.plan_processor(&basichttp("now", 0)),
             Err(ProcessorError::NotDelayed)
         );
-        let oversized = BasicHttpSend {
+        let oversized = ProcessorSend {
             content: Some(scxml_types::DataValue::String(
                 "x".repeat(scxml_types::MAX_DELAYED_SEND_BYTES),
             )),
             ..basichttp("big", 1)
         };
         assert_eq!(
-            ScxmlIoProcessor.plan_basichttp(&oversized),
+            ScxmlIoProcessor.plan_processor(&oversized),
             Err(ProcessorError::PayloadTooLarge)
         );
-        let unnamed = BasicHttpSend {
+        let unnamed = ProcessorSend {
             params: vec![scxml_types::NamedValue {
                 name: String::new(),
                 value: scxml_types::DataValue::Null,
@@ -1441,7 +1444,7 @@ mod tests {
             ..basichttp("bad", 1)
         };
         assert_eq!(
-            ScxmlIoProcessor.plan_basichttp(&unnamed),
+            ScxmlIoProcessor.plan_processor(&unnamed),
             Err(ProcessorError::InvalidSend)
         );
     }
@@ -1450,7 +1453,7 @@ mod tests {
     fn pending_sends_decode_in_clock_order_and_fail_whole_on_a_broken_timer() {
         let first = encode(&delayed("first"));
         let second = ScxmlIoProcessor
-            .plan_basichttp(&basichttp("second", 5))
+            .plan_processor(&basichttp("second", 5))
             .expect("a delayed BasicHTTP send plans")
             .payload;
         let pending = decode_pending_sends([
@@ -1466,7 +1469,7 @@ mod tests {
                     deadline_ms: 105,
                 },
                 PendingSend {
-                    request: DelayedSend::BasicHttp(basichttp("second", 5)),
+                    request: DelayedSend::Processor(basichttp("second", 5)),
                     deadline_ms: 105,
                 },
             ]

@@ -113,7 +113,7 @@ case "$proof_dir" in
 esac
 manifest="$proof_dir/manifest.tsv"
 manifest_tmp="$proof_dir/manifest.tsv.tmp"
-all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_service_example scxml_service_files scxml_extension_example scxml_package_validator_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scxml_resolver_github scx'
+all_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_ioprocessor_websocket scxml_service_example scxml_service_files scxml_extension_example scxml_package_validator_example scxml_script_example scxml_validator scxml_reporter_rustc scxml_reporter_sarif scxml_compiler scxml_machine scxml_snapshot_codec scxml_resolver_github scx'
 if [ "$#" -eq 0 ]; then
     components=$all_components
 else
@@ -168,9 +168,9 @@ expected_imports() {
         scxml_data_model_ecmascript|scxml_data_model_null|scxml_data_model_xpath) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/telemetry@0.2.0' 'stateforward:scxml/execution-host@0.2.0' ;;
         # The example service reaches the session's logical clock only
         # through its world's wasi:clocks/monotonic-clock@0.3.0, and the
-        # network only through the host-admitted outbound-http request its
-        # `endpoint` slot's reference supplies.
-        scxml_service_example) printf '%s\n' 'wasi:clocks/types@0.3.0' 'wasi:clocks/monotonic-clock@0.3.0' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/telemetry@0.2.0' ;;
+        # network only through the host-admitted outbound-http requests and
+        # outbound-websocket connections.
+        scxml_service_example) printf '%s\n' 'wasi:clocks/types@0.3.0' 'wasi:clocks/monotonic-clock@0.3.0' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/outbound-websocket@0.2.0' 'stateforward:scxml/telemetry@0.2.0' ;;
         # The files example keeps exactly the WASI interfaces of the
         # filesystem it imports: the filesystem interfaces, the wasi:io
         # interfaces they use, and wasi:clocks/wall-clock for its `datetime`
@@ -182,6 +182,10 @@ expected_imports() {
         # BasicHTTP reaches the network only through the embedder-supplied
         # http-transport capability; wasi:sockets and wasi:http are denied.
         scxml_ioprocessor_basichttp) printf '%s\n' 'stateforward:scxml-basichttp/types@0.2.0' 'stateforward:scxml-basichttp/telemetry@0.2.0' 'stateforward:scxml-basichttp/http-transport@0.2.0' ;;
+        # The WebSocket processor reaches the network only through the
+        # host-admitted outbound-websocket connections its targets name
+        # (outbound-http only for the text-part type those requests use).
+        scxml_ioprocessor_websocket) printf '%s\n' 'stateforward:scxml/types@0.2.0' 'stateforward:scxml/outbound-http@0.2.0' 'stateforward:scxml/outbound-websocket@0.2.0' ;;
         # The example namespace exercises every session capability,
         # including the read-only session-snapshot-host (an extension does
         # no I/O: no outbound-http, no WASI).
@@ -299,8 +303,10 @@ check_wasi_types_only_imports() {
 
 # Example components that import a WASI resource are not host-bundled
 # either: an embedder binds them by SHA-256 (authenticate_service_component)
-# with the resources it grants, so manifest.tsv does not list them.
-caller_authenticated=' scxml_service_files '
+# with the resources it grants, so manifest.tsv does not list them. Nor are
+# Event I/O Processor components, which an embedder binds by SHA-256
+# (authenticate_processor_component) with the package that names them.
+caller_authenticated=' scxml_service_files scxml_ioprocessor_websocket '
 in_manifest() {
     case "$caller_authenticated" in
         *" $1 "*) return 1 ;;

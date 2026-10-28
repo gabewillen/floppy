@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `cd3916157996341e10d4e4fe040d334c06694bd1c8d9faac454d378a564277b8`,
+  `cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e`,
   and canonical artifact SHA-256
-  `7ed53e7731259e9a27c6c36d0f99b1c09a819459f1074e04b499a88a14b66266`.
+  `b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `f99aa26a94993207dcbd865727c37f6857f10773d92695988c81ef9a599c2025`,
+  `3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1`,
   and canonical artifact SHA-256
-  `3168603bf04f3b2080142cd12f4df770f639f702d6f5f1b5186f4d837b23bf85`.
+  `fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -180,6 +180,20 @@ disagree are in [spec-errata.md](spec-errata.md).
   gives up (nothing is sent); and the browser host offers none. A request
   has no time limit of its own: the invocation's lifetime bounds it
   (`a_slow_streaming_response_is_read_to_its_end`).
+- Invoked services' outbound WebSocket: `outbound-websocket.connect`
+  suspends only the calling task; a live session runs the connection on a
+  thread of its own and delivers its opening, messages, and end as recorded
+  external inputs (`websocket` records without `processor`), which a replay
+  delivers from its log. Proven by
+  `hosts/scxml-host-wasmtime/tests/websocket_processor.rs`
+  (`an_invoked_service_talks_over_a_websocket_with_a_referenced_token_and_replays`,
+  `a_service_connection_outside_its_package_or_without_a_transport_fails_the_invocation`)
+  against a loopback server. Gaps: a batch run and the browser host refuse
+  every connection (`unavailable`); and a service's connections are
+  counted under the processors' `processor-websocket-connect` and
+  `processor-websocket` spans. Admission, including a reference that
+  supplies the origin, is proven by the host's unit test
+  `a_websocket_url_is_admitted_by_its_http_form_or_by_the_origin_a_reference_supplies`.
 - WASI for invoked services: the WASI interfaces a service may use are its
   component's own `wasi:*` imports; no manifest declares them. Only runtime
   resources need a grant, named after wasmtime CLI's options and scoped to
@@ -200,9 +214,19 @@ disagree are in [spec-errata.md](spec-errata.md).
   capture what a service reads through its WASI resources (files, sockets),
   so a replay needs the same ones; and the browser host links no WASI
   interface.
-- The SCXML and `BasicHTTP` Event I/O processors are supported; no other
-  Event I/O processor exists, so a `<send>` of any other type raises
-  `error.execution` (SCXML 6.2, IRP case 199). `BasicHTTP`
+- The SCXML and `BasicHTTP` Event I/O processors are built in. Any other
+  `<send>` type goes to the host, and the Wasmtime session host sends it to
+  the Event I/O Processor component a package binds to that type
+  ([event-io-processors.md](event-io-processors.md)); a type no package
+  binds, and every such type in the browser host and in batch and IRP runs,
+  raises `error.execution` (SCXML 6.2, IRP case 199). The shipped WebSocket
+  processor is proven against a loopback server, live and replayed, by
+  `hosts/scxml-host-wasmtime/tests/websocket_processor.rs` and
+  `crates/scxml-cli/tests/live_run.rs`. Only `scx run` binds processor
+  packages; `_ioprocessors` lists no bound processor; a document cannot bind
+  one itself; a document closes a WebSocket connection with code 1000 only;
+  and a session snapshot does not include processor instances or their
+  connections. `BasicHTTP`
   sends run through the shipped `scxml-ioprocessor-basichttp` component,
   over the session host's deterministic in-process loopback `http-transport` (no
   socket, thread, or wall clock; locations live under the reserved
@@ -213,7 +237,7 @@ disagree are in [spec-errata.md](spec-errata.md).
   `hosts/scxml-host-wasmtime/tests/basichttp_network.rs` and the two-process
   test in `crates/scxml-cli/tests/live_run.rs`. A delayed `BasicHTTP` send
   is checked by the `BasicHTTP` processor at the `<send>`, held on the
-  session clock by the SCXML Event I/O Processor (`schedule-basichttp`), so
+  session clock by the SCXML Event I/O Processor (`schedule-processor`), so
   `<cancel>` cancels it and a terminated session discards it, and posted
   only when its delay elapses (SCXML 6.2); one that cannot be dispatched
   then raises `error.communication` with its send id
@@ -318,8 +342,9 @@ disagree are in [spec-errata.md](spec-errata.md).
 
 In short:
 
-- No Event I/O Processor other than SCXML and BasicHTTP exists; a `<send>`
-  of any other type raises `error.execution`.
+- Only the Wasmtime session host and `scx run` bind Event I/O Processor
+  components; elsewhere a `<send>` whose type is neither SCXML nor BasicHTTP
+  raises `error.execution`.
 - XPath IRP cases 241, 244, 307, 520, and 534 pass only under the documented
   upstream errata in `tests/conformance/w3c-irp/errata/xpath.json`. 24 XPath
   cases that never exercise the XPath data model are `NotApplicable` to it

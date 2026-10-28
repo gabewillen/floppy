@@ -7,9 +7,9 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use scxml_types::{
-    BaggagePolicy, BasicHttpSend, DataValue, DelayError, DelayedSend, Event, EventName, EventType,
-    MAX_DELAY_BYTES, MAX_DELAYED_SEND_BYTES, NamedValue, SendId, SendRequest, TraceContext,
-    decode_delayed_send, encode_delayed_send, parse_delay_ms,
+    BaggagePolicy, DataValue, DelayError, DelayedSend, Event, EventName, EventType,
+    MAX_DELAY_BYTES, MAX_DELAYED_SEND_BYTES, NamedValue, ProcessorSend, SendId, SendRequest,
+    TraceContext, decode_delayed_send, encode_delayed_send, parse_delay_ms,
 };
 
 fn config() -> Config {
@@ -34,7 +34,8 @@ fn processor() -> impl Strategy<Value = Processor> {
 
 fn valid_request(delay_ms: u64, processor: Processor) -> DelayedSend {
     if let Processor::BasicHttp = processor {
-        return DelayedSend::BasicHttp(BasicHttpSend {
+        return DelayedSend::Processor(ProcessorSend {
+            processor_type: "basichttp".into(),
             send_id: SendId::new("timer-1").expect("fixture send id is valid"),
             event_name: Some("order.ready".into()),
             target: Some("http://example.test/in".into()),

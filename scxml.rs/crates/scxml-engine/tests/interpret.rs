@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 
 use scxml_compiler_core::{MachineIr, SCXML_NAMESPACE, ScriptSourceIr, XmlNodeIr, lower};
 use scxml_engine::interpret::{
-    self, BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot,
-    ForeachItems, InlineBody, InterpretFailure, Interpreter, Invocation, InvocationContext,
-    InvocationProgress, InvokeRequest, InvokedSession, LoadedDocument, Observation,
-    SendDisposition, SendTarget, SessionCapabilities, SessionState,
+    self, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot, ForeachItems,
+    InlineBody, InterpretFailure, Interpreter, Invocation, InvocationContext, InvocationProgress,
+    InvokeRequest, InvokedSession, LoadedDocument, Observation, ProcessorSend, SendDisposition,
+    SendTarget, SessionCapabilities, SessionState,
 };
 use scxml_engine::{BatchEnd, Command, Engine, EngineStatus, RunFailure, RunReport};
 use scxml_syntax::{SourceId, SourceText, parse_xml};
@@ -78,7 +78,7 @@ struct Mock {
     /// requests, in the order the interpreter made them.
     timeline: Vec<String>,
     sends: Vec<SendRequest>,
-    basichttp: Vec<BasicHttpSend>,
+    basichttp: Vec<ProcessorSend>,
     logs: Vec<(Option<String>, String)>,
     invocations: Vec<InvokedSession>,
     observations: Vec<String>,
@@ -445,7 +445,15 @@ impl SessionCapabilities for Mock {
         }
     }
 
-    fn send_basichttp(&mut self, request: BasicHttpSend) -> Result<SendDisposition, MockError> {
+    fn send_processor(&mut self, request: ProcessorSend) -> Result<SendDisposition, MockError> {
+        // As a host does: only a bound processor answers its type (here
+        // BasicHTTP's), and any other type is `invalid-input`.
+        if !matches!(
+            request.processor_type.as_str(),
+            "basichttp" | "http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor"
+        ) {
+            return Err(fail(CapabilityErrorKind::InvalidInput));
+        }
         self.basichttp.push(request);
         self.basichttp_result
             .clone()

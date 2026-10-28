@@ -29,7 +29,17 @@
 //!     streams the response: it returns `echo.received` carrying the number
 //!     of body bytes each read took, as they arrive, then `echo.fetched`
 //!     carrying the status once the body has ended; a request or a body that
-//!     fails resolves the future with that error.
+//!     fails resolves the future with that error;
+//!   * `connect`, whose string data is a `ws` or `wss` URL, which opens a
+//!     WebSocket connection to it through `outbound-websocket.connect`, with
+//!     `authorization: Bearer <token>` when the invocation binds the `token`
+//!     slot, and returns `echo.opened` (carrying the subprotocol, if any)
+//!     once it is open, `echo.message` for each message the peer sends (a
+//!     text message's text, a binary message's byte count), and
+//!     `echo.closed` (carrying the peer's close code, if any) when it ends; a
+//!     connection that fails resolves the future with that error;
+//!   * `message`, whose string data is sent as a text message over the open
+//!     connection; and `close`, which closes it (code 1000).
 //!
 //! When the invoking state exits first, the host cancels the invocation
 //! (SCXML 6.4) and drops its instance: there is nothing to release.
@@ -38,8 +48,9 @@
 //! the guest carries out the [`EchoAction`]s it returns against the WIT
 //! imports. It reaches nothing else: no WASI interface beyond its world's
 //! logical clock, and the network only through the host-admitted
-//! `outbound-http` request whose URL the run's value supplies (the component
-//! never sees it).
+//! `outbound-http` requests and `outbound-websocket` connections (a value
+//! the run holds, such as the endpoint or the token, stays a reference: the
+//! component never sees it).
 
 #![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
 #![cfg_attr(
@@ -69,6 +80,21 @@ pub const SEND_EVENT: &str = "send";
 /// The event a streamed GET returns for each body read, carrying its byte
 /// count.
 pub const RECEIVED_EVENT: &str = "echo.received";
+/// The event name that opens a WebSocket connection to its data's URL.
+pub const CONNECT_EVENT: &str = "connect";
+/// The event a connection returns once it is open, carrying its
+/// subprotocol.
+pub const OPENED_EVENT: &str = "echo.opened";
+/// The event name whose data is sent over the open connection; also the
+/// event the service returns for each message the peer sends.
+pub const MESSAGE_EVENT: &str = "message";
+/// The event a connection returns for each message the peer sends.
+pub const HEARD_EVENT: &str = "echo.message";
+/// The event name that closes the open connection.
+pub const CLOSE_EVENT: &str = "close";
+/// The event a connection returns when it ends, carrying the peer's close
+/// code.
+pub const CLOSED_EVENT: &str = "echo.closed";
 /// The `env` slot whose value is the URL `fetch` requests.
 pub const ENDPOINT_SLOT: &str = "endpoint";
 /// The `env` slot whose value `fetch` sends as a bearer token.
@@ -101,6 +127,19 @@ pub enum EchoAction {
         /// empty).
         path: String,
     },
+    /// Open a WebSocket connection to `url`: [`Echo::opened`], then
+    /// [`Echo::heard`] for each message, then [`Echo::closed`].
+    Connect {
+        /// The `connect` event's URL.
+        url: String,
+    },
+    /// Send `text` over the open connection.
+    Message {
+        /// The `message` event's text.
+        text: String,
+    },
+    /// Close the open connection (code 1000).
+    Close,
 }
 
 /// Why the service rejected an input.
@@ -115,6 +154,11 @@ pub enum EchoError {
     NotRunning,
     /// `fetch` or `send` without an `endpoint` slot reference.
     NoEndpoint,
+    /// `connect` or `message` whose data is not a string.
+    NotText,
+    /// `connect` while a connection is open, or `message` or `close`
+    /// without one.
+    Connection,
 }
 
 /// The echo service's state for one invocation.
@@ -124,6 +168,7 @@ pub struct Echo {
     echoed: u64,
     running: bool,
     endpoint: bool,
+    connected: bool,
 }
 
 impl Echo {
@@ -150,6 +195,7 @@ impl Echo {
                 echoed: 0,
                 running: true,
                 endpoint: false,
+                connected: false,
             },
             delay.filter(|delay| *delay > 0),
         ))
@@ -162,18 +208,39 @@ impl Echo {
     }
 
     /// One event the invoking session sent: `stop` completes the service,
-    /// `fetch` requests the `endpoint` URL, and any other event is returned
-    /// as `echo.<name>` with its data.
+    /// `fetch` requests the `endpoint` URL, `connect`, `message`, and
+    /// `close` open, use, and close a connection, and any other event is
+    /// returned as `echo.<name>` with its data.
     ///
     /// # Errors
     ///
     /// [`EchoError::NotRunning`] after completion,
-    /// [`EchoError::NoEndpoint`] for `fetch` without a bound endpoint, and
+    /// [`EchoError::NoEndpoint`] for `fetch` without a bound endpoint,
+    /// [`EchoError::NotText`] for `connect` or `message` without string
+    /// data, [`EchoError::Connection`] for `connect` with a connection open
+    /// or `message` or `close` without one, and
     /// [`EchoError::InvalidEventName`] when `echo.<name>` is not a valid
     /// event name.
     pub fn send(&mut self, name: &str, data: DataValue) -> Result<EchoAction, EchoError> {
         if !self.running {
             return Err(EchoError::NotRunning);
+        }
+        if name == CONNECT_EVENT || name == MESSAGE_EVENT || name == CLOSE_EVENT {
+            if self.connected == (name == CONNECT_EVENT) {
+                return Err(EchoError::Connection);
+            }
+            if name == CLOSE_EVENT {
+                self.connected = false;
+                return Ok(EchoAction::Close);
+            }
+            let DataValue::String(text) = data else {
+                return Err(EchoError::NotText);
+            };
+            if name == MESSAGE_EVENT {
+                return Ok(EchoAction::Message { text });
+            }
+            self.connected = true;
+            return Ok(EchoAction::Connect { url: text });
         }
         if name == FETCH_EVENT || name == SEND_EVENT {
             return if self.endpoint {
@@ -257,6 +324,55 @@ impl Echo {
         Ok(EchoAction::Return { name, data })
     }
 
+    /// The connection opened with `protocol`: returns [`OPENED_EVENT`] with
+    /// it.
+    ///
+    /// # Errors
+    ///
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn opened(&mut self, protocol: Option<String>) -> Result<EchoAction, EchoError> {
+        self.returned(
+            OPENED_EVENT,
+            protocol.map_or(DataValue::Absent, DataValue::String),
+        )
+    }
+
+    /// The peer sent a message: returns [`HEARD_EVENT`] with `data`.
+    ///
+    /// # Errors
+    ///
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn heard(&mut self, data: DataValue) -> Result<EchoAction, EchoError> {
+        self.returned(HEARD_EVENT, data)
+    }
+
+    /// A connection ended, with the peer's close `code` when it sent one:
+    /// returns [`CLOSED_EVENT`] with it. When it was the open connection
+    /// (`current`), `connect` may open another; one that `close` already
+    /// ended leaves a connection opened since then open.
+    ///
+    /// # Errors
+    ///
+    /// [`EchoError::NotRunning`] after completion.
+    pub fn closed(&mut self, code: Option<u16>, current: bool) -> Result<EchoAction, EchoError> {
+        if current {
+            self.connected = false;
+        }
+        let data = code
+            .and_then(|code| scxml_types::FiniteNumber::new(f64::from(code)).ok())
+            .map_or(DataValue::Absent, DataValue::Number);
+        self.returned(CLOSED_EVENT, data)
+    }
+
+    /// Returns the event `name` with `data`.
+    fn returned(&self, name: &str, data: DataValue) -> Result<EchoAction, EchoError> {
+        if !self.running {
+            return Err(EchoError::NotRunning);
+        }
+        let name = EventName::new(name.to_owned()).map_err(|_| EchoError::InvalidEventName)?;
+        Ok(EchoAction::Return { name, data })
+    }
+
     /// Whether the service still takes inputs.
     #[must_use]
     pub const fn running(&self) -> bool {
@@ -304,6 +420,9 @@ mod guest {
 
     use exports::stateforward::scxml::invoked_service_api::Guest;
     use stateforward::scxml::outbound_http::{self, HttpHeader, HttpRequest, TextPart};
+    use stateforward::scxml::outbound_websocket::{
+        self, Message, WebsocketHeader, WebsocketRequest,
+    };
     use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
     use stateforward::scxml::types::{
         ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
@@ -322,26 +441,41 @@ mod guest {
         Done(Done),
     }
 
-    /// A single-threaded queue from the service's tasks to the writer task.
-    #[derive(Default)]
-    struct Queue {
-        items: VecDeque<Output>,
+    /// A single-threaded queue from the service's tasks to a writer task.
+    struct Queue<T> {
+        items: VecDeque<T>,
         waker: Option<Waker>,
     }
 
-    type Outputs = Rc<RefCell<Queue>>;
+    impl<T> Default for Queue<T> {
+        fn default() -> Self {
+            Self {
+                items: VecDeque::new(),
+                waker: None,
+            }
+        }
+    }
 
-    fn push(outputs: &Outputs, output: Output) {
-        let mut queue = outputs.borrow_mut();
-        queue.items.push_back(output);
+    type Outputs = Rc<RefCell<Queue<Output>>>;
+
+    /// What the events task hands a connection's writer task: a message to
+    /// send, or `None` to close the connection.
+    type Outgoing = Rc<RefCell<Queue<Option<Message>>>>;
+
+    /// The open connection's outgoing queue, if any.
+    type Socket = Rc<RefCell<Option<Outgoing>>>;
+
+    fn push<T>(queue: &Rc<RefCell<Queue<T>>>, item: T) {
+        let mut queue = queue.borrow_mut();
+        queue.items.push_back(item);
         if let Some(waker) = queue.waker.take() {
             waker.wake();
         }
     }
 
-    async fn next(outputs: &Outputs) -> Output {
+    async fn next<T>(queue: &Rc<RefCell<Queue<T>>>) -> T {
         std::future::poll_fn(|cx| {
-            let mut queue = outputs.borrow_mut();
+            let mut queue = queue.borrow_mut();
             if let Some(output) = queue.items.pop_front() {
                 Poll::Ready(output)
             } else {
@@ -383,6 +517,7 @@ mod guest {
             let (echo, delay, slots) = started?;
             let echo = Rc::new(RefCell::new(echo));
             let outputs: Outputs = Rc::default();
+            let socket: Socket = Rc::default();
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
             let (done, done_reader) = wit_future::new::<Done>(|| {
                 Err(error(
@@ -412,10 +547,11 @@ mod guest {
             if let Some(delay) = delay {
                 let timer_echo = Rc::clone(&echo);
                 let timer_outputs = Rc::clone(&outputs);
+                let timer_socket = Rc::clone(&socket);
                 wit_bindgen::spawn(async move {
                     monotonic_clock::wait_for(delay.saturating_mul(1_000_000)).await;
                     let action = timer_echo.borrow_mut().tick();
-                    carry_out(action, &timer_echo, &timer_outputs, slots);
+                    carry_out(action, &timer_echo, &timer_outputs, slots, &timer_socket);
                 });
             }
             // The events the invoking session sends.
@@ -429,7 +565,7 @@ mod guest {
                             return;
                         }
                     };
-                    if carry_out(action, &echo, &outputs, slots) {
+                    if carry_out(action, &echo, &outputs, slots, &socket) {
                         return;
                     }
                     // A task spawned from a running task (a fetch) is polled
@@ -485,6 +621,7 @@ mod guest {
         echo: &Rc<RefCell<Echo>>,
         outputs: &Outputs,
         slots: Slots,
+        socket: &Socket,
     ) -> bool {
         match action {
             Err(EchoError::NotRunning) => true,
@@ -503,9 +640,121 @@ mod guest {
                 push(outputs, Output::Done(Ok(Some(wit_value(data)))));
                 true
             }
-            Ok(EchoAction::Fetch { path }) => get(path, false, echo, outputs, slots),
-            Ok(EchoAction::Send { path }) => get(path, true, echo, outputs, slots),
+            Ok(EchoAction::Fetch { path }) => get(path, false, echo, outputs, slots, socket),
+            Ok(EchoAction::Send { path }) => get(path, true, echo, outputs, slots, socket),
+            Ok(EchoAction::Connect { url }) => {
+                connect(url, echo, outputs, slots, socket);
+                false
+            }
+            Ok(EchoAction::Message { text }) => {
+                if let Some(outgoing) = socket.borrow().as_ref() {
+                    push(outgoing, Some(Message::Text(text)));
+                }
+                false
+            }
+            Ok(EchoAction::Close) => {
+                if let Some(outgoing) = socket.borrow_mut().take() {
+                    push(&outgoing, None);
+                }
+                false
+            }
         }
+    }
+
+    /// The `authorization` header carrying the `token` slot's reference, when
+    /// the invocation binds it.
+    fn bearer(slots: Slots) -> Option<Vec<TextPart>> {
+        slots.token.map(|token| {
+            vec![
+                TextPart::Literal("Bearer ".to_owned()),
+                TextPart::Reference(token),
+            ]
+        })
+    }
+
+    /// Opens a connection to `url`, suspending only its own tasks: one hands
+    /// it the queued messages, the other returns what the peer sends.
+    fn connect(
+        url: String,
+        echo: &Rc<RefCell<Echo>>,
+        outputs: &Outputs,
+        slots: Slots,
+        socket: &Socket,
+    ) {
+        let outgoing: Outgoing = Rc::default();
+        *socket.borrow_mut() = Some(Rc::clone(&outgoing));
+        let (mut writer, reader) = wit_stream::new::<Message>();
+        // The writer: each queued message, in order, until `close` (or the
+        // connection's end) drops it, which closes the connection.
+        let queued = Rc::clone(&outgoing);
+        wit_bindgen::spawn(async move {
+            while let Some(message) = next(&queued).await {
+                if writer.write_one(message).await.is_some() {
+                    return;
+                }
+            }
+        });
+        let echo = Rc::clone(echo);
+        let outputs = Rc::clone(outputs);
+        let socket = Rc::clone(socket);
+        wit_bindgen::spawn(async move {
+            let request = WebsocketRequest {
+                url: vec![TextPart::Literal(url)],
+                headers: bearer(slots)
+                    .map(|value| WebsocketHeader {
+                        name: "authorization".to_owned(),
+                        value,
+                    })
+                    .into_iter()
+                    .collect(),
+                protocols: Vec::new(),
+            };
+            let (protocol, mut incoming, end) =
+                match outbound_websocket::connect(request, reader).await {
+                    Ok(connected) => connected,
+                    Err(failure) => {
+                        push(&outputs, Output::Done(Err(failure)));
+                        return;
+                    }
+                };
+            let action = echo.borrow_mut().opened(protocol);
+            carry_out(action, &echo, &outputs, slots, &socket);
+            while let Some(message) = incoming.next().await {
+                let data = match message {
+                    Message::Text(text) => scxml_types::DataValue::String(text),
+                    // The count saturates at `u32::MAX` (documented saturation).
+                    Message::Binary(bytes) => scxml_types::FiniteNumber::new(f64::from(
+                        u32::try_from(bytes.len()).unwrap_or(u32::MAX),
+                    ))
+                    .map_or(
+                        scxml_types::DataValue::Absent,
+                        scxml_types::DataValue::Number,
+                    ),
+                };
+                let action = echo.borrow_mut().heard(data);
+                carry_out(action, &echo, &outputs, slots, &socket);
+            }
+            drop(incoming);
+            // The connection ended: its writer stops, unless `close` already
+            // stopped it (and `connect` may have opened another since).
+            let current = socket
+                .borrow()
+                .as_ref()
+                .is_some_and(|open| Rc::ptr_eq(open, &outgoing));
+            if current {
+                socket.borrow_mut().take();
+            }
+            push(&outgoing, None);
+            match end.await {
+                Ok(frame) => {
+                    let action = echo
+                        .borrow_mut()
+                        .closed(frame.map(|frame| frame.code), current);
+                    carry_out(action, &echo, &outputs, slots, &socket);
+                }
+                Err(failure) => push(&outputs, Output::Done(Err(failure))),
+            }
+        });
     }
 
     /// GETs the `endpoint` slot's URL followed by `path` (`streamed`:
@@ -517,6 +766,7 @@ mod guest {
         echo: &Rc<RefCell<Echo>>,
         outputs: &Outputs,
         slots: Slots,
+        socket: &Socket,
     ) -> bool {
         let Some(reference) = slots.endpoint else {
             push(
@@ -528,19 +778,16 @@ mod guest {
         // Suspends only this task: the service keeps reading events.
         let echo = Rc::clone(echo);
         let outputs = Rc::clone(outputs);
+        let socket = Rc::clone(socket);
         wit_bindgen::spawn(async move {
             let mut url = vec![TextPart::Reference(reference)];
             if !path.is_empty() {
                 url.push(TextPart::Literal(path));
             }
-            let headers = slots
-                .token
-                .map(|token| HttpHeader {
+            let headers = bearer(slots)
+                .map(|value| HttpHeader {
                     name: "authorization".to_owned(),
-                    value: vec![
-                        TextPart::Literal("Bearer ".to_owned()),
-                        TextPart::Reference(token),
-                    ],
+                    value,
                 })
                 .into_iter()
                 .collect();
@@ -551,7 +798,7 @@ mod guest {
                 body: Vec::new(),
             };
             let status = if streamed {
-                send(request, &echo, &outputs, slots).await
+                send(request, &echo, &outputs, slots, &socket).await
             } else {
                 outbound_http::fetch(request)
                     .await
@@ -560,7 +807,7 @@ mod guest {
             match status {
                 Ok(status) => {
                     let action = echo.borrow_mut().fetched(status);
-                    carry_out(action, &echo, &outputs, slots);
+                    carry_out(action, &echo, &outputs, slots, &socket);
                 }
                 Err(failure) => push(&outputs, Output::Done(Err(failure))),
             }
@@ -575,13 +822,14 @@ mod guest {
         echo: &Rc<RefCell<Echo>>,
         outputs: &Outputs,
         slots: Slots,
+        socket: &Socket,
     ) -> Result<u16, ComponentError> {
         let (status, mut body, end) = outbound_http::send(request).await?;
         loop {
             let (result, read) = body.read(Vec::with_capacity(65_536)).await;
             if !read.is_empty() {
                 let action = echo.borrow_mut().received(read.len());
-                carry_out(action, echo, outputs, slots);
+                carry_out(action, echo, outputs, slots, socket);
             }
             if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
                 break;
@@ -650,6 +898,13 @@ mod guest {
             }
             EchoError::NotRunning => error(ErrorCode::Protocol, "the service is not running"),
             EchoError::NoEndpoint => error(ErrorCode::InvalidInput, "no endpoint slot is bound"),
+            EchoError::NotText => {
+                error(ErrorCode::InvalidInput, "the event's data is not a string")
+            }
+            EchoError::Connection => error(
+                ErrorCode::Protocol,
+                "connect needs no open connection, message and close need one",
+            ),
         }
     }
 
@@ -759,6 +1014,76 @@ mod tests {
         assert!(matches!(
             action,
             EchoAction::Return { name, data } if name.as_str() == super::FETCHED_EVENT && data == number(204.0)
+        ));
+    }
+
+    #[test]
+    fn a_connection_opens_carries_messages_and_closes_once_at_a_time() {
+        let (mut echo, _) = Echo::start([]).expect("start");
+        let url = DataValue::String("wss://example.test/stream".into());
+        assert_eq!(
+            echo.send(super::MESSAGE_EVENT, DataValue::String("hi".into())),
+            Err(EchoError::Connection)
+        );
+        assert_eq!(
+            echo.send(super::CLOSE_EVENT, DataValue::Absent),
+            Err(EchoError::Connection)
+        );
+        assert_eq!(
+            echo.send(super::CONNECT_EVENT, DataValue::Null),
+            Err(EchoError::NotText)
+        );
+        assert_eq!(
+            echo.send(super::CONNECT_EVENT, url.clone()),
+            Ok(EchoAction::Connect {
+                url: "wss://example.test/stream".into()
+            })
+        );
+        assert_eq!(
+            echo.send(super::CONNECT_EVENT, url.clone()),
+            Err(EchoError::Connection)
+        );
+        assert_eq!(
+            echo.send(super::MESSAGE_EVENT, DataValue::String("hi".into())),
+            Ok(EchoAction::Message { text: "hi".into() })
+        );
+        assert!(matches!(
+            echo.opened(None).expect("running"),
+            EchoAction::Return { name, data } if name.as_str() == super::OPENED_EVENT && data == DataValue::Absent
+        ));
+        assert!(matches!(
+            echo.heard(DataValue::String("hi".into())).expect("running"),
+            EchoAction::Return { name, .. } if name.as_str() == super::HEARD_EVENT
+        ));
+        assert_eq!(
+            echo.send(super::CLOSE_EVENT, DataValue::Absent),
+            Ok(EchoAction::Close)
+        );
+        assert!(matches!(
+            echo.send(super::CONNECT_EVENT, url.clone()),
+            Ok(EchoAction::Connect { .. })
+        ));
+        // The closed connection's end leaves the one opened since open.
+        assert!(matches!(
+            echo.closed(Some(1000), false).expect("running"),
+            EchoAction::Return { name, data } if name.as_str() == super::CLOSED_EVENT && data == number(1000.0)
+        ));
+        assert_eq!(
+            echo.send(super::MESSAGE_EVENT, DataValue::String("again".into())),
+            Ok(EchoAction::Message {
+                text: "again".into()
+            })
+        );
+        assert!(matches!(
+            echo.closed(None, true),
+            Ok(EchoAction::Return {
+                data: DataValue::Absent,
+                ..
+            })
+        ));
+        assert!(matches!(
+            echo.send(super::CONNECT_EVENT, url),
+            Ok(EchoAction::Connect { .. })
         ));
     }
 }

@@ -1064,33 +1064,41 @@ pub const BASICHTTP_EVENT_PROCESSOR_URI: &str =
 /// Short alias of the `BasicHTTP` Event I/O Processor.
 pub const BASICHTTP_PROCESSOR_ALIAS: &str = "basichttp";
 
-/// Maximum UTF-8 bytes of a [`BasicHttpSend`] event name (WIT
-/// `basichttp-send.event-name`).
-pub const MAX_BASICHTTP_EVENT_NAME_BYTES: usize = 1_024;
-/// Maximum UTF-8 bytes of a [`BasicHttpSend`] target (WIT
-/// `basichttp-send.target`).
-pub const MAX_BASICHTTP_TARGET_BYTES: usize = 16_384;
-/// Maximum [`BasicHttpSend`] fields (WIT `basichttp-send.params`).
-pub const MAX_BASICHTTP_PARAMS: usize = 256;
+/// Maximum UTF-8 bytes of a [`ProcessorSend`] processor type (WIT
+/// `processor-send.processor-type`).
+pub const MAX_PROCESSOR_SEND_TYPE_BYTES: usize = 4_096;
+/// Maximum UTF-8 bytes of a [`ProcessorSend`] event name (WIT
+/// `processor-send.event-name`).
+pub const MAX_PROCESSOR_SEND_EVENT_NAME_BYTES: usize = 1_024;
+/// Maximum UTF-8 bytes of a [`ProcessorSend`] target (WIT
+/// `processor-send.target`).
+pub const MAX_PROCESSOR_SEND_TARGET_BYTES: usize = 16_384;
+/// Maximum [`ProcessorSend`] fields (WIT `processor-send.params`).
+pub const MAX_PROCESSOR_SEND_PARAMS: usize = 256;
 
-/// One evaluated `<send>` addressed to the `BasicHTTP` Event I/O Processor
-/// (SCXML C.2; WIT `basichttp-send`). The machine evaluates every
-/// expression; the processor never sees one.
+/// One evaluated `<send>` addressed to an Event I/O Processor other than
+/// the SCXML one (SCXML 6.2), such as `BasicHTTP` (SCXML C.2) or a processor
+/// a package binds (WIT `processor-send`). The machine evaluates every
+/// expression; the processor never sees one, and the host routes the send
+/// by its type.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BasicHttpSend {
+pub struct ProcessorSend {
+    /// Evaluated `type`/`typeexpr`, exactly as written (at most
+    /// [`MAX_PROCESSOR_SEND_TYPE_BYTES`]).
+    pub processor_type: String,
     /// The send's id: the authored `id`, else the one the machine generated
-    /// (SCXML 3.14, 6.2.4). It never enters the HTTP message; a delayed send
+    /// (SCXML 3.14, 6.2.4). It never enters the message; a delayed send
     /// is scheduled and cancelled under it (SCXML 6.2, 6.3), and an
     /// `error.communication` for it carries it (SCXML 5.10.1).
     pub send_id: SendId,
     /// Evaluated `event`/`eventexpr` (at most
-    /// [`MAX_BASICHTTP_EVENT_NAME_BYTES`]).
+    /// [`MAX_PROCESSOR_SEND_EVENT_NAME_BYTES`]).
     pub event_name: Option<String>,
     /// Evaluated `target`/`targetexpr` (at most
-    /// [`MAX_BASICHTTP_TARGET_BYTES`]).
+    /// [`MAX_PROCESSOR_SEND_TARGET_BYTES`]).
     pub target: Option<String>,
     /// `namelist` entries then `<param>` children, in document order (at
-    /// most [`MAX_BASICHTTP_PARAMS`]).
+    /// most [`MAX_PROCESSOR_SEND_PARAMS`]).
     pub params: Vec<NamedValue>,
     /// Evaluated `<content>`; mutually exclusive with `params`.
     pub content: Option<DataValue>,
@@ -1108,19 +1116,20 @@ pub struct BasicHttpSend {
 pub enum DelayedSend {
     /// A send of the SCXML Event I/O Processor (SCXML C.1).
     Scxml(SendRequest),
-    /// A send of the `BasicHTTP` Event I/O Processor (SCXML C.2).
-    BasicHttp(BasicHttpSend),
+    /// A send of another Event I/O Processor, such as `BasicHTTP` (SCXML
+    /// C.2), dispatched through the processor its type names.
+    Processor(ProcessorSend),
 }
 
 impl DelayedSend {
     /// The send id the clock timer carries: the request's for an SCXML
-    /// send (absent only for an undelayed one), the send's own for a
-    /// `BasicHTTP` send.
+    /// send (absent only for an undelayed one), the send's own for another
+    /// processor's.
     #[must_use]
     pub fn send_id(&self) -> Option<&SendId> {
         match self {
             Self::Scxml(request) => request.send_id.as_ref(),
-            Self::BasicHttp(send) => Some(&send.send_id),
+            Self::Processor(send) => Some(&send.send_id),
         }
     }
 
@@ -1129,7 +1138,7 @@ impl DelayedSend {
     pub const fn delay_ms(&self) -> u64 {
         match self {
             Self::Scxml(request) => request.delay_ms,
-            Self::BasicHttp(send) => send.delay_ms,
+            Self::Processor(send) => send.delay_ms,
         }
     }
 }
@@ -1144,7 +1153,8 @@ pub enum ProcessorKind {
     /// The optional `BasicHTTP` Event I/O Processor (URI or `basichttp` alias),
     /// provided by the `scxml-ioprocessor-basichttp` component.
     BasicHttp,
-    /// Any other value: an invalid processor identifier (SCXML 6.2 raises
+    /// Any other value: a processor the host may bind to that type. A type
+    /// no processor answers is invalid (SCXML 6.2.5 raises
     /// `error.execution`).
     Unknown,
 }
@@ -1224,12 +1234,12 @@ pub fn send_ids_agree(request: Option<&SendId>, event: Option<&SendId>) -> bool 
 
 /// Wire kind byte of a [`DelayedSend::Scxml`] record.
 const DELAYED_SEND_KIND_SCXML: u8 = 0;
-/// Wire kind byte of a [`DelayedSend::BasicHttp`] record.
-const DELAYED_SEND_KIND_BASICHTTP: u8 = 1;
+/// Wire kind byte of a [`DelayedSend::Processor`] record.
+const DELAYED_SEND_KIND_PROCESSOR: u8 = 1;
 
 /// Encodes one delayed send into the canonical versioned wire format:
 /// [`DELAYED_SEND_MAGIC`], the little-endian [`DELAYED_SEND_WIRE_VERSION`],
-/// one kind byte (`0` SCXML, `1` `BasicHTTP`), then the send's fields.
+/// one kind byte (`0` SCXML, `1` another processor), then the send's fields.
 ///
 /// The returned bytes are owned by the caller and contain no ambient data.
 /// Field order is fixed, all strings are UTF-8 length-prefixed, and absence is
@@ -1250,9 +1260,9 @@ pub fn encode_delayed_send(send: &DelayedSend) -> Result<Vec<u8>, SendCodecError
             bytes.push(DELAYED_SEND_KIND_SCXML);
             write_send_request(&mut bytes, request)?;
         }
-        DelayedSend::BasicHttp(send) => {
-            bytes.push(DELAYED_SEND_KIND_BASICHTTP);
-            write_basichttp_send(&mut bytes, send)?;
+        DelayedSend::Processor(send) => {
+            bytes.push(DELAYED_SEND_KIND_PROCESSOR);
+            write_processor_send(&mut bytes, send)?;
         }
     }
     if bytes.len() > MAX_DELAYED_SEND_BYTES {
@@ -1290,11 +1300,12 @@ fn write_send_request(bytes: &mut Vec<u8>, request: &SendRequest) -> Result<(), 
     write_send_message(bytes, &request.message)
 }
 
-/// Writes the fields of one `BasicHTTP` send: send id, event name, target,
-/// fields (a `u32` count then each name and value), content, delay, and
-/// trace carrier.
-fn write_basichttp_send(bytes: &mut Vec<u8>, send: &BasicHttpSend) -> Result<(), SendCodecError> {
-    check_basichttp_send(send)?;
+/// Writes the fields of one processor send: processor type, send id, event
+/// name, target, fields (a `u32` count then each name and value), content,
+/// delay, and trace carrier.
+fn write_processor_send(bytes: &mut Vec<u8>, send: &ProcessorSend) -> Result<(), SendCodecError> {
+    check_processor_send(send)?;
+    write_string(bytes, &send.processor_type)?;
     write_string(bytes, send.send_id.as_str())?;
     write_optional_string(bytes, send.event_name.as_deref())?;
     write_optional_string(bytes, send.target.as_deref())?;
@@ -1315,25 +1326,28 @@ fn write_basichttp_send(bytes: &mut Vec<u8>, send: &BasicHttpSend) -> Result<(),
     write_trace_context(bytes, send.trace_context.as_ref())
 }
 
-/// The bounds of the WIT `basichttp-send` record: event name, target, field
-/// count, and field names (non-empty, at most [`MAX_NAME_BYTES`]).
-fn check_basichttp_send(send: &BasicHttpSend) -> Result<(), SendCodecError> {
-    if send
-        .event_name
-        .as_ref()
-        .is_some_and(|name| name.len() > MAX_BASICHTTP_EVENT_NAME_BYTES)
+/// The bounds of the WIT `processor-send` record: processor type (non-empty),
+/// event name, target, field count, and field names (non-empty, at most
+/// [`MAX_NAME_BYTES`]).
+fn check_processor_send(send: &ProcessorSend) -> Result<(), SendCodecError> {
+    if send.processor_type.len() > MAX_PROCESSOR_SEND_TYPE_BYTES
+        || send
+            .event_name
+            .as_ref()
+            .is_some_and(|name| name.len() > MAX_PROCESSOR_SEND_EVENT_NAME_BYTES)
         || send
             .target
             .as_ref()
-            .is_some_and(|target| target.len() > MAX_BASICHTTP_TARGET_BYTES)
-        || send.params.len() > MAX_BASICHTTP_PARAMS
+            .is_some_and(|target| target.len() > MAX_PROCESSOR_SEND_TARGET_BYTES)
+        || send.params.len() > MAX_PROCESSOR_SEND_PARAMS
     {
         return Err(SendCodecError::TooLarge);
     }
-    if send
-        .params
-        .iter()
-        .any(|field| field.name.is_empty() || field.name.len() > MAX_NAME_BYTES)
+    if send.processor_type.is_empty()
+        || send
+            .params
+            .iter()
+            .any(|field| field.name.is_empty() || field.name.len() > MAX_NAME_BYTES)
     {
         return Err(SendCodecError::Invalid);
     }
@@ -1387,7 +1401,7 @@ pub fn decode_delayed_send(bytes: &[u8]) -> Result<DelayedSend, SendCodecError> 
     }
     let send = match reader.read::<1>()?[0] {
         DELAYED_SEND_KIND_SCXML => DelayedSend::Scxml(reader.read_send_request()?),
-        DELAYED_SEND_KIND_BASICHTTP => DelayedSend::BasicHttp(reader.read_basichttp_send()?),
+        DELAYED_SEND_KIND_PROCESSOR => DelayedSend::Processor(reader.read_processor_send()?),
         _ => return Err(SendCodecError::Invalid),
     };
     if reader.cursor != bytes.len() {
@@ -1456,14 +1470,15 @@ impl WireReader<'_> {
         Ok(request)
     }
 
-    /// Reads the fields [`write_basichttp_send`] wrote.
-    fn read_basichttp_send(&mut self) -> Result<BasicHttpSend, SendCodecError> {
+    /// Reads the fields [`write_processor_send`] wrote.
+    fn read_processor_send(&mut self) -> Result<ProcessorSend, SendCodecError> {
+        let processor_type = self.read_string()?;
         let send_id = SendId::new(self.read_string()?).map_err(|_| SendCodecError::Invalid)?;
         let event_name = self.read_optional_string()?;
         let target = self.read_optional_string()?;
         let count = u32::from_le_bytes(self.read()?);
         let count = usize::try_from(count).map_err(|_| SendCodecError::Invalid)?;
-        if count > MAX_BASICHTTP_PARAMS {
+        if count > MAX_PROCESSOR_SEND_PARAMS {
             return Err(SendCodecError::Invalid);
         }
         let mut params = Vec::with_capacity(count);
@@ -1479,7 +1494,8 @@ impl WireReader<'_> {
         };
         let delay_ms = u64::from_le_bytes(self.read()?);
         let trace_context = self.read_trace_context()?;
-        let send = BasicHttpSend {
+        let send = ProcessorSend {
+            processor_type,
             send_id,
             event_name,
             target,
@@ -1488,7 +1504,7 @@ impl WireReader<'_> {
             delay_ms,
             trace_context,
         };
-        check_basichttp_send(&send).map_err(|_| SendCodecError::Invalid)?;
+        check_processor_send(&send).map_err(|_| SendCodecError::Invalid)?;
         Ok(send)
     }
 
@@ -2143,12 +2159,13 @@ mod tests {
     fn decode_send_request(bytes: &[u8]) -> Result<SendRequest, SendCodecError> {
         match decode_delayed_send(bytes)? {
             DelayedSend::Scxml(request) => Ok(request),
-            DelayedSend::BasicHttp(_) => Err(SendCodecError::Invalid),
+            DelayedSend::Processor(_) => Err(SendCodecError::Invalid),
         }
     }
 
-    fn basichttp_send() -> BasicHttpSend {
-        BasicHttpSend {
+    fn basichttp_send() -> ProcessorSend {
+        ProcessorSend {
+            processor_type: BASICHTTP_PROCESSOR_ALIAS.into(),
             send_id: SendId::new("post-1").expect("test send id is valid"),
             event_name: Some("order.ready".into()),
             target: Some("http://example.test/sessions/a/basichttp".into()),
@@ -2186,9 +2203,9 @@ mod tests {
     }
 
     #[test]
-    fn basichttp_delayed_sends_round_trip_and_fail_closed() {
+    fn processor_delayed_sends_round_trip_and_fail_closed() {
         let fields = basichttp_send();
-        let content = BasicHttpSend {
+        let content = ProcessorSend {
             event_name: None,
             target: None,
             params: Vec::new(),
@@ -2197,16 +2214,16 @@ mod tests {
             ..basichttp_send()
         };
         for send in [fields.clone(), content] {
-            let delayed = DelayedSend::BasicHttp(send);
+            let delayed = DelayedSend::Processor(send);
             let bytes = encode_delayed_send(&delayed).expect("bounded send encodes");
-            assert_eq!(bytes[12], 1, "the BasicHTTP kind byte follows the header");
+            assert_eq!(bytes[12], 1, "the processor kind byte follows the header");
             assert_eq!(decode_delayed_send(&bytes), Ok(delayed.clone()));
             assert_eq!(delayed.send_id().map(SendId::as_str), Some("post-1"));
             assert_eq!(delayed.delay_ms(), 250);
         }
         // Unknown kinds, trailing and truncated bytes, and over-bound or
         // unnamed fields fail closed.
-        let bytes = encode_delayed_send(&DelayedSend::BasicHttp(fields.clone()))
+        let bytes = encode_delayed_send(&DelayedSend::Processor(fields.clone()))
             .expect("bounded send encodes");
         let mut unknown = bytes.clone();
         unknown[12] = 2;
@@ -2218,7 +2235,7 @@ mod tests {
             decode_delayed_send(&bytes[..bytes.len() - 1]),
             Err(SendCodecError::Invalid)
         );
-        let unnamed = BasicHttpSend {
+        let unnamed = ProcessorSend {
             params: vec![NamedValue {
                 name: String::new(),
                 value: DataValue::Null,
@@ -2226,30 +2243,46 @@ mod tests {
             ..fields.clone()
         };
         assert_eq!(
-            encode_delayed_send(&DelayedSend::BasicHttp(unnamed)),
+            encode_delayed_send(&DelayedSend::Processor(unnamed)),
             Err(SendCodecError::Invalid)
         );
-        let too_many = BasicHttpSend {
+        let too_many = ProcessorSend {
             params: vec![
                 NamedValue {
                     name: "a".into(),
                     value: DataValue::Null,
                 };
-                MAX_BASICHTTP_PARAMS + 1
+                MAX_PROCESSOR_SEND_PARAMS + 1
             ],
             ..fields.clone()
         };
         assert_eq!(
-            encode_delayed_send(&DelayedSend::BasicHttp(too_many)),
+            encode_delayed_send(&DelayedSend::Processor(too_many)),
             Err(SendCodecError::TooLarge)
         );
-        let long_target = BasicHttpSend {
-            target: Some("x".repeat(MAX_BASICHTTP_TARGET_BYTES + 1)),
+        let long_target = ProcessorSend {
+            target: Some("x".repeat(MAX_PROCESSOR_SEND_TARGET_BYTES + 1)),
+            ..fields.clone()
+        };
+        assert_eq!(
+            encode_delayed_send(&DelayedSend::Processor(long_target)),
+            Err(SendCodecError::TooLarge)
+        );
+        let long_type = ProcessorSend {
+            processor_type: "x".repeat(MAX_PROCESSOR_SEND_TYPE_BYTES + 1),
+            ..fields.clone()
+        };
+        assert_eq!(
+            encode_delayed_send(&DelayedSend::Processor(long_type)),
+            Err(SendCodecError::TooLarge)
+        );
+        let untyped = ProcessorSend {
+            processor_type: String::new(),
             ..fields
         };
         assert_eq!(
-            encode_delayed_send(&DelayedSend::BasicHttp(long_target)),
-            Err(SendCodecError::TooLarge)
+            encode_delayed_send(&DelayedSend::Processor(untyped)),
+            Err(SendCodecError::Invalid)
         );
     }
 

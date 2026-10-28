@@ -12,6 +12,7 @@ mod expression;
 mod extensions;
 mod mask;
 mod package_validators;
+mod processors;
 #[cfg_attr(
     not(feature = "wasmtime"),
     allow(
