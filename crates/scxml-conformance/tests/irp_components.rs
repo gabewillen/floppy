@@ -9,8 +9,8 @@
 //! Requires the `wasmtime` feature; the release components come from
 //! `tests/support` (built and verified by
 //! `scripts/verify-wasm-capabilities.sh`, or `SCXML_COMPONENTS_DIR` and
-//! `SCXML_COMPONENTS_MANIFEST_SHA256`). Run it in release mode:
-//! `cargo test --release -p scxml-conformance --features wasmtime --test irp_components`.
+//! `SCXML_COMPONENTS_MANIFEST_SHA256`):
+//! `cargo test -p scxml-conformance --features wasmtime --test irp_components`.
 //! `SCXML_IRP_DATAMODEL=ecmascript|xpath` limits the corpus run to one data
 //! model.
 #![allow(
@@ -82,7 +82,7 @@ fn checked_in_irp_corpora_reproduce_their_baselines_through_components() {
             fresh == baseline,
             "{datamodel}: the component run reproduces every case but not the baseline's \
              identity bytes; regenerate the baseline with \
-             `cargo run --release -p scxml-conformance --features wasmtime \
+             `cargo run -p scxml-conformance --features wasmtime \
              --example generate_irp_baselines -- --components DIR \
              --components-manifest-sha256 HEX --extension-component-sha256 HEX`"
         );

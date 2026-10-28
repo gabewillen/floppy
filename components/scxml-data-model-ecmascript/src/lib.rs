@@ -28,10 +28,9 @@ pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
 pub const MAX_SCRIPT_BYTES: usize = scxml_types::wasm_bound(65_536);
 /// Longest rendered text a data-model snapshot carries for one variable;
 /// longer text is [`VariableValue::Oversized`] (the WIT `variable-value`
-/// contract). It also bounds what one amplifying built-in call may produce
-/// (`builtin_guard.js`, the JSON tree text of a value, and `log` text). No
-/// value crossing the data model's interface has a byte bound (SCXML sets
-/// none).
+/// contract). No value has a byte bound (SCXML sets none): not one crossing
+/// the data model's interface, a built-in's result, a JSON tree's text, nor
+/// `log` text.
 pub const MAX_VALUE_BYTES: usize = 65_536;
 /// Maximum declared `<data>` ids of one instance, so every snapshot fits one
 /// `data-model-api.snapshot` image (every build: the WIT contract's "data
@@ -79,20 +78,11 @@ pub const MAX_NESTING_DEPTH: usize = 32;
 /// component instead of aborting the host.
 pub const PARSE_STACK_BYTES: usize = 64 * 1024 * 1024;
 
-/// Host allocation ceiling for each ECMAScript `ArrayBuffer` or
-/// `SharedArrayBuffer`. Boa interprets this hook in bytes despite an upstream
-/// rustdoc wording bug that calls the unit bits.
-pub const MAX_BUFFER_BYTES: u64 = MAX_VALUE_BYTES as u64;
-
 /// Host hooks of every context; see each hook.
 #[derive(Debug, Default)]
 struct BoundedHostHooks;
 
 impl HostHooks for BoundedHostHooks {
-    fn max_buffer_size(&self, _context: &mut Context) -> u64 {
-        MAX_BUFFER_BYTES
-    }
-
     /// Every context runs in UTC: the host time zone is ambient state.
     fn local_timezone_offset_seconds(&self, _unix_time_seconds: i64) -> i32 {
         0
@@ -635,18 +625,11 @@ impl EcmaScriptDataModel {
     ///
     /// Functions, bigint, symbols, exotic/accessor/symbol-keyed/cyclic objects,
     /// sparse or undefined JSON members, NaN, and infinity are rejected.
-    /// `ArrayBuffer` allocations are host-capped at [`MAX_BUFFER_BYTES`].
-    /// Single-call amplifying built-ins (`repeat`, `padStart`, `padEnd`,
-    /// string `concat`, `replace`, `replaceAll`, `RegExp.prototype[@@replace]`,
-    /// `String.raw`, array `join`/`toString`/`toLocaleString`/`concat`/`flat`/
-    /// `flatMap`, length-driven `Array.prototype` methods, array iterators,
-    /// `Array.from`, `Function.prototype.apply`, `Reflect.apply`/`construct`,
-    /// and `JSON.stringify`) reject with a `RangeError` before Boa allocates,
-    /// iterates, or recurses past [`MAX_VALUE_BYTES`] or
-    /// [`MAX_NESTING_DEPTH`]; `Proxy` is unavailable. Operator-level string
-    /// concatenation and native iteration of user-defined iterables still
-    /// allocate inside Boa before the portable-value bound; Wasm memory/fuel
-    /// limits remain the outer bound for those.
+    /// Built-ins that recurse natively (array `join`/`toString`/
+    /// `toLocaleString`/`flat`/`flatMap`, and `JSON.stringify` and
+    /// `JSON.parse`) reject with a `RangeError` before Boa recurses past
+    /// [`MAX_NESTING_DEPTH`]; `Proxy` is unavailable. No result has a size
+    /// bound (SCXML sets none): memory, and in a wasm build fuel, limit it.
     pub fn evaluate_value(
         &self,
         expression: &str,
@@ -704,8 +687,7 @@ impl EcmaScriptDataModel {
     /// # Errors
     ///
     /// Rejects blank or over-bound source, host failures, and runtime
-    /// limits; ECMAScript runtime errors are [`DataModelError::Execution`];
-    /// text longer than [`MAX_VALUE_BYTES`] is [`DataModelError::InvalidInput`].
+    /// limits; ECMAScript runtime errors are [`DataModelError::Execution`].
     pub fn evaluate_log(
         &self,
         expression: &str,
@@ -2317,7 +2299,7 @@ mod tests {
                 &event(),
                 &mut h
             ),
-            Err(DataModelError::InvalidInput)
+            Ok(format!("{}y", "x".repeat(MAX_VALUE_BYTES)))
         );
     }
 
@@ -2345,10 +2327,10 @@ mod tests {
             m.evaluate_value_without_event("missing + 1", &mut h),
             Err(DataModelError::Execution)
         );
-        // Bound violations stay fail-closed unsupported values.
+        // A built-in's result has no size bound (SCXML sets none).
         assert_eq!(
             m.evaluate_value(&format!("'ab'.repeat({MAX_VALUE_BYTES})"), &event(), &mut h),
-            Err(DataModelError::UnsupportedValue)
+            Ok(DataValue::String("ab".repeat(MAX_VALUE_BYTES)))
         );
     }
 
@@ -2872,51 +2854,21 @@ mod tests {
     }
 
     #[test]
-    fn host_hooks_reject_oversized_array_buffers() {
+    fn array_buffers_and_repeated_strings_have_no_size_bound() {
+        // SCXML sets no size: a buffer or a repeated string past 64 KiB is
+        // made; memory, and in a wasm build fuel, limit it.
         let mut model = EcmaScriptDataModel::new();
         model.initialize("{}", system()).expect("initialize");
         let mut host = Host::Inactive;
         assert_eq!(
-            model.evaluate_value(
-                &format!("new ArrayBuffer({})", MAX_BUFFER_BYTES + 1),
-                &event(),
-                &mut host,
-            ),
-            // A rejected runtime allocation is a bound violation, not an
-            // illegal expression: it fails closed as unsupported.
-            Err(DataModelError::UnsupportedValue)
+            model.evaluate_value("new ArrayBuffer(4 * 65536).byteLength", &event(), &mut host),
+            Ok(DataValue::Number(
+                FiniteNumber::new(262_144.0).expect("finite")
+            ))
         );
         assert_eq!(
-            model.evaluate_value(
-                &format!("new ArrayBuffer({MAX_BUFFER_BYTES})"),
-                &event(),
-                &mut host,
-            ),
-            Err(DataModelError::UnsupportedValue)
-        );
-    }
-
-    #[test]
-    fn string_repeat_rejects_before_oversized_result_allocation() {
-        let mut model = EcmaScriptDataModel::new();
-        model.initialize("{}", system()).expect("initialize");
-        let mut host = Host::Inactive;
-        assert_eq!(
-            model.evaluate_value(
-                &format!("'ab'.repeat({})", MAX_VALUE_BYTES / 2),
-                &event(),
-                &mut host,
-            ),
-            Ok(DataValue::String("ab".repeat(MAX_VALUE_BYTES / 2)))
-        );
-        assert_eq!(
-            model.evaluate_value(
-                &format!("'ab'.repeat({})", MAX_VALUE_BYTES / 2 + 1),
-                &event(),
-                &mut host,
-            ),
-            // Same bound-violation classification as oversized buffers.
-            Err(DataModelError::UnsupportedValue)
+            model.evaluate_value("'ab'.repeat(2 * 65536)", &event(), &mut host),
+            Ok(DataValue::String("ab".repeat(2 * 65_536)))
         );
     }
 }

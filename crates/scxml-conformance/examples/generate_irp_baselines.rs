@@ -3,10 +3,10 @@
 //! (`tests/conformance/w3c-irp`) and every repository namespace's own suite
 //! (`namespaces/<name>/irp`, [`scxml_conformance::NAMESPACE_SUITES`]).
 //!
-//! Usage (release mode):
+//! Usage:
 //!
 //! ```text
-//! cargo run --release -p scxml-conformance --features wasmtime \
+//! cargo run -p scxml-conformance --features wasmtime \
 //!   --example generate_irp_baselines -- \
 //!   --components DIR --components-manifest-sha256 HEX \
 //!   --extension-component-sha256 HEX

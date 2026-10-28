@@ -99,7 +99,7 @@ every namespace suite's baselines
 ([docs/conformance.md](../../../docs/conformance.md#namespace-suites)):
 
 ```console
-cargo run --release --locked -p scxml-conformance --features wasmtime \
+cargo run --locked -p scxml-conformance --features wasmtime \
   --example generate_irp_baselines -- \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --extension-component-sha256 "$EXTENSION_SHA256"
@@ -122,8 +122,8 @@ empty filter identity, every case including manual cases run) measure:
 
 | Data model | Passed / Applicable | Under errata | Not applicable | Mandatory Passed | Not Passing | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e` | `b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7` |
-| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1` | `fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd` |
+| ECMAScript | 201 / 201 | 0 | 1 | 167 / 167 | 0 | `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573` | `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d` |
+| XPath | 178 / 178 | 5 | 24 | 163 / 163 | 0 | `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34` | `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43` |
 
 The ECMAScript corpus digest is
 `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` and the

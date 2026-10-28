@@ -36,6 +36,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use scxml_compiler_core::MachineIr;
 use scxml_host_wasmtime::{
@@ -51,8 +52,8 @@ use sha2::{Digest as _, Sha256};
 
 use crate::executor::{
     BoundExtension, CaseExecutor, CaseSnapshotDocument, ExecutionError, ExecutionFailureCategory,
-    ExecutionResult, ExecutionTrace, ExecutorIdentities, ExternalClientRun, HttpHeader,
-    HttpRequest, HttpResponse, LoadRejection, LogRecord, TraceObservation, TraceRecord,
+    ExecutionResult, ExecutionTrace, ExecutorFactory, ExecutorIdentities, ExternalClientRun,
+    HttpHeader, HttpRequest, HttpResponse, LoadRejection, LogRecord, TraceObservation, TraceRecord,
     implementation_identity,
 };
 use crate::report::{RUNNER_VERSION, TerminalStatus};
@@ -289,6 +290,21 @@ pub struct WasmExecutor {
     snapshot_collection: SnapshotCollection,
     /// The bound extension namespaces (namespace-URI order).
     extensions: Vec<BoundExtension>,
+    /// What this executor was built from, so equal executors can be built
+    /// on other threads ([`CaseExecutor::factory`]).
+    release: Arc<Release>,
+}
+
+/// The release bytes and extension bindings a [`WasmExecutor`] was built
+/// from. Every executor built from one is equal: components compiled once
+/// are shared by every host of the process.
+#[derive(Clone)]
+struct Release {
+    manifest: Vec<u8>,
+    trusted_manifest_sha256: String,
+    artifacts: Vec<(&'static str, Vec<u8>)>,
+    snapshot_collection: SnapshotCollection,
+    extensions: Vec<ExtensionRelease>,
 }
 
 impl std::fmt::Debug for WasmExecutor {
@@ -421,20 +437,37 @@ impl WasmExecutor {
         artifact: &dyn Fn(&'static str) -> Result<Vec<u8>, WasmExecutorError>,
         snapshot_collection: SnapshotCollection,
     ) -> Result<Self, WasmExecutorError> {
-        let trusted = TrustedManifestDigest::from_hex(trusted_manifest_sha256)
+        let mut artifacts = Vec::with_capacity(COMPONENTS.len());
+        for (_, name) in COMPONENTS {
+            artifacts.push((name, artifact(name)?));
+        }
+        Self::from_release(Arc::new(Release {
+            manifest: manifest.to_vec(),
+            trusted_manifest_sha256: trusted_manifest_sha256.to_owned(),
+            artifacts,
+            snapshot_collection,
+            extensions: Vec::new(),
+        }))
+    }
+
+    /// Authenticates and links `release`'s session components, then binds
+    /// its extensions.
+    fn from_release(release: Arc<Release>) -> Result<Self, WasmExecutorError> {
+        let manifest = release.manifest.as_slice();
+        let snapshot_collection = release.snapshot_collection;
+        let trusted = TrustedManifestDigest::from_hex(&release.trusted_manifest_sha256)
             .map_err(|_| WasmExecutorError::InvalidDigest)?;
         let mut authenticated = Vec::with_capacity(COMPONENTS.len());
-        for (kind, name) in COMPONENTS {
-            let bytes = artifact(name)?;
-            let component = authenticate_component(manifest, trusted, kind, name, &bytes)
+        for ((kind, name), (_, bytes)) in COMPONENTS.into_iter().zip(&release.artifacts) {
+            let component = authenticate_component(manifest, trusted, kind, name, bytes)
                 .map_err(WasmExecutorError::Host)?;
-            authenticated.push((kind, component, bytes));
+            authenticated.push((kind, component, bytes.as_slice()));
         }
         let find = |kind: ArtifactKind| {
             authenticated
                 .iter()
                 .find(|(candidate, ..)| *candidate == kind)
-                .map(|(_, component, bytes)| (component, bytes.as_slice()))
+                .map(|(_, component, bytes)| (component, *bytes))
                 .ok_or(WasmExecutorError::Host(HostError::Artifact(
                     scxml_host_wasmtime::ArtifactError::ArtifactIdentity,
                 )))
@@ -501,12 +534,19 @@ impl WasmExecutor {
             .collect(),
             unrouted_data_model: identity("scxml-machine-unlinked-datamodel", machine.1),
         };
-        Ok(Self {
+        let extensions = release.extensions.clone();
+        let executor = Self {
             host,
             identities,
             snapshot_collection,
             extensions: Vec::new(),
-        })
+            release,
+        };
+        if extensions.is_empty() {
+            Ok(executor)
+        } else {
+            executor.bind_extensions(extensions)
+        }
     }
 
     /// Binds `releases` (each namespace at most once): every component is
@@ -520,6 +560,18 @@ impl WasmExecutor {
     /// verify, and [`WasmExecutorError::Host`] for an authentication or
     /// binding failure.
     pub fn with_extensions(
+        mut self,
+        releases: Vec<ExtensionRelease>,
+    ) -> Result<Self, WasmExecutorError> {
+        let mut release = Arc::unwrap_or_clone(self.release);
+        release.extensions.clone_from(&releases);
+        self.release = Arc::new(release);
+        self.bind_extensions(releases)
+    }
+
+    /// Binds `releases` as [`WasmExecutor::with_extensions`] does, leaving
+    /// the recorded release as it is.
+    fn bind_extensions(
         mut self,
         releases: Vec<ExtensionRelease>,
     ) -> Result<Self, WasmExecutorError> {
@@ -648,6 +700,14 @@ impl CaseExecutor for WasmExecutor {
 
     fn extensions(&self) -> Vec<BoundExtension> {
         self.extensions.clone()
+    }
+
+    fn factory(&self) -> Option<ExecutorFactory> {
+        let release = Arc::clone(&self.release);
+        Some(Arc::new(move || {
+            let executor = Self::from_release(Arc::clone(&release)).ok()?;
+            Some(Box::new(executor) as Box<dyn CaseExecutor>)
+        }))
     }
 
     fn execute(

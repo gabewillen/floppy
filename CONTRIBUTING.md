@@ -253,7 +253,13 @@ verifies the eight release components the conformance executor links and
 the example extension component the namespace suites bind, runs every `scxml-conformance`
 test with the `wasmtime` feature through them (`irp_components.rs`
 reproduces both checked-in W3C IRP baselines and every namespace suite's
-byte for byte), and reproduces all of them through the CLI:
+byte for byte), and reproduces all of them through the CLI. The tests and
+`scx` build in the test profile, which optimizes every dependency
+(Wasmtime and Cranelift above all), so cases run nearly as fast as under
+`--release`; the release profile's thin LTO with one codegen unit would
+instead relink Wasmtime into every test binary, which takes longer than the
+whole run. Locally, `CARGO_TARGET_DIR="$PWD/target"` shares the components
+and dependencies the workspace build already compiled:
 
 ```console
 export CARGO_TARGET_DIR="$PWD/target/irp-components"
@@ -270,10 +276,10 @@ EXTENSION_SHA256=$(sha256sum "$RELEASE/scxml_extension_example.virtualized.wasm"
 cp LICENSE-APACHE LICENSE-MIT "$RELEASE/"
 SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
   SCXML_EXTENSION_COMPONENT_SHA256="$EXTENSION_SHA256" \
-  cargo test --release --locked -p scxml-conformance --features wasmtime
-cargo build --release --locked -p scxml-cli --features wasmtime
+  cargo test --locked -p scxml-conformance --features wasmtime
+cargo build --locked -p scxml-cli --features wasmtime
 for model in ecmascript xpath; do
-  "$CARGO_TARGET_DIR/release/scx" conformance run \
+  "$CARGO_TARGET_DIR/debug/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done
@@ -286,7 +292,7 @@ for suite in env:example event:; do
   packages=''
   if [ -n "${suite#*:}" ]; then packages=$EXAMPLE_PACKAGE; fi
   for model in ecmascript xpath; do
-    "$CARGO_TARGET_DIR/release/scx" conformance run \
+    "$CARGO_TARGET_DIR/debug/scx" conformance run \
       --corpus "namespaces/$name/irp/prepared/$model" \
       --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" $packages \
       --canonical-baseline "namespaces/$name/irp/baselines/$model.scxml-report.json"
@@ -297,14 +303,14 @@ done
 # must be byte-identical to each other and to the checked-in baseline, with
 # sound, reproducible documents.
 for model in ecmascript xpath; do
-  "$CARGO_TARGET_DIR/release/scx" conformance run \
+  "$CARGO_TARGET_DIR/debug/scx" conformance run \
     --corpus "tests/conformance/w3c-irp/prepared/$model" \
     --snapshot-every-checkpoint \
     --canonical-baseline "tests/conformance/w3c-irp/baselines/$model.scxml-report.json"
 done
 # `scx snapshot run` end to end through the same release.
 SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
-  cargo test --release --locked -p scxml-cli --features wasmtime --test snapshot_run --test live_run
+  cargo test --locked -p scxml-cli --features wasmtime --test snapshot_run --test live_run
 ```
 
 On a system without `sha256sum` (older macOS), use
@@ -315,7 +321,7 @@ executing tests build their own verified release under
 data model:
 
 ```console
-SCXML_IRP_DATAMODEL=xpath cargo test --release --locked -p scxml-conformance \
+SCXML_IRP_DATAMODEL=xpath cargo test --locked -p scxml-conformance \
   --features wasmtime --test irp_components
 ```
 

@@ -1,6 +1,8 @@
-//! Hostile-input proof that high-amplification ECMAScript builtins reject
-//! over-bound work before the native builtin allocates or iterates, and that
-//! the bounded replacements keep standard semantics inside the bound.
+//! Hostile-input proof for the ECMAScript built-in guards: a built-in's
+//! result has no size bound (SCXML sets none), while native recursion past the
+//! nesting bound and array-likes whose length is not a plain data property
+//! still reject before the native built-in runs, and the guarded replacements
+//! keep standard semantics.
 
 use scxml_data_model_ecmascript::{
     DataModelError, EcmaScriptDataModel, ExecutionHost, MAX_VALUE_BYTES, SystemContext,
@@ -51,89 +53,73 @@ fn outcome(model: &EcmaScriptDataModel, expression: &str) -> String {
     }
 }
 
-fn assert_rejected(expressions: &[&str]) {
+fn assert_outcome(expected: &str, expressions: &[&str]) {
     let model = model();
     for expression in expressions {
-        assert_eq!(
-            outcome(&model, expression),
-            "rejected",
-            "over-bound builtin must reject before allocation: {expression}"
-        );
+        assert_eq!(outcome(&model, expression), expected, "{expression}");
     }
 }
 
 #[test]
-fn value_bound_used_by_guards_matches_public_constant() {
+fn a_builtin_result_has_no_size_bound() {
     let model = model();
     assert_eq!(
-        outcome(&model, &format!("'x'.repeat({MAX_VALUE_BYTES})")),
-        "allowed"
+        value(
+            &model,
+            &format!("'x'.repeat({}).length", MAX_VALUE_BYTES + 1)
+        ),
+        Ok(DataValue::Number(
+            scxml_types::FiniteNumber::new(f64::from(
+                u32::try_from(MAX_VALUE_BYTES + 1).expect("fits")
+            ))
+            .expect("finite")
+        ))
     );
-    assert_eq!(
-        outcome(&model, &format!("'x'.repeat({})", MAX_VALUE_BYTES + 1)),
-        "rejected"
+    assert_outcome(
+        "allowed",
+        &[
+            "'x'.padStart(1e6)",
+            "'x'.padEnd(1e6, 'ab')",
+            "'a'.repeat(40000).concat('b'.repeat(40000))",
+            "'a'.repeat(4000).replace(/a/g, '$`')",
+            "'a'.repeat(4000).replaceAll('a', '$`')",
+            "'a'.repeat(4000).replace(/a/g, () => 'b'.repeat(20))",
+            "String.raw({raw: ['a', 'b', 'c']}, 'x'.repeat(40000), 'y'.repeat(40000))",
+            "Array(64).fill('x'.repeat(2048)).join('')",
+            "String(Array(64).fill('x'.repeat(2048)))",
+            "Array(64).fill('x'.repeat(2048)).toLocaleString()",
+            "(a => [].concat(a, a, a))(Array(40000).fill(0))",
+            "Array(300).fill(Array(300).fill(0)).flat()",
+            "Array(300).fill(0).flatMap(() => Array(300).fill(0))",
+            "Array.from({length: 100000})",
+            "JSON.stringify(Array(64).fill('x'.repeat(2048)))",
+            "JSON.stringify(Array(12000).fill(0), null, 10)",
+        ],
     );
 }
 
 #[test]
-fn string_amplifiers_reject_before_allocation() {
-    assert_rejected(&[
-        "'x'.padStart(1e6)",
-        "'x'.padEnd(1e6, 'ab')",
-        "'a'.repeat(40000).concat('b'.repeat(40000))",
-        "'a'.repeat(4000).replace(/a/g, '$`')",
-        "'a'.repeat(4000).replace(/a/g, \"$'\")",
-        "'a'.repeat(4000).replace(/a/g, '$&$&$&$&$&$&$&$&$&$&$&$&$&$&$&$&$&$&')",
-        "'a'.repeat(4000).replaceAll('a', '$`')",
-        "'a'.repeat(4000).replace(/a/g, () => 'b'.repeat(20))",
-        "/a/g[Symbol.replace]('a'.repeat(4000), '$`')",
-        "RegExp.prototype[Symbol.replace].call(/a/g, 'a'.repeat(4000), '$`')",
-        // Tampering with globals the guards use must not disable them.
-        "(() => { Math.trunc = () => 0; Number.isFinite = () => true; \
-          Reflect.apply = () => ''; return 'ab'.repeat(40000); })()",
-        "(() => { String.prototype.padStart = null; return 'x'.padStart(1e6); })()",
-    ]);
+fn deep_nesting_rejects_before_native_recursion() {
+    assert_outcome(
+        "rejected",
+        &[
+            "(() => { let a = []; for (let i = 0; i < 100000; i++) a = [a]; return a.flat(Infinity); })()",
+            "(() => { let a = []; for (let i = 0; i < 100000; i++) a = [a]; return a.join(); })()",
+            "(() => { let a = []; for (let i = 0; i < 100000; i++) a = [a]; return JSON.stringify(a); })()",
+            "JSON.parse('['.repeat(100000) + ']'.repeat(100000))",
+        ],
+    );
 }
 
 #[test]
-fn array_length_amplifiers_reject_before_native_iteration() {
-    assert_rejected(&[
-        "(a => { a.length = 1e7; return a.fill(0); })([])",
-        "(a => { a.length = 1e7; return a.join('ab'); })([])",
-        "Array(1e7).join('ab')",
-        "Array(1e7).indexOf(1)",
-        "Array(1e7).map(x => x)",
-        "Array(64).fill('x'.repeat(2048)).join('')",
-        "String(Array(64).fill('x'.repeat(2048)))",
-        "Array(64).fill('x'.repeat(2048)).toLocaleString()",
-        "Array.from({length: 1e7})",
-        "Math.max.apply(null, {length: 1e7})",
-        "Reflect.apply(Math.max, null, {length: 1e7})",
-        "Reflect.construct(Array, {length: 1e7})",
-        "[...Array(1e6)]",
-        "(a => [].concat(a, a, a))(Array(40000).fill(0))",
-        "Array(300).fill(Array(300).fill(0)).flat()",
-        "Array(300).fill(0).flatMap(() => Array(300).fill(0))",
-        "Array.prototype.fill.call({length: 1e7}, 0)",
-        "Array.prototype.fill.call({get length() { return 1e7; }}, 0)",
-        "Array.prototype.fill.call({length: {valueOf() { return 1e7; }}}, 0)",
-    ]);
-}
-
-#[test]
-fn json_raw_and_iterator_amplifiers_reject_before_allocation() {
-    assert_rejected(&[
-        "JSON.stringify(Array(64).fill('x'.repeat(2048)))",
-        "JSON.stringify(Array(64).fill(new String('x'.repeat(2048))))",
-        "JSON.stringify(Array(64).fill({ toJSON() { return 'x'.repeat(2048); } }))",
-        "JSON.stringify(Array(12000).fill(0), null, 10)",
-        "String.raw({raw: {length: 1e7}})",
-        "String.raw({raw: ['a', 'b', 'c']}, 'x'.repeat(40000), 'y'.repeat(40000))",
-        // A getter grows the array while the native iterator reads its length
-        // live on every step.
-        "(() => { const a = [0]; Object.defineProperty(a, 0, { get() { a.length = 1e6; return 0; } }); \
-          return [...a]; })()",
-    ]);
+fn array_likes_without_a_data_length_reject_before_native_iteration() {
+    assert_outcome(
+        "rejected",
+        &[
+            "Array.prototype.fill.call({get length() { return 1e7; }}, 0)",
+            "Array.prototype.fill.call({length: {valueOf() { return 1e7; }}}, 0)",
+        ],
+    );
 }
 
 #[test]

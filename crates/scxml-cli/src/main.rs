@@ -1255,6 +1255,7 @@ fn runner_options(options: &ConformanceRunOptions) -> RunOptions {
         filters: options.filters.clone(),
         schema_mode: SchemaMode::Off,
         git_commit: options.git_commit.clone(),
+        jobs: None,
     }
 }
 
