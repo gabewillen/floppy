@@ -2,13 +2,13 @@
 <!--
   floppy's Routines ability: it keeps the ACTIVE persistent routines of behavior inventory running and
   forwards their ticks. The cognition (abilities/cognition/cognition.scx) invokes it
-  as its long-lived child "routines", with the database path as <param name="database">.
+  as its long-lived child "routines", with the memory's address as <param name="memory">.
 
     active { inventory { reconciling { recalling } -> running
                          -bot.ability.routines.reconcile-> reconciling },
              chain { chain_off | chain_on } }
 
-  Reconciling: with no database (null) it
+  Reconciling: with no memory (null) it
   logs <log label="routines" expr="'absent'"> and runs nothing. Otherwise
   it selects, through the Memory ability (abilities/memory/memory.scx), the
   ACTIVE persistent bot_behavior rows in inventory order and raises
@@ -44,8 +44,11 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="routines" initial="active">
   <datamodel>
-    <!-- The memory database (the cognition's), or null. -->
-    <data id="database" expr="null"/>
+    <!-- The address of the bot's memory (the cognition's), or null. -->
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <!-- The behaviors of one status and lifetime: plain rows, portable to both engines. -->
     <data id="select_routines">SELECT name, source, updated_at FROM bot_behavior WHERE status = ? AND lifetime = ? ORDER BY name</data>
     <!-- The rows the last recall selected, and the ones the chain runs. -->
@@ -69,19 +72,21 @@
 
         <!-- One read of behavior inventory. -->
         <state id="recalling">
-          <invoke id="recall" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="routinesSelectStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+          <onentry>
+            <if cond="hasMemory()">
+              <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+                <param name="id" expr="memory_requests.recall"/>
+                <param name="statements" expr="routinesSelectStatements()"/>
+              </send>
+            </if>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json" target="running">
             <assign location="desired" expr="routinesFromMemoryOutput(_event)"/>
-          </transition>
-          <transition event="done.invoke.recall" target="running">
             <assign location="restart" expr="isRevisionChanged()"/>
             <assign location="routines" expr="desired"/>
             <raise event="bot.ability.routines.reconciled"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="running">
+          <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="running">
             <log label="bot.ability.routines.reconcile.failed" expr="reconcileFailedLog(_event.data.message)"/>
           </transition>
           <transition event="error.*" target="running">

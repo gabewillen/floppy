@@ -5,8 +5,11 @@
   <data id="snapshot" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
-  <invoke id="identity" type="scxml" src="../../../identity.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="identity" type="scxml" src="../../../identity.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="name_select" expr="&quot;SELECT content FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x &lt; 20000000) SELECT count(*) AS n, 'x' AS content FROM c) AS slow WHERE ?1 = 'self_name' AND ?2 = 'self'&quot;"/>
     <param name="name" expr='"Floppy"'/>
     <param name="recall_attempt_timeout_ms" expr="200"/>

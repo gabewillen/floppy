@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/voice_identification/irp/sources">
   <assert id="voice_identification-1" specnum="1" specid="#voice_identification-1">
-    <![CDATA[Given the `segments` `<param>`, it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and the done data (`done.invoke.voice_identification`) is exactly `{segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.]]>
+    <![CDATA[It is long-lived: each request is `bot.ability.hearing.voice.identification.input` `{id, segments}` or, for direct identification, `{id, audio, sample_rate_hz, channels, start_seconds, end_seconds, output}`. Given `segments`, it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and it answers its parent with `bot.ability.hearing.voice.identification.output` exactly `{id, segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -24,7 +24,7 @@
     </test>
   </assert>
   <assert id="voice_identification-4" specnum="4" specid="#voice_identification-4">
-    <![CDATA[When the clip answers `bot.ability.failed` `{message}` (a span that holds no audio, a sound that cannot be read), the done data is `{message: "Voice identification opening segment conversion failed: <message>"}` and nothing is identified.]]>
+    <![CDATA[When the clip answers `bot.ability.failed` `{message}` (a span that holds no audio, a sound that cannot be read), it answers `bot.ability.failed` `{id, message: "Voice identification opening segment conversion failed: <message>"}` and nothing is identified.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="voice_identification-5" specnum="5" specid="#voice_identification-5">
-    <![CDATA[When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), the done data is exactly `{message}`.]]>
+    <![CDATA[When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), it answers `bot.ability.failed` exactly `{id, message}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -45,7 +45,7 @@
     </test>
   </assert>
   <assert id="voice_identification-6" specnum="6" specid="#voice_identification-6">
-    <![CDATA[When a step cannot run (segments that are not ascending `audio/pcm` voice segments, or no segments and no sound to clip, reject its start with `error.execution`), the done data is `{message: "VoiceIdentification could not run (<error event>)"}`.]]>
+    <![CDATA[When a step cannot run (segments that are not ascending `audio/pcm` voice segments, or no segments and no sound to clip, reject its start with `error.execution`), it answers `bot.ability.failed` `{id, message: "VoiceIdentification could not run (<error event>)"}`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

@@ -2,20 +2,16 @@
 <!-- voice_identification-3: the opening voice span is clipped (its end clamped to the sound) and identified. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx">
-    <param name="audio" expr="'media/sound.raw'"/>
-    <param name="sample_rate_hz" expr="8000"/>
-    <param name="channels" expr="1"/>
-    <param name="start_seconds" expr="0.25"/>
-    <param name="end_seconds" expr="2"/>
-    <param name="output" expr="'media/clip'"/>
-  </invoke>
+  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_identification" cond="Object.keys(_event.data).sort().join() === 'embeddings,segments' &amp;&amp; JSON.stringify(_event.data.embeddings) === &quot;[{\&quot;confidence\&quot;:null,\&quot;embedding\&quot;:[0.5,0.6],\&quot;model\&quot;:\&quot;voice-detect-wespeaker-resnet34\&quot;}]&quot; &amp;&amp; _event.data.segments.length === 1 &amp;&amp; _event.data.segments[0].audio === &quot;media/clip&quot; &amp;&amp; _event.data.segments[0].channels === 1 &amp;&amp; _event.data.segments[0].end_seconds === 1 &amp;&amp; _event.data.segments[0].media_type === &quot;audio/pcm&quot; &amp;&amp; _event.data.segments[0].sample_rate_hz === 8000 &amp;&amp; _event.data.segments[0].start_seconds === 0.25" target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification"><content expr="({id: &quot;r1&quot;, audio: 'media/sound.raw', sample_rate_hz: 8000, channels: 1, start_seconds: 0.25, end_seconds: 2, output: 'media/clip'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.voice.identification.output" cond="_event.data.id === &quot;r1&quot; &amp;&amp; (function (_event) { return Object.keys(_event.data).sort().join() === 'embeddings,segments' &amp;&amp; JSON.stringify(_event.data.embeddings) === &quot;[{\&quot;confidence\&quot;:null,\&quot;embedding\&quot;:[0.5,0.6],\&quot;model\&quot;:\&quot;voice-detect-wespeaker-resnet34\&quot;}]&quot; &amp;&amp; _event.data.segments.length === 1 &amp;&amp; _event.data.segments[0].audio === &quot;media/clip&quot; &amp;&amp; _event.data.segments[0].channels === 1 &amp;&amp; _event.data.segments[0].end_seconds === 1 &amp;&amp; _event.data.segments[0].media_type === &quot;audio/pcm&quot; &amp;&amp; _event.data.segments[0].sample_rate_hz === 8000 &amp;&amp; _event.data.segments[0].start_seconds === 0.25; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

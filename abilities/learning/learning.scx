@@ -71,7 +71,10 @@
        version="1.0" datamodel="ecmascript" name="learning" initial="idle">
   <datamodel>
     <!-- The cognition's <param>s. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
@@ -154,23 +157,27 @@
     <onentry>
       <assign location="statements" expr="recallStatements()"/>
     </onentry>
-    <transition cond="hasNoDatabase()" target="failing">
+    <transition cond="hasNoMemory()" target="failing">
       <assign location="failure" expr="'Learning memory recall failed: no database.'"/>
     </transition>
     <transition cond="isNotText()" target="failing">
       <assign location="failure" expr="notTextMessage()"/>
     </transition>
-    <invoke id="recalling_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="selecting">
+    <onentry>
+      <if cond="isRecallable()">
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recalling_memory">
+          <param name="id" expr="memory_requests.recalling_memory"/>
+          <param name="statements" expr="statements"/>
+        </send>
+      </if>
+    </onentry>
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('recalling_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="selecting">
       <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
       <behavior:instances_from_behavior_results location="behaviors"
           behaviors="_event.data.results[1]" triggers="_event.data.results[2]"/>
       <log label="learning.recalled" expr="recalledLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" cond="isMemoryReply('recalling_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="recallFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -280,7 +287,7 @@
       <cancel sendid="learning-revising-ceiling"/>
     </onexit>
     <invoke id="revision" type="scxml" src="../revision/revision.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
       <param name="model" expr="model"/>
       <param name="reflection_model" expr="reflection_model"/>
       <param name="progress_target" expr="progressTarget()"/>
@@ -335,19 +342,19 @@
     </transition>
     <onentry>
       <assign location="statements" expr="breakStatements()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.breaking_memory">
+        <param name="id" expr="memory_requests.breaking_memory"/>
+        <param name="statements" expr="statements"/>
+      </send>
     </onentry>
-    <invoke id="breaking_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
-                cond="hasBroken(_event)" target="reporting">
+                cond="isMemoryReply('breaking_memory') &amp;&amp; hasBroken(_event)" target="reporting">
       <assign location="behavior" expr="brokenBehavior()"/>
     </transition>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('breaking_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
       <assign location="failure" expr="breakFailedMessage('no behavior is named ' + intent.name)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" cond="isMemoryReply('breaking_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">

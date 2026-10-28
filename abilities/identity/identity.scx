@@ -12,9 +12,9 @@
   invoker's <param name="name"> when it passes one (tests do; the body does
   not), else null.
 
-  recalling: with a database (the <param>
-  database, the memory database file) it invokes the memory ability
-  (abilities/memory/memory.scx) to select the adopted names (query_tags
+  recalling: with a memory (the <param>
+  memory, the address of the bot's memory) it asks the bot's memory
+  (abilities/memory/memory.scx, decision D266) to select the adopted names (query_tags
   self_name, subject_ref self, oldest first, at most 50) and sends
   bot.ability.identity.recalled {name} to #_internal with the last one
   that decodes as a name ({text, kind?}, kind "fact" when absent, no other key, text of 1 to 64
@@ -30,7 +30,7 @@
   sends bot.ability.failed {message: "Identity could not recall a name:
   memory did not answer within the bring-up budget."} to the parent and
   recalls the session's name.
-  Without a database it logs <log label="memory" expr="'absent'"> and
+  Without a memory it logs <log label="memory" expr="'absent'"> and
   recalls the session's name.
 
   Asking:
@@ -65,7 +65,7 @@
   from the live session with <decision:offers>, the event its offerable
   <data> declares with its effort (adopt_effort, 1 by default, decision
   D206), while a transition without a cond takes it. adopting writes the name down before answering to
-  it: with a database it inserts the name (scope long_term, kind fact,
+  it: with a memory it inserts the name (scope long_term, kind fact,
   query_tags self_name, subject_ref self, and the recall orders ties in
   created_at by memory_id, so two adoptions in one second keep their
   order) and sends
@@ -75,7 +75,7 @@
   in one transition: a private event sent to #_internal would be judged by the adopt
   transition, whose descriptor matches it) and the bot keeps its old name
   (fail-closed).
-  Without a database it logs <log label="memory" expr="'absent'"> and
+  Without a memory it logs <log label="memory" expr="'absent'"> and
   sends adopted.
 
   Deferral: communication input, adopt and
@@ -93,8 +93,8 @@
   error.execution in its sender, and input from outside the session that
   does not is refused, so no cond rechecks a payload.
 
-  Bindings: the identity namespace package and the memory ability's
-  sql service package (a run grants it its directory: scx run's dir option).
+  Bindings: the identity namespace package (the bot's memory, which the
+  body invokes, binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -116,14 +116,17 @@
          live session with <decision:offers>: the adoption, of
          adopt_effort. -->
     <data id="offerable" expr="({'bot.ability.identity.adopt': {effort: adopt_effort}})"/>
-    <!-- Memory: the database file (null: no memory) and its statements.
+    <!-- Memory: the address of the bot's memory (null: no memory) and its statements.
          The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
          across invocations in Wasm); JSON rows are told by their
          content_format, the 50 most recent by created_at,
          then memory_id (the insertion order), read oldest first. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="name_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
@@ -145,7 +148,7 @@
       <assign location="recalled_name" expr="recalledName()"/>
     </onentry>
     <state id="recalling_from">
-      <transition cond="hasNoDatabase()" target="recalling_nothing"/>
+      <transition cond="hasNoMemory()" target="recalling_nothing"/>
       <transition target="recalling_memory"/>
     </state>
     <state id="recalling_nothing">
@@ -173,17 +176,19 @@
         <onexit>
           <cancel sendid="asking-after"/>
         </onexit>
-        <invoke id="recall" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="nameSelectStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+            <param name="id" expr="memory_requests.recall"/>
+            <param name="statements" expr="nameSelectStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json">
           <assign location="recalled_name" expr="recalledNameFromMemory(_event)"/>
           <send event="bot.ability.identity.recalled" target="#_internal">
             <param name="name" expr="recalled_name"/>
           </send>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+        <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
           <log label="identity.recall.failed" expr="recallFailedMessage(_event)"/>
         </transition>
         <transition event="asking.after" target="waiting">
@@ -268,7 +273,7 @@
        (fail-closed: a name that could not be written down is not taken). -->
   <state id="adopting" initial="adopting_from">
     <state id="adopting_from">
-      <transition cond="hasNoDatabase()" target="adopting_nothing"/>
+      <transition cond="hasNoMemory()" target="adopting_nothing"/>
       <transition target="adopting_memory"/>
     </state>
     <state id="adopting_nothing">
@@ -283,12 +288,12 @@
       <onentry>
         <assign location="name_parameters" expr="nameInsertParameters()"/>
         <assign location="name_parameters" expr="nameInsertParametersCompleted()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.remember">
+          <param name="id" expr="memory_requests.remember"/>
+          <param name="statements" expr="nameInsertStatements()"/>
+        </send>
       </onentry>
-      <invoke id="remember" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="nameInsertStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.memory.output.json">
         <send event="bot.ability.identity.adopted" target="#_internal">
           <param name="name" expr="adoptedName()"/>
         </send>
@@ -296,7 +301,7 @@
       <!-- The write failed (taken here: a failure sent to #_internal would
            be judged by the adopt descriptor,
            which matches it, and refused). -->
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="knowing">
+      <transition event="bot.ability.failed" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.failed.json" target="knowing">
         <log label="identity.adopt.failed" expr="adoptFailedMessage(_event)"/>
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="adoptFailedMessage(_event)"/>

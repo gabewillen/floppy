@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.decoding.input",
+  "additionalProperties": false,
+  "description": "One utterance for SpeechDecoding to decode (mosfet.py's SpeechDecoding input): a reference to its audio and its media type.",
+  "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "audio": {
+      "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+      "examples": [
+        "media/audio-1"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Audio",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+      "examples": [
+        "audio/pcm",
+        "audio/opus"
+      ],
+      "title": "Media Type"
+    }
+  },
+  "required": [
+    "id",
+    "audio"
+  ],
+  "type": "object"
+}

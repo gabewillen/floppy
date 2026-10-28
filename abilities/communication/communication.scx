@@ -135,9 +135,9 @@
     <data id="response_timeout_ms" expr="36000"/>
     <!-- Speaking's encoding bound, passed to it (decision D98). -->
     <data id="encoding_timeout_ms" expr="30000"/>
-    <!-- The memory database file, for the conversation (null:
+    <!-- The address of the bot's memory, for the conversation (null:
          no memory). -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
     <!-- The environment's id (decision D106), where speaking's sound goes. -->
     <data id="environment" expr="null"/>
     <data id="ready" expr="({})"/>
@@ -178,7 +178,7 @@
 
   <state id="communication" initial="inactive">
     <invoke id="conversation" type="scxml" src="../conversation/conversation.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
     </invoke>
     <invoke id="speaking" type="scxml" src="../speaking/speaking.scx">
       <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>

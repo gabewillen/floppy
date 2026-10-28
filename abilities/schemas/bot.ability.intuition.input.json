@@ -1,111 +1,126 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.intuition.input",
-  "description": "Typed Cognition request for one intuitive processing stage.",
+  "description": "One turn the cognition hands its long-lived decision layer (abilities/intuition/intuition.scx) after autonomy left it unhandled [floppy fields; mosfet.py's System 1 stage, since renamed Decision].",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "turn",
+    "stimulus",
+    "focus",
+    "focus_candidates",
+    "choices",
+    "held",
+    "environment",
+    "recent",
+    "confidence_tuner",
+    "decision_timeout_ms",
+    "hand_ons",
+    "max_context_tokens",
+    "bytes_per_token"
+  ],
   "properties": {
     "turn": {
       "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
       "minimum": 1,
       "type": "integer"
     },
-    "processing_input": {
-      "additionalProperties": false,
-      "description": "Processing input: stimulus payload plus HSM event schemas available for selection. Processor output is always an array of selected events.",
-      "examples": [
-        {
-          "input": "incoming speech",
-          "schemas": [
-            "bot.ability.cognition.ignore"
-          ]
-        }
-      ],
-      "properties": {
-        "input": {
-          "description": "Incoming stimulus event or payload.",
-          "examples": [
-            "incoming speech"
-          ],
-          "title": "Input"
-        },
-        "instructions": {
-          "anyOf": [
-            {
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Optional system policy stamped by Processing for model-facing processors. Not part of the stimulus; providers use this as the system prompt when present.",
-          "examples": [
-            "Return an immediate typed result only when the input is already unambiguous."
-          ],
-          "title": "Instructions"
-        }
-      },
-      "required": [
-        "input"
-      ],
-      "title": "InputData",
-      "type": "object"
+    "stimulus": {
+      "description": "The turn's stimulus envelope."
     },
-    "input": {
-      "additionalProperties": false,
-      "description": "Live body input for this turn: the stimulus plus the abilities, named actors, and focus candidates the stage may select from. Built by the Cognition host from live body context.",
-      "examples": [
+    "focus": {
+      "anyOf": [
         {
-          "focus": "device-a",
-          "focus_candidates": [
-            "device-a"
-          ]
+          "type": "string"
+        },
+        {
+          "type": "null"
         }
       ],
-      "properties": {
-        "focus": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Instance name the bot is looking at, if any.",
-          "examples": [
-            "device-a"
-          ],
-          "title": "Focus"
-        },
-        "focus_candidates": {
-          "default": [],
-          "description": "Instance names that may become focus for this turn (body attention policy).",
-          "examples": [
-            [
-              "device-a"
-            ],
-            [
-              "device-a",
-              "device-b"
-            ]
-          ],
-          "items": {
-            "type": "string"
-          },
-          "title": "Focus Candidates",
-          "type": "array"
-        }
+      "description": "Instance name the bot is looking at, if any."
+    },
+    "focus_candidates": {
+      "type": "array",
+      "items": {
+        "type": "string"
       },
-      "title": "InputData",
-      "type": "object"
+      "description": "Instance names that may become focus for this turn."
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The turn's choices within the decision layer's effort ceiling: {event, schema, description?, target?} each."
+    },
+    "held": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The actions held from this tier, over its effort ceiling: {event, description?} each."
+    },
+    "environment": {
+      "description": "The bot's environment, or null."
+    },
+    "recent": {
+      "type": "array",
+      "description": "The recent turns of the bot's conversations."
+    },
+    "confidence_tuner": {
+      "type": "object",
+      "description": "The decision layer's confidence tuner state, on the 0-100 scale.",
+      "required": [
+        "mean",
+        "var",
+        "n"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mean": {
+          "type": "number"
+        },
+        "var": {
+          "type": "number"
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "decision_timeout_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How long the decision may take, in milliseconds."
+    },
+    "hand_ons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "intuition",
+          "reasoning"
+        ]
+      },
+      "description": "The later tiers a pass may hand the turn to."
+    },
+    "max_context_tokens": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The decision model's context window in tokens, or null to send every request whole."
+    },
+    "bytes_per_token": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The fewest bytes a token any answer showed so far."
     }
-  },
-  "required": [
-    "turn",
-    "processing_input",
-    "input"
-  ],
-  "type": "object"
+  }
 }

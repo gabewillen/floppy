@@ -156,42 +156,52 @@ fn consolidate(
         )
     });
     let document = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="seeding">
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
   <datamodel>
     <data id="seeds" expr="{seed}"/>
     <data id="inspects" expr="{inspect}"/>
   </datamodel>
-  <state id="seeding">
-    <invoke id="seed" type="scxml" src="abilities/memory/memory.scx">
+  <state id="harness" initial="seeding">
+    <invoke id="memory" type="scxml" src="abilities/memory/memory.scx">
       <param name="database" expr="'{database}'"/>
-      <param name="statements" expr="seeds"/>
     </invoke>
-    <transition event="bot.ability.memory.output" target="consolidating"/>
-    <transition event="bot.ability.failed" target="done"><log label="failed" expr="_event.data.message"/></transition>
-  </state>
-  <state id="consolidating">
-    {stopping}
-    <invoke id="consolidation" type="scxml" src="abilities/consolidation/consolidation.scx">
-      <param name="database" expr="'{database}'"/>
-      <param name="bounds" expr="({{consolidation_pause_ms: 100}})"/>
-    </invoke>
-    <transition event="error.*" target="done"><log label="failed" expr="_event.name"/></transition>
-    <transition event="done.invoke.consolidation" target="inspecting">
-      <log label="consolidated" expr="JSON.stringify(_event.data)"/>
-    </transition>
-  </state>
-  <state id="inspecting">
-    <invoke id="inspect" type="scxml" src="abilities/memory/memory.scx">
-      <param name="database" expr="'{database}'"/>
-      <param name="statements" expr="inspects"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" target="done">
-      <log label="inspected" expr="JSON.stringify(_event.data.results)"/>
-    </transition>
-    <transition event="bot.ability.failed" target="done"><log label="failed" expr="_event.data.message"/></transition>
+    <state id="seeding">
+      <onentry><send event="started"/></onentry>
+      <transition event="started">
+        <send event="bot.ability.memory.input" target="#_memory">
+          <param name="id" expr="'seed'"/>
+          <param name="statements" expr="seeds"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.memory.output" target="consolidating"/>
+      <transition event="bot.ability.failed" target="done"><log label="failed" expr="_event.data.message"/></transition>
+    </state>
+    <state id="consolidating">
+      {stopping}
+      <invoke id="consolidation" type="scxml" src="abilities/consolidation/consolidation.scx">
+        <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
+        <param name="bounds" expr="({{consolidation_pause_ms: 100}})"/>
+      </invoke>
+      <transition event="error.*" target="done"><log label="failed" expr="_event.name"/></transition>
+      <transition event="done.invoke.consolidation" target="inspecting">
+        <log label="consolidated" expr="JSON.stringify(_event.data)"/>
+      </transition>
+    </state>
+    <state id="inspecting">
+      <onentry>
+        <send event="bot.ability.memory.input" target="#_memory">
+          <param name="id" expr="'inspect'"/>
+          <param name="statements" expr="inspects"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" target="done">
+        <log label="inspected" expr="JSON.stringify(_event.data.results)"/>
+      </transition>
+      <transition event="bot.ability.failed" target="done"><log label="failed" expr="_event.data.message"/></transition>
+    </state>
   </state>
   <final id="done"/>
-</scxml>"#,
+</scxml>"##,
         seed = attribute(&Json::from(seed.to_vec()).to_string()),
         inspect = attribute(&Json::from(inspect.to_vec()).to_string()),
     );

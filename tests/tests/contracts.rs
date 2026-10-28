@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 113] = [
+const ABILITY_EVENTS: [&str; 126] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -107,6 +107,8 @@ const ABILITY_EVENTS: [&str; 113] = [
     "bot.ability.cognition.step.failed",
     "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
+    // Speaking's cancel of an utterance its long-lived vocal is encoding.
+    "bot.ability.processing.cancel",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",
@@ -173,8 +175,9 @@ const ABILITY_EVENTS: [&str; 113] = [
     "bot.ability.learning.output",
     "bot.ability.routines.reconcile",
     "bot.ability.ready",
-    // Phase 3: the memory service's committed transaction, described where
-    // the abilities take it.
+    // Phase 3: a request to the bot's memory and its committed transaction
+    // (decision D266), described where the memory and the abilities take them.
+    "bot.ability.memory.input",
     "bot.ability.memory.output",
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
@@ -187,7 +190,7 @@ const ABILITY_EVENTS: [&str; 113] = [
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
-    // The transcription's turns, handed to the interpretation (D264).
+    // The transcription's turns, handed to the interpretation (D270).
     "bot.ability.listening.transcription.turn",
     // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
@@ -202,6 +205,19 @@ const ABILITY_EVENTS: [&str; 113] = [
     "bot.ability.reading.image.decoded",
     "bot.ability.reading.unreadable.output.ready",
     "bot.ability.reading.output.encoded",
+    // The interpretation's long-lived stages: their requests and answers.
+    "bot.ability.hearing.voice.detection.input",
+    "bot.ability.hearing.voice.detection.output",
+    "bot.ability.hearing.sound.classification.input",
+    "bot.ability.hearing.sound.classification.output",
+    "bot.ability.hearing.voice.diarization.input",
+    "bot.ability.hearing.voice.diarization.output",
+    "bot.ability.hearing.voice.identification.input",
+    "bot.ability.hearing.voice.identification.output",
+    "bot.ability.hearing.speech.decoding.input",
+    "bot.ability.hearing.speech.decoding.output",
+    "bot.ability.classifying.input",
+    "bot.ability.classifying.output",
     // The turn detector (the conversation's turn_detector stage).
     "bot.ability.turn_detector.turn.start",
     "bot.ability.turn_detector.turn.update",

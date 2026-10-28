@@ -2,18 +2,16 @@
 <!-- voice_diarization-2: raw PCM is read in the given format. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx">
-    <param name="audio" expr="'media/utterance.raw'"/>
-    <param name="sample_rate_hz" expr="8000"/>
-    <param name="channels" expr="1"/>
-    <param name="output" expr="'media/segment'"/>
-  </invoke>
+  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_diarization" cond='JSON.stringify(_event.data) === "{\"segments\":[{\"audio\":\"media/segment-0\",\"channels\":1,\"confidence\":null,\"end_seconds\":0.6,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":8000,\"start_seconds\":0.2}]}"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization"><content expr="({id: &quot;r1&quot;, audio: 'media/utterance.raw', sample_rate_hz: 8000, channels: 1, output: 'media/segment'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.voice.diarization.output" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return JSON.stringify(_event.data) === "{\"segments\":[{\"audio\":\"media/segment-0\",\"channels\":1,\"confidence\":null,\"end_seconds\":0.6,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":8000,\"start_seconds\":0.2}]}"; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

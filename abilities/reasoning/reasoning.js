@@ -4,8 +4,8 @@
 
 // Shared by the steps.
 
-function hasNoDatabase() {
-  return database === null;
+function hasNoMemory() {
+  return memory === null;
 }
 
 // The input of bot.ability.reasoning.recalled.
@@ -76,7 +76,7 @@ function hasNoCueWords() {
 }
 
 function cueEmbeddingInput() {
-  return ({role: 'query', items: [{parts: [{kind: 'text', text: cueWords()}]}]});
+  return ({id: embedding_requests.recalling_embedding, role: 'query', items: [{parts: [{kind: 'text', text: cueWords()}]}]});
 }
 
 function candidateSelectStatements() {
@@ -353,4 +353,17 @@ function observedBytesPerToken(_event) {
 
 function withFit(done) {
   return Object.assign({}, done, {bytes_per_token: bytes_per_token});
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D266): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
+}
+
+// A reply of the Embedding ability to the request the state name last sent.
+function isEmbeddingReply(name) {
+  return embedding_requests[name] !== undefined && _event.data.id === embedding_requests[name];
 }

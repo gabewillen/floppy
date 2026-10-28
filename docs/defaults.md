@@ -20,7 +20,7 @@ values. No package has a default model endpoint (decision D31).
 | `FLOPPY_STREAM` | the `generate` service (`env:stream`): whether the model endpoint streams; `true` or `false` | no: unset (the default), no call but reasoning's is streamed and each other model-bound stage is bounded by its backstop alone; `true` makes reasoning's, reflection's and the builder's calls streamed and bounded by inactivity once they stream (decision D101); reasoning (and the intuition) stream whatever it says, by their `stream` `<data>`, true by default, so a reply is said while it is written (decision D262); api.willen.dev streams. The CPA gateway does not stream (it answers a streamed request with keep-alive comments only), the maintainer's vLLM does |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai`, when a key is held; without `TYPESAFE_API_KEY` a held base URL is asked keyless, with no authorization header (decision D150) |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot, unless `TYPESAFE_BASE_URL` names a keyless endpoint: with neither, every turn fails (`unconfigured`); the builder triages with its fallback |
-| `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's streaming hearing session (the listening's transcription, the `wss` form of its `https` URL), its speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured`, and the listening hears through the interpretation (decision D264) |
+| `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's streaming hearing session (the listening's transcription, the `wss` form of its `https` URL), its speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured`, and the listening hears through the interpretation (decision D270) |
 | `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 | `FLOPPY_VOICE_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's voice detection, diarization and voice identification (listening), on LocalAI's voice APIs | yes: without it every sound the bot hears fails voice detection |
 | `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
@@ -88,7 +88,7 @@ its own path, so `FLOPPY_EMOTION_BASE_URL` is
 `https://api.willen.dev/emotion/v1` (decision D247). The listening streams
 what it hears to the same origin's WebSocket `/v1/audio/stream` (the
 transcription's `language` `en` and `chunk_seconds` `0.56`, Nemotron with
-turn-taking; decision D264). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `provider` of
+turn-taking; decision D270). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `provider` of
 `gemini` is the Gemini API (decision D94).
 
 ## Timeouts and bounds
@@ -136,7 +136,7 @@ turn-taking; decision D264). From the lab, `http://192.168.2.2:8090/v1` serves t
 | `abilities/identity/identity.scx` | `bring_up_timeout_ms` | `30000` | recalling the name until memory answers, then the identity wakes with the session's name and says so (the body passes half its `activation_timeout_ms`) |
 | `abilities/persona/persona.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the self-written description from memory, asked again after `recall_retry_delay_ms` |
 | `abilities/persona/persona.scx` | `bring_up_timeout_ms` | `30000` | recalling the description until memory answers, then the persona wakes with none and says so (the body passes half its `activation_timeout_ms`) |
-| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | one memory operation, its migration and transaction together, which then fails with kind `timeout` |
+| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | the memory's migration, after which every request fails with kind `timeout`, and each request's transaction, which then fails with kind `timeout` |
 | `abilities/stm/stm.scx` | `open_timeout_ms` | `30000` | opening the short-term register (its database migrated), after which it is degraded |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input |
@@ -146,7 +146,7 @@ turn-taking; decision D264). From the lab, `http://192.168.2.2:8090/v1` serves t
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation |
 | `abilities/speaking/speaking.scx` | `lookahead_ms` | `1000` | the most playout commanded ahead of the mouth; each played piece is at most half of it and never past its chunk's end (decisions D179, D203) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound |
-| `abilities/transcription/transcription.scx` | `open_timeout_ms` | `30000` | opening a streaming hearing session; the first one not open by then ends the transcription, so the listening hears through the interpretation (decision D264) |
+| `abilities/transcription/transcription.scx` | `open_timeout_ms` | `30000` | opening a streaming hearing session; the first one not open by then ends the transcription, so the listening hears through the interpretation (decision D270) |
 | `abilities/transcription/transcription.scx` | `first_backoff_ms` | `1000` | the wait before reopening a lost session, doubled each time it is lost again (mosfet.py's speech server backoff) |
 | `abilities/transcription/transcription.scx` | `last_backoff_ms` | `30000` | the longest wait before reopening a lost session |
 | `abilities/transcription/transcription.scx` | `max_turn_frames` | `1500` | the most sounds a streamed turn keeps for identifying who spoke |

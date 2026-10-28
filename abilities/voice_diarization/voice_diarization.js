@@ -4,6 +4,11 @@
 
 // applying
 
+// A request's optional field, or null.
+function requested(name) {
+  return request[name] === undefined ? null : request[name];
+}
+
 // A diarization output with its segments (D41: the service's events are
 // unchecked).
 function hasSegments(_event) {
@@ -12,22 +17,22 @@ function hasSegments(_event) {
 
 // The clipped segments, as the service answered them.
 function diarizedResult(_event) {
-  return ({segments: _event.data.segments});
+  return ({id: request.id, segments: _event.data.segments});
 }
 
 // The failure: the service's message, or a fixed one.
 function failedResult(_event) {
-  return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'});
+  return ({id: request.id, message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'});
 }
 
 function mismatchedResult() {
-  return ({message: 'VoiceDiarization produced output that does not match its output schema.'});
+  return ({id: request.id, message: 'VoiceDiarization produced output that does not match its output schema.'});
 }
 
 function undiarizedResult() {
-  return ({message: 'VoiceDiarization ended without diarizing.'});
+  return ({id: request.id, message: 'VoiceDiarization ended without diarizing.'});
 }
 
 function errorResult(_event) {
-  return ({message: 'VoiceDiarization could not run (' + _event.name + ')'});
+  return ({id: request.id, message: 'VoiceDiarization could not run (' + _event.name + ')'});
 }

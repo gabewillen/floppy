@@ -2,8 +2,11 @@
 <!-- stm-5: a stored turn that does not decode as one is skipped; the turns around it are read. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="stm" type="scxml" src="../../../stm.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="recent_turns_select" expr="&quot;SELECT turn_id, at, direction, speakers_json, text, cut, conversation FROM (SELECT 2 AS n, 't2' AS turn_id, '2026-07-07T12:00:01.000000+00:00' AS at, 'heard' AS direction, '[]' AS speakers_json, 'good' AS text, 0 AS cut, 'listening' AS conversation UNION ALL SELECT 1, 't1', '2026-07-07T12:00:00.000000+00:00', 'shouted', '[]', 'bad', 0, 'listening') AS stored WHERE ?1 = ?1 AND ?2 = ?2 ORDER BY n DESC&quot;"/>
   </invoke>
   <state id="boot">

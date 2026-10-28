@@ -77,6 +77,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         "identity",
         "memory",
         "stm",
+        "embedding",
         "persona",
         "seeing",
         "speech_decoding",

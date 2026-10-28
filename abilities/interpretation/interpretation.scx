@@ -22,7 +22,7 @@
         -> IdentifyingOwnVoice -> Idle
       Idle -voices to remember-> Working.Remembering -> Idle
       Idle -bot.ability.listening.transcription.turn-> Working.SpeechEnded
-        -> DecodingSpeech { Transcribed, Detected | Diarized } -> HandingOff
+        -> DecodingSpeech { Detected | Diarized } -> HandingOff
       Working -bot.ability.listening.stage.failed-> Idle }
 
   Configuration (as <data>): the voice activity
@@ -55,19 +55,38 @@
   and HearingSpeech: interpretation is serial, and
   the score was taken on arrival.
 
-  Stages, each a child invoked from its state (leaving the state cancels
-  it, SCXML 6.4) and bounded by its own stage timer:
-  bot.ability.listening.stage.failed {stage, message: "Listening <stage>
-  timed out."} sent to this session after stage_timeout_ms.
+  Stages: the interpretation invokes each stage once, as a long-lived
+  child of Interpretation (mosfet.py's Interpretation holds its
+  VoiceDetection, SoundClassification, VoiceDiarization,
+  VoiceIdentification, SpeechDecoding and affect classifier for its
+  lifetime): voice_detection, sound_classification, voice_diarization,
+  voice_identification, speech_decoding and voice_affect. A state that
+  needs a stage sends it a request (its <name>.input event, the affect
+  classifier's bot.ability.classifying.input) whose id is the stage's
+  name and the serial of the sound in hand, and takes the answer with
+  that id, so an answer about an earlier sound is never taken for this
+  one; a stage serves one request at a time, and a newer request replaces
+  one the interpretation gave up on. Each request is bounded by its
+  state's stage timer: bot.ability.listening.stage.failed {stage,
+  message: "Listening <stage> timed out."} sent to this session after
+  stage_timeout_ms.
 
-  * DetectingVoice and FeedingSpeech invoke abilities/voice_detection/voice_detection.scx:
+  * DetectingVoice, FeedingSpeech and DetectingOwnVoice ask voice
+    detection (abilities/voice_detection/voice_detection.scx,
+    bot.ability.hearing.voice.detection.input) for
     the sound normalized to PCM (a WAV
     container's PCM is written beside it as floppy-sound-<n>.pcm) and its
     voice spans (its ApplyData). With no voice: dropped when only
     speech decoding is configured, handed off as a silence observation
     when nothing else is, else classified. With voice: identified directly
     (voice identification without diarization), else the open-speech
-    window opens (VAD Start).
+    window opens (VAD Start). A scored sound that arrives while the
+    interpretation is busy is asked of a second voice detection,
+    speech_voice_detection, as it arrives (one sound ahead: requested,
+    {serial, sensed}), so its answer is in hand, or on its way, when the
+    sound is taken; the answer is kept in requested until then, and a
+    sound taken in its place (another serial or another sound) is asked
+    as usual.
   * HearingSpeech is the open-speech window: each scored sound goes to
     FeedingSpeech, still voiced it joins the utterance and the window stays
     open, and the first one without voice joins it and closes it
@@ -84,13 +103,13 @@
     known: floppy hands the decoder a file, and transcription APIs read a
     container, not raw PCM. Without a rate it stays raw PCM
     (floppy-utterance-<n>.pcm), and decoding then fails.
-  * ClassifyingSound invokes abilities/sound_classification/sound_classification.scx: a
+  * ClassifyingSound asks abilities/sound_classification/sound_classification.scx: a
     labelled sound is non-speech and is handed off as its
     environment.sound envelope; an unlabelled one is dropped when speech decoding
     is configured, else handed off as a silence observation.
-  * DiarizingVoice invokes abilities/voice_diarization/voice_diarization.scx on the
+  * DiarizingVoice asks abilities/voice_diarization/voice_diarization.scx about the
     utterance (its clipped segments are floppy-diarized-<n>-<index>).
-  * IdentifyingVoiceDirect invokes abilities/voice_identification/voice_identification.scx on
+  * IdentifyingVoiceDirect asks abilities/voice_identification/voice_identification.scx about
     the opening voice span (clipped to floppy-voice-<n>.pcm); its one
     embedding is identified, and the voice's ref becomes the window's source
     identity. IdentifyingVoice embeds each diarized segment, exactly one
@@ -110,17 +129,17 @@
     first, as mosfet.py mints uuid4().hex), and at max_ids (500, decision
     D259; mosfet.py's 1000 prints of 256 dimensions are past a data-model
     call's fuel) the least recently seen id that is not own leaves the
-    session's registry, as mosfet.py evicts it; with a database it stays
+    session's registry, as mosfet.py evicts it; with a memory it stays
     a person in memory. A product names a
-    voice by its ref, voice:<id>. Without a database the registry lives in
+    voice by its ref, voice:<id>. Without a memory the registry lives in
     the session, as mosfet.py's InProcessStore: a restart forgets it.
-  * Memory (decisions D194 and D258): with a database (the <param>
-    database, the memory database file), the voices heard are the people
+  * Memory (decisions D194 and D258): with a memory (the <param>
+    memory, the address of the bot's memory), the voices heard are the people
     long-term memory holds (bot_person, bot_person_embedding and
     bot_person_centroid, kind voice), each id that is not own a person
     whose ref is the id's, so a voice is recognized across restarts.
-    Recalling, before Interpretation is ready, invokes the memory ability
-    (abilities/memory/memory.scx) with one read, the representatives of the
+    Recalling, before Interpretation is ready, asks the bot's memory
+    (abilities/memory/memory.scx, decision D266) with one read, the representatives of the
     96 people seen most recently (one compact row a person; about 100 fit
     the memory ability's output, decision D205), as ids weighted by their representative's
     weight; a failure is logged (memory) and the registry starts empty. A
@@ -132,12 +151,21 @@
     ability, as Working, so sounds wait behind it; a failure is logged
     (memory) and those writes are dropped. The bot's own voice is not
     remembered: it is learned again each run.
-  * DecodingSpeech is two regions: Words, whose Decoding invokes
-    abilities/speech_decoding/speech_decoding.scx (the speech
-    service) on the utterance (decoding rewrites the observation into
-    words), or whose Transcribed takes the words a transcribed turn
-    gives; and Voices, which hears the tone and who spoke (below). With diarization, the decoder is invoked on DecodingSpeech
-    while its child Diarized diarizes the utterance (Diarizing), so the
+  * A transcribed turn (bot.ability.listening.transcription.turn {text,
+    confidence, frames, sensed, voice_detection, participants}, from the
+    listening while its transcription streams; abilities/transcription/
+    transcription.scx) is taken by Idle as an utterance already ended:
+    its frames are the open speech, its loudest scored sound the one the
+    product is compared with and carries, its voice spans the product's,
+    and its participants the active ones. SpeechEnded joins it as any
+    utterance, and DecodingSpeech hears its voices and tone with its words
+    given (no decoding is asked), so it is handed off as decoded speech
+    is, with the turn's confidence. Turns that arrive while Working are
+    held by <event:defer/> as sounds are.
+  * DecodingSpeech asks abilities/speech_decoding/speech_decoding.scx (the speech
+    service) to decode the utterance: decoding rewrites the observation into
+    words. With diarization, the decoder is asked on entering DecodingSpeech
+    while its child state Diarized diarizes the utterance (Diarizing), so the
     words and the voices are heard concurrently, each stage bounded by its
     own timer and failing as its own stage. With voice identification
     configured and segments diarized, Identifying embeds the diarized
@@ -149,24 +177,13 @@
     streaming hearing does the same for each turn). Otherwise the
     diarized segments' tone is heard in Detected.
   * DecodingSpeech also hears the utterance's tone, with affect_classifier
-    (true; mosfet.py's Listening(affect_classifier=)): it invokes
-    abilities/voice_affect/voice_affect.scx beside the decoder, on the
+    (true; mosfet.py's Listening(affect_classifier=)): it asks
+    abilities/voice_affect/voice_affect.scx beside the decoder, about the
     utterance (Detected) or, once diarized, its diarized segments
     (Identifying, or Detected when nobody is identified) (the longest of
     at least 0.3 s is heard, within 3 s), and leaves once the words are
     decoded and the tone is heard or not (mosfet.py's tone, heard
     alongside decoding). A tone not heard never fails the stage.
-  * A transcribed turn (bot.ability.listening.transcription.turn {text,
-    confidence, frames, sensed, voice_detection, participants}, from the
-    listening while its transcription streams; abilities/transcription/
-    transcription.scx) is taken by Idle as an utterance already ended:
-    its frames are the open speech, its loudest scored sound the one the
-    product is compared with and carries, its voice spans the product's,
-    and its participants the active ones. SpeechEnded joins it as any
-    utterance, and DecodingSpeech hears its voices and tone with its words
-    given (Transcribed: no decoder is invoked), so it is handed off as
-    decoded speech is, with the turn's confidence. Turns that arrive while
-    Working are held by <event:defer/> as sounds are.
   * The bot's own voice is heard as any sound is: speaking's efference
     copy of a completed utterance carries the audio it commanded
     (bot.ability.speaking.efference {audio, media_type, sample_rate_hz,
@@ -211,7 +228,8 @@
   Files are written in the directory of the sound's audio reference, the
   directory the run grants the speech service.
 
-  Failure: a stage failure (its child's failure, an error, or its timer)
+  Failure: a stage failure (its bot.ability.failed {id, message}, an
+  error, or its timer)
   answers the listening with bot.ability.listening.failed {stage, message}
   and returns to Idle; Idle clears the open
   speech.
@@ -219,13 +237,13 @@
   Readiness: on start it sends bot.ability.ready to the listening
   (decision D242); it offers nothing.
 
-  Contracts: the events it takes reference abilities/schemas/ by
-  event:schema (never inline). The stages' results are done.invoke
-  <donedata>, which scxml.rs does not check, so their shape is checked by
-  cond.
+  Contracts: the events it takes, the stages' answers included,
+  reference abilities/schemas/ by event:schema (never inline). The append
+  step's result is done.invoke <donedata>, which scxml.rs does not check,
+  so its shape is checked by cond.
 
   Bindings: the speech service for the append step (no backend); the
-  stages bind their own services, and the memory ability its own.
+  stages bind their own services, and the bot's memory its own.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -256,10 +274,13 @@
     <data id="max_ids" expr="500"/>
     <data id="registry" expr="[]"/>
     <data id="minted" expr="0"/>
-    <!-- The memory database (the invoker's <param>; null: the registry
+    <!-- The address of the bot's memory (the invoker's <param>; null: the registry
          lives in the session), the statements waiting to be written, and
          the people memory holds and remembers. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="statements" expr="[]"/>
     <data id="voice_select" expr="'SELECT person_id, centroid, weight FROM bot_person_centroid WHERE kind = ?1 ORDER BY updated_at DESC, person_id LIMIT 96'"/>
     <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
@@ -273,6 +294,9 @@
     <data id="stage" expr="null"/>
     <data id="media_dir" expr="''"/>
     <data id="serial" expr="0"/>
+    <!-- The sound whose voice detection was asked ahead {serial, sensed}
+         (sensed as JSON), with the answer {event, data} once it is in. -->
+    <data id="requested" expr="null"/>
     <!-- The current frame's detection {sensed, voice_detection}, and what
          HandingOff hands off {kind, sensed, voice_detection, ...}. -->
     <data id="detection" expr="null"/>
@@ -308,22 +332,24 @@
     <transition cond="hasNoRecognizeTimeout()" target="degraded">
       <log label="interpretation.degraded" expr="'recognize_timeout must be positive'"/>
     </transition>
-    <transition cond="database !== null" target="Recalling"/>
+    <transition cond="hasMemory()" target="Recalling"/>
     <transition target="Interpretation"/>
   </state>
 
   <!-- The people memory holds, before the first voice is identified. -->
   <state id="Recalling">
-    <invoke id="recall" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="recallStatements()"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Interpretation">
+    <onentry>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+        <param name="id" expr="memory_requests.recall"/>
+        <param name="statements" expr="recallStatements()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json" target="Interpretation">
       <foreach array="recalledRows(_event)" item="result">
         <assign location="registry" expr="withRecalled(result)"/>
       </foreach>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Interpretation">
+    <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="Interpretation">
       <log label="memory" expr="memoryFailure(_event)"/>
     </transition>
     <transition event="error.*" target="Interpretation">
@@ -335,6 +361,17 @@
     <onentry>
       <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
+    <!-- The stages live as long as the interpretation does (mosfet.py's
+         Interpretation holds them); each sound, utterance or voice is a
+         request to one of them. -->
+    <invoke id="voice_detection" type="scxml" src="../voice_detection/voice_detection.scx"/>
+    <!-- The next sound's voice detection, asked as the sound arrives. -->
+    <invoke id="speech_voice_detection" type="scxml" src="../voice_detection/voice_detection.scx"/>
+    <invoke id="sound_classification" type="scxml" src="../sound_classification/sound_classification.scx"/>
+    <invoke id="voice_diarization" type="scxml" src="../voice_diarization/voice_diarization.scx"/>
+    <invoke id="voice_identification" type="scxml" src="../voice_identification/voice_identification.scx"/>
+    <invoke id="speech_decoding" type="scxml" src="../speech_decoding/speech_decoding.scx"/>
+    <invoke id="voice_affect" type="scxml" src="../voice_affect/voice_affect.scx"/>
 
     <!-- Scored sounds are taken here, one at a time; the open speech is
          clear whenever the interpretation is idle. -->
@@ -386,11 +423,30 @@
     <!-- One busy region: the deferral and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
+      <!-- A sound that arrives while busy waits its turn, but its voice
+           detection is asked now, one sound ahead. -->
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+        <if cond="requested === null &amp;&amp; !isPredictedOwnVoice(_event.data)">
+          <assign location="requested" expr="({serial: nextSerial(), sensed: JSON.stringify(_event.data)})"/>
+          <send event="bot.ability.hearing.voice.detection.input" target="#_speech_voice_detection">
+            <content expr="detectionInput(_event.data.sound, requested.serial)"/>
+          </send>
+        </if>
         <event:defer/>
       </transition>
       <transition event="bot.ability.listening.transcription.turn" event:schema="../schemas/bot.ability.listening.transcription.turn.json">
         <event:defer/>
+      </transition>
+      <!-- The answer for the sound ahead, kept until the sound is taken. -->
+      <transition event="bot.ability.hearing.voice.detection.output" event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                  cond="requested !== null &amp;&amp; requested.serial !== serial &amp;&amp; _event.data.id === 'speech_voice_detection.' + requested.serial">
+        <assign location="requested.event" expr="_event.name"/>
+        <assign location="requested.data" expr="_event.data"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                  cond="requested !== null &amp;&amp; requested.serial !== serial &amp;&amp; _event.data.id === 'speech_voice_detection.' + requested.serial">
+        <assign location="requested.event" expr="_event.name"/>
+        <assign location="requested.data" expr="_event.data"/>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
                   cond="learnsOwnVoice(_event)">
@@ -408,10 +464,11 @@
           <content expr="stageErrorFailure(_event)"/>
         </send>
       </transition>
-      <!-- A stage child's failure (its <donedata> {message}). -->
-      <transition event="done.invoke" cond="isStageChildFailure(_event)">
+      <!-- A stage's failure for what is in hand. -->
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                  cond="isStageReply(_event)">
         <send event="bot.ability.listening.stage.failed" target="#_internal">
-          <content expr="childFailure(_event)"/>
+          <content expr="stageReplyFailure(_event)"/>
         </send>
       </transition>
 
@@ -425,29 +482,36 @@
           <send id="voice-detection-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
+          <!-- The sound asked ahead takes the answer asked for it. -->
+          <if cond="requested !== null &amp;&amp; requested.serial === serial &amp;&amp; requested.sensed === JSON.stringify(sensed)">
+            <if cond="requested.event !== undefined">
+              <send eventexpr="requested.event" target="#_internal">
+                <content expr="requested.data"/>
+              </send>
+            </if>
+          <else/>
+            <if cond="requested !== null &amp;&amp; requested.serial &lt;= serial">
+              <assign location="requested" expr="null"/>
+            </if>
+            <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
+              <content expr="detectionInput(sensed.sound)"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
+          <if cond="requested !== null &amp;&amp; requested.serial === serial">
+            <assign location="requested" expr="null"/>
+          </if>
           <cancel sendid="voice-detection-timer"/>
         </onexit>
-        <invoke id="voice_detection" type="scxml" src="../voice_detection/voice_detection.scx">
-          <param name="audio" expr="sensed.sound.audio"/>
-          <param name="media_type" expr="orNull(sensed.sound.media_type)"/>
-          <param name="sample_rate_hz" expr="orNull(sensed.sound.sample_rate_hz)"/>
-          <param name="channels" expr="orNull(sensed.sound.channels)"/>
-          <param name="output" expr="soundOutput()"/>
-        </invoke>
-        <transition event="done.invoke.voice_detection"
-                    cond="isApplyData(_event)">
+        <transition event="bot.ability.hearing.voice.detection.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                    cond="isReply(_event, 'voice_detection') || isReply(_event, 'speech_voice_detection')">
           <assign location="result" expr="_event.data"/>
           <assign location="detection" expr="detectionRecord()"/>
           <if cond="isRenormalized()">
             <assign location="detection.sensed" expr="renormalizedSensed()"/>
           </if>
-        </transition>
-        <transition event="done.invoke.voice_detection" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice detection child produced a non-ApplyData terminal.')"/>
-          </send>
         </transition>
         <!-- The routes, in order. -->
         <transition cond="dropsSilence()"
@@ -507,19 +571,31 @@
           <send id="feeding-speech-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
+          <!-- The sound asked ahead takes the answer asked for it. -->
+          <if cond="requested !== null &amp;&amp; requested.serial === serial &amp;&amp; requested.sensed === JSON.stringify(sensed)">
+            <if cond="requested.event !== undefined">
+              <send eventexpr="requested.event" target="#_internal">
+                <content expr="requested.data"/>
+              </send>
+            </if>
+          <else/>
+            <if cond="requested !== null &amp;&amp; requested.serial &lt;= serial">
+              <assign location="requested" expr="null"/>
+            </if>
+            <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
+              <content expr="detectionInput(sensed.sound)"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
+          <if cond="requested !== null &amp;&amp; requested.serial === serial">
+            <assign location="requested" expr="null"/>
+          </if>
           <cancel sendid="feeding-speech-timer"/>
         </onexit>
-        <invoke id="speech_voice_detection" type="scxml" src="../voice_detection/voice_detection.scx">
-          <param name="audio" expr="sensed.sound.audio"/>
-          <param name="media_type" expr="orNull(sensed.sound.media_type)"/>
-          <param name="sample_rate_hz" expr="orNull(sensed.sound.sample_rate_hz)"/>
-          <param name="channels" expr="orNull(sensed.sound.channels)"/>
-          <param name="output" expr="soundOutput()"/>
-        </invoke>
-        <transition event="done.invoke.speech_voice_detection"
-                    cond="isApplyData(_event)">
+        <transition event="bot.ability.hearing.voice.detection.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                    cond="isReply(_event, 'voice_detection') || isReply(_event, 'speech_voice_detection')">
           <assign location="result" expr="_event.data"/>
           <assign location="detection" expr="detectionRecord()"/>
           <if cond="isRenormalized()">
@@ -527,11 +603,6 @@
           </if>
           <!-- The frame joins the utterance, voiced or not. -->
           <assign location="open_frames" expr="openFramesWithFrame()"/>
-        </transition>
-        <transition event="done.invoke.speech_voice_detection" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice detection child produced a non-ApplyData terminal.')"/>
-          </send>
         </transition>
         <!-- Still in voice: the loudest frame is remembered. -->
         <transition cond="isStillVoiced()" target="HearingSpeech">
@@ -580,12 +651,12 @@
           </send>
         </transition>
         <!-- A transcribed turn's words are given: its voices are found. -->
-        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; isUtteranceToDiarize(_event)" target="Transcribed Diarizing">
+        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; isUtteranceToDiarize(_event)" target="Diarizing">
           <assign location="utterance" expr="_event.data"/>
           <assign location="open_sensed" expr="turnSensed(_event.data)"/>
           <assign location="completion" expr="null"/>
         </transition>
-        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; hasAudio(_event)" target="Transcribed Detected">
+        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; hasAudio(_event)" target="DecodingSpeech">
           <assign location="utterance" expr="_event.data"/>
           <assign location="open_sensed" expr="turnSensed(_event.data)"/>
           <assign location="completion" expr="null"/>
@@ -610,28 +681,25 @@
           <send id="sound-classification-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
+          <send event="bot.ability.hearing.sound.classification.input" target="#_sound_classification">
+            <content expr="classificationInput()"/>
+          </send>
         </onentry>
         <onexit>
           <cancel sendid="sound-classification-timer"/>
         </onexit>
-        <invoke id="sound_classification" type="scxml" src="../sound_classification/sound_classification.scx">
-          <param name="audio" expr="detection.sensed.sound.audio"/>
-          <param name="media_type" expr="orNull(detection.sensed.sound.media_type)"/>
-          <param name="kind" expr="orNull(detection.sensed.sound.kind)"/>
-        </invoke>
-        <transition event="done.invoke.sound_classification"
-                    cond="hasAnyLabel(_event)" target="HandingOff">
+        <transition event="bot.ability.hearing.sound.classification.output"
+                    event:schema="../schemas/bot.ability.hearing.sound.classification.output.json"
+                    cond="isReply(_event, 'sound_classification') &amp;&amp; hasAnyLabel(_event)" target="HandingOff">
           <assign location="completion" expr="soundCompletion('labelled')"/>
         </transition>
-        <transition event="done.invoke.sound_classification" cond="isUnlabelledForDecoder(_event)"
-                    target="Idle"/>
-        <transition event="done.invoke.sound_classification" cond="hasLabels(_event)" target="HandingOff">
+        <transition event="bot.ability.hearing.sound.classification.output"
+                    event:schema="../schemas/bot.ability.hearing.sound.classification.output.json"
+                    cond="isReply(_event, 'sound_classification') &amp;&amp; speech_decoder" target="Idle"/>
+        <transition event="bot.ability.hearing.sound.classification.output"
+                    event:schema="../schemas/bot.ability.hearing.sound.classification.output.json"
+                    cond="isReply(_event, 'sound_classification')" target="HandingOff">
           <assign location="completion" expr="soundCompletion('detection')"/>
-        </transition>
-        <transition event="done.invoke.sound_classification">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Sound classification child produced invalid output.')"/>
-          </send>
         </transition>
       </state>
 
@@ -642,30 +710,24 @@
           <send id="voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
+          <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization">
+            <content expr="diarizationInput()"/>
+          </send>
         </onentry>
         <onexit>
           <cancel sendid="voice-diarization-timer"/>
         </onexit>
-        <invoke id="voice_diarization" type="scxml" src="../voice_diarization/voice_diarization.scx">
-          <param name="audio" expr="utterance.audio"/>
-          <param name="media_type" expr="utterance.media_type"/>
-          <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
-          <param name="channels" expr="utterance.channels"/>
-          <param name="output" expr="diarizedOutput()"/>
-        </invoke>
-        <transition event="done.invoke.voice_diarization" cond="isDiarizedToIdentify(_event)"
-                    target="IdentifyingVoice">
+        <transition event="bot.ability.hearing.voice.diarization.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
+                    cond="isReply(_event, 'voice_diarization') &amp;&amp; isDiarizedToIdentify()" target="IdentifyingVoice">
           <assign location="completion" expr="diarizationCompletion()"/>
           <assign location="completion.segments" expr="_event.data.segments"/>
         </transition>
-        <transition event="done.invoke.voice_diarization" cond="hasSegments(_event)" target="HandingOff">
+        <transition event="bot.ability.hearing.voice.diarization.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
+                    cond="isReply(_event, 'voice_diarization')" target="HandingOff">
           <assign location="completion" expr="diarizationCompletion()"/>
           <assign location="completion.segments" expr="_event.data.segments"/>
-        </transition>
-        <transition event="done.invoke.voice_diarization" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice diarization child produced invalid output.')"/>
-          </send>
         </transition>
       </state>
 
@@ -679,24 +741,21 @@
             <send event="bot.ability.listening.stage.failed" target="#_internal">
               <content expr="openingConversionFailure()"/>
             </send>
+          <else/>
+            <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification">
+              <content expr="openingIdentificationInput()"/>
+            </send>
           </if>
         </onentry>
         <onexit>
           <cancel sendid="direct-identification-timer"/>
         </onexit>
-        <invoke id="direct_voice_identification" type="scxml" src="../voice_identification/voice_identification.scx">
-          <param name="audio" expr="detection.sensed.sound.audio"/>
-          <param name="sample_rate_hz" expr="detection.sensed.sound.sample_rate_hz"/>
-          <param name="channels" expr="soundChannels(detection.sensed.sound)"/>
-          <param name="start_seconds" expr="openingStart()"/>
-          <param name="end_seconds" expr="openingEnd()"/>
-          <param name="output" expr="voiceOutput()"/>
-        </invoke>
         <!-- No embedding for the opening span, or none in time: the window
              opens with this frame and nobody identified (decision
              D177). -->
-        <transition event="done.invoke.direct_voice_identification"
-                    cond="hasNoEmbedding(_event)" target="HearingSpeech">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification') &amp;&amp; hasNoEmbedding(_event)" target="HearingSpeech">
           <log label="interpretation.unidentified" expr="'no embedding for the opening voice'"/>
           <assign location="open_sensed" expr="detection.sensed"/>
           <assign location="open_frames" expr="openingFrames()"/>
@@ -708,15 +767,12 @@
         </transition>
         <!-- The first segment's identity is committed, then the window
              opens with this frame. -->
-        <transition event="done.invoke.direct_voice_identification" cond="hasEmbeddings(_event)" target="HearingSpeech">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification')" target="HearingSpeech">
           <assign location="active_source_ids" expr="activeSourceIds(_event)"/>
           <assign location="open_sensed" expr="detection.sensed"/>
           <assign location="open_frames" expr="openingFrames()"/>
-        </transition>
-        <transition event="done.invoke.direct_voice_identification" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice identification child produced invalid output.')"/>
-          </send>
         </transition>
       </state>
 
@@ -725,21 +781,24 @@
         <onentry>
           <assign location="stage" expr="'voice_identification'"/>
           <send id="voice-identification-timer" event="IdentifyingVoice.after" delayexpr="identifyDelay()"/>
+          <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification">
+            <content expr="identificationInput(completion.segments)"/>
+          </send>
         </onentry>
         <onexit>
           <cancel sendid="voice-identification-timer"/>
         </onexit>
-        <invoke id="voice_identification" type="scxml" src="../voice_identification/voice_identification.scx">
-          <param name="segments" expr="completion.segments"/>
-        </invoke>
-        <transition event="done.invoke.voice_identification"
-                    cond="isEmbeddingCountMismatch(_event)">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification') &amp;&amp; isEmbeddingCountMismatch(_event)">
           <assign location="mismatch" expr="embeddingCountMismatch(_event)"/>
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="embeddingCountFailure()"/>
           </send>
         </transition>
-        <transition event="done.invoke.voice_identification" cond="hasEmbeddings(_event)" target="HandingOff">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification')" target="HandingOff">
           <assign location="completion.kind" expr="identifiedKind()"/>
           <assign location="completion.recognitions" expr="identify(_event.data.embeddings)"/>
         </transition>
@@ -750,17 +809,12 @@
           <assign location="completion.kind" expr="identifiedKind()"/>
           <assign location="completion.recognitions" expr="unidentifiedVoices()"/>
         </transition>
-        <transition event="done.invoke.voice_identification" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice identification child produced invalid output.')"/>
-          </send>
-        </transition>
       </state>
 
       <!-- Speech decoding rewrites the observation into words; after
            diarization its voices are heard and identified while the words
            are decoded. -->
-      <parallel id="DecodingSpeech">
+      <state id="DecodingSpeech" initial="Detected">
         <onentry>
           <assign location="stage" expr="'speech_decoding'"/>
           <assign location="result" expr="null"/>
@@ -769,21 +823,32 @@
           <send id="speech-decoding-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
+          <!-- A transcribed turn's words are given, not decoded. -->
+          <if cond="isTurn()">
+            <assign location="result" expr="transcribedWords()"/>
+          <else/>
+            <send event="bot.ability.hearing.speech.decoding.input" target="#_speech_decoding">
+              <content expr="decodingInput()"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
           <cancel sendid="speech-decoding-timer"/>
         </onexit>
-        <transition event="done.invoke.voice_affect done.invoke.speech_voice_affect">
+        <transition event="bot.ability.classifying.output" event:schema="../schemas/bot.ability.classifying.output.json"
+                    cond="isReply(_event, 'voice_affect')">
           <assign location="affect" expr="heardAffect(_event)"/>
           <assign location="classifying" expr="false"/>
         </transition>
-        <transition event="done.invoke.speech_decoding" cond="hasText(_event)">
-          <assign location="result" expr="_event.data"/>
+        <!-- No tone heard: the utterance goes on without one. -->
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                    cond="isReply(_event, 'voice_affect')">
+          <assign location="classifying" expr="false"/>
         </transition>
-        <transition event="done.invoke.speech_decoding" cond="isNotChildFailure(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="decodingFailure('Speech decoding child produced a non-bytes terminal.')"/>
-          </send>
+        <transition event="bot.ability.hearing.speech.decoding.output"
+                    event:schema="../schemas/bot.ability.hearing.speech.decoding.output.json"
+                    cond="isReply(_event, 'speech_decoding')">
+          <assign location="result" expr="_event.data"/>
         </transition>
         <!-- The words, their tone, and who spoke are all in hand. -->
         <transition cond="isDecoded() &amp;&amp; In('Identifying') &amp;&amp; hasVoices()" target="HandingOff">
@@ -792,106 +857,83 @@
         <transition cond="isDecoded() &amp;&amp; In('Detected')" target="HandingOff">
           <assign location="completion" expr="decodingCompletion()"/>
         </transition>
-        <!-- The words: decoded, or given with the turn the transcription
-             heard. -->
-        <state id="Words" initial="Decoding">
-          <state id="Decoding">
-            <invoke id="speech_decoding" type="scxml" src="../speech_decoding/speech_decoding.scx">
-              <param name="audio" expr="utterance.audio"/>
-              <param name="media_type" expr="utterance.media_type"/>
-            </invoke>
-          </state>
-          <state id="Transcribed">
+        <!-- The tone of the utterance, or of its diarized segments when
+             nobody is identified (mosfet.py's tone, heard alongside
+             decoding). -->
+        <state id="Detected">
+          <onentry>
+            <send event="bot.ability.classifying.input" target="#_voice_affect">
+              <content expr="affectInput()"/>
+            </send>
+          </onentry>
+        </state>
+        <!-- Who spoke when, while the words are decoded. -->
+        <state id="Diarized" initial="Diarizing">
+          <state id="Diarizing">
             <onentry>
-              <assign location="result" expr="transcribedWords()"/>
+              <assign location="stage" expr="'voice_diarization'"/>
+              <send id="speech-voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
+                <content expr="stageTimeout()"/>
+              </send>
+              <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization">
+                <content expr="diarizationInput()"/>
+              </send>
             </onentry>
+            <onexit>
+              <cancel sendid="speech-voice-diarization-timer"/>
+            </onexit>
+            <transition event="bot.ability.hearing.voice.diarization.output"
+                        event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
+                        cond="isReply(_event, 'voice_diarization') &amp;&amp; identifiesSegments(_event)" target="Identifying">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="_event.data.segments"/>
+            </transition>
+            <transition event="bot.ability.hearing.voice.diarization.output"
+                        event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
+                        cond="isReply(_event, 'voice_diarization')" target="Detected">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="_event.data.segments"/>
+            </transition>
+          </state>
+          <!-- The tone of the diarized segments, and one embedding per
+               voiced segment. -->
+          <state id="Identifying">
+            <onentry>
+              <assign location="stage" expr="'voice_identification'"/>
+              <send id="speech-voice-identification-timer" event="IdentifyingVoice.after" delayexpr="identifyDelay()"/>
+              <send event="bot.ability.classifying.input" target="#_voice_affect">
+                <content expr="affectInput()"/>
+              </send>
+              <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification">
+                <content expr="identificationInput(voicedSegments())"/>
+              </send>
+            </onentry>
+            <onexit>
+              <cancel sendid="speech-voice-identification-timer"/>
+            </onexit>
+            <transition event="bot.ability.hearing.voice.identification.output"
+                        event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                        cond="isReply(_event, 'voice_identification') &amp;&amp; isEmbeddingCountMismatch(_event)">
+              <assign location="mismatch" expr="embeddingCountMismatch(_event)"/>
+              <send event="bot.ability.listening.stage.failed" target="#_internal">
+                <content expr="embeddingCountFailure()"/>
+              </send>
+            </transition>
+            <!-- The embeddings wait for the words: a voice is identified
+                 only once its speech is decoded. -->
+            <transition event="bot.ability.hearing.voice.identification.output"
+                        event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                        cond="isReply(_event, 'voice_identification') &amp;&amp; !hasVoices()">
+              <assign location="completion.embeddings" expr="_event.data.embeddings"/>
+            </transition>
+            <!-- Nobody identified in time (decision D177). -->
+            <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event) &amp;&amp; !hasVoices()">
+              <log label="interpretation.unidentified" expr="identifyTimedOut(voicedSegments().length)"/>
+              <assign location="completion.embeddings" expr="null"/>
+            </transition>
           </state>
         </state>
-        <state id="Voices" initial="Detected">
-          <!-- The tone of the utterance, or of its diarized segments when
-               nobody is identified (mosfet.py's tone, heard alongside
-               decoding). -->
-          <state id="Detected">
-            <invoke id="voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
-              <param name="segments" expr="affectSegments()"/>
-            </invoke>
-          </state>
-          <!-- Who spoke when, while the words are decoded. -->
-          <state id="Diarized" initial="Diarizing">
-            <state id="Diarizing">
-              <onentry>
-                <assign location="stage" expr="'voice_diarization'"/>
-                <send id="speech-voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
-                  <content expr="stageTimeout()"/>
-                </send>
-              </onentry>
-              <onexit>
-                <cancel sendid="speech-voice-diarization-timer"/>
-              </onexit>
-              <invoke id="speech_voice_diarization" type="scxml" src="../voice_diarization/voice_diarization.scx">
-                <param name="audio" expr="utterance.audio"/>
-                <param name="media_type" expr="utterance.media_type"/>
-                <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
-                <param name="channels" expr="utterance.channels"/>
-                <param name="output" expr="diarizedOutput()"/>
-              </invoke>
-              <transition event="done.invoke.speech_voice_diarization" cond="hasSegments(_event) &amp;&amp; identifiesSegments(_event)"
-                          target="Identifying">
-                <assign location="completion" expr="diarizationCompletion()"/>
-                <assign location="completion.segments" expr="_event.data.segments"/>
-              </transition>
-              <transition event="done.invoke.speech_voice_diarization" cond="hasSegments(_event)" target="Detected">
-                <assign location="completion" expr="diarizationCompletion()"/>
-                <assign location="completion.segments" expr="_event.data.segments"/>
-              </transition>
-              <transition event="done.invoke.speech_voice_diarization" cond="isNotChildFailure(_event)">
-                <send event="bot.ability.listening.stage.failed" target="#_internal">
-                  <content expr="stageFailure('Voice diarization child produced invalid output.')"/>
-                </send>
-              </transition>
-            </state>
-            <!-- The tone of the diarized segments, and one embedding per
-                 voiced segment. -->
-            <state id="Identifying">
-              <onentry>
-                <assign location="stage" expr="'voice_identification'"/>
-                <send id="speech-voice-identification-timer" event="IdentifyingVoice.after" delayexpr="identifyDelay()"/>
-              </onentry>
-              <onexit>
-                <cancel sendid="speech-voice-identification-timer"/>
-              </onexit>
-              <invoke id="speech_voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
-                <param name="segments" expr="affectSegments()"/>
-              </invoke>
-              <invoke id="speech_voice_identification" type="scxml" src="../voice_identification/voice_identification.scx">
-                <param name="segments" expr="voicedSegments()"/>
-              </invoke>
-              <transition event="done.invoke.speech_voice_identification"
-                          cond="isEmbeddingCountMismatch(_event)">
-                <assign location="mismatch" expr="embeddingCountMismatch(_event)"/>
-                <send event="bot.ability.listening.stage.failed" target="#_internal">
-                  <content expr="embeddingCountFailure()"/>
-                </send>
-              </transition>
-              <!-- The embeddings wait for the words: a voice is identified
-                   only once its speech is decoded. -->
-              <transition event="done.invoke.speech_voice_identification" cond="hasEmbeddings(_event) &amp;&amp; !hasVoices()">
-                <assign location="completion.embeddings" expr="_event.data.embeddings"/>
-              </transition>
-              <!-- Nobody identified in time (decision D177). -->
-              <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event) &amp;&amp; !hasVoices()">
-                <log label="interpretation.unidentified" expr="identifyTimedOut(voicedSegments().length)"/>
-                <assign location="completion.embeddings" expr="null"/>
-              </transition>
-              <transition event="done.invoke.speech_voice_identification" cond="isNotChildFailure(_event) &amp;&amp; !hasVoices()">
-                <send event="bot.ability.listening.stage.failed" target="#_internal">
-                  <content expr="stageFailure('Voice identification child produced invalid output.')"/>
-                </send>
-              </transition>
-            </state>
-          </state>
-        </state>
-      </parallel>
+      </state>
 
       <!-- The bot's own voice, from speaking's copy of what it said. -->
       <state id="DetectingOwnVoice">
@@ -900,24 +942,25 @@
           <assign location="serial" expr="nextSerial()"/>
           <assign location="media_dir" expr="ownMediaDir()"/>
           <send id="own-voice-detection-timer" event="DetectingOwnVoice.after" delayexpr="stageDelay()"/>
+          <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
+            <content expr="detectionInput(utterance)"/>
+          </send>
         </onentry>
         <onexit>
           <cancel sendid="own-voice-detection-timer"/>
         </onexit>
-        <invoke id="own_voice_detection" type="scxml" src="../voice_detection/voice_detection.scx">
-          <param name="audio" expr="utterance.audio"/>
-          <param name="media_type" expr="utterance.media_type"/>
-          <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
-          <param name="channels" expr="utterance.channels"/>
-          <param name="output" expr="soundOutput()"/>
-        </invoke>
-        <transition event="done.invoke.own_voice_detection" cond="isOwnVoiceLongEnough(_event)" target="IdentifyingOwnVoice">
-          <assign location="utterance.voice_detection" expr="_event.data.voice_detection"/>
+        <transition event="bot.ability.hearing.voice.detection.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                    cond="isReply(_event, 'voice_detection') &amp;&amp; isOwnVoiceLongEnough(_event)" target="IdentifyingOwnVoice">
+          <assign location="utterance.voice_detection" expr="detectedVoice(_event)"/>
         </transition>
-        <transition event="done.invoke.own_voice_detection" cond="isApplyData(_event)" target="Idle">
+        <transition event="bot.ability.hearing.voice.detection.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                    cond="isReply(_event, 'voice_detection')" target="Idle">
           <log label="interpretation.unidentified" expr="'too little of the bot\'s own voice'"/>
         </transition>
-        <transition event="done.invoke.own_voice_detection" target="Idle">
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                    cond="isReply(_event, 'voice_detection')" target="Idle">
           <log label="interpretation.unidentified" expr="ownVoiceUndetected(_event)"/>
         </transition>
         <transition event="DetectingOwnVoice.after" target="Idle">
@@ -930,22 +973,25 @@
       <state id="IdentifyingOwnVoice">
         <onentry>
           <send id="own-voice-identification-timer" event="IdentifyingOwnVoice.after" delayexpr="identifyDelay()"/>
+          <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification">
+            <content expr="ownIdentificationInput()"/>
+          </send>
         </onentry>
         <onexit>
           <cancel sendid="own-voice-identification-timer"/>
         </onexit>
-        <invoke id="own_voice_identification" type="scxml" src="../voice_identification/voice_identification.scx">
-          <param name="audio" expr="utterance.audio"/>
-          <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
-          <param name="channels" expr="utterance.channels"/>
-          <param name="start_seconds" expr="ownVoiceStart()"/>
-          <param name="end_seconds" expr="ownVoiceEnd()"/>
-          <param name="output" expr="voiceOutput()"/>
-        </invoke>
-        <transition event="done.invoke.own_voice_identification" cond="hasOneEmbedding(_event)" target="Idle">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification') &amp;&amp; hasOneEmbedding(_event)" target="Idle">
           <assign location="registry" expr="enrolledOwn(firstEmbedding(_event))"/>
         </transition>
-        <transition event="done.invoke.own_voice_identification" target="Idle">
+        <transition event="bot.ability.hearing.voice.identification.output"
+                    event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                    cond="isReply(_event, 'voice_identification')" target="Idle">
+          <log label="interpretation.unidentified" expr="ownVoiceUnidentified(_event)"/>
+        </transition>
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                    cond="isReply(_event, 'voice_identification')" target="Idle">
           <log label="interpretation.unidentified" expr="ownVoiceUnidentified(_event)"/>
         </transition>
         <transition event="IdentifyingOwnVoice.after" target="Idle">
@@ -958,14 +1004,16 @@
 
       <!-- The voices heard, written to memory in one transaction. -->
       <state id="Remembering">
-        <invoke id="remember" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="statements"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.remember">
+            <param name="id" expr="memory_requests.remember"/>
+            <param name="statements" expr="statements"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.memory.output.json" target="Idle">
           <assign location="statements" expr="[]"/>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Idle">
+        <transition event="bot.ability.failed" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.failed.json" target="Idle">
           <log label="memory" expr="memoryFailure(_event)"/>
           <assign location="statements" expr="[]"/>
         </transition>

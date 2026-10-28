@@ -727,6 +727,15 @@ hard cutover.
 
 ### Changed
 
+- The Wasmtime session host compiles each extension, service, and
+  data-model package component a host or document binds on a thread of its
+  own as soon as it is bound, through the process-wide compilation cache,
+  and its first use waits for that compilation instead of starting one
+  (it compiled on first use before). Binding many packages compiles them
+  in parallel ahead of the session's first use; a component another live
+  host holds is not compiled again, and a compilation that fails is
+  reported by the first use as before.
+
 - `ExtensionHttpClient` keeps connections alive and pools them per origin
   for invoked services' requests, which each opened a new connection (TCP
   and TLS handshakes) before: consecutive requests to one origin reuse one

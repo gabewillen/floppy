@@ -2,6 +2,9 @@
 <!-- reasoning-7: with a database and no choices, the recall still runs and the turn fails for its choices. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
     <param name="turn" expr="1"/>
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
@@ -9,7 +12,7 @@
     <param name="focus_candidates" expr="[]"/>
     <param name="choices" expr="[]"/>
     <param name="model" expr="'mock-model'"/>
-    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

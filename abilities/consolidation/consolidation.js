@@ -6,7 +6,7 @@
 // consolidating
 
 function isAbsent() {
-  return database === null;
+  return memory === null;
 }
 
 function stepDelay() {
@@ -140,4 +140,12 @@ function contextStatement(pair) {
 
 function mergedAfter() {
   return merged + 1;
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D266): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

@@ -4,20 +4,25 @@
   through the speech service's identify operation (LocalAI's
   POST {base}/voice/embed, which serves the WeSpeaker ResNet34 speaker
   embedding model). The interpretation
-  (abilities/interpretation/interpretation.scx) invokes it from
-  IdentifyingVoice (the diarized segments) and IdentifyingVoiceDirect (the
-  opening voice span of a sound, direct identification); the
-  interpretation's stage timer bounds it, and leaving the state cancels it
-  and its service call (SCXML 6.4).
+  (abilities/interpretation/interpretation.scx) invokes it once, as its
+  long-lived child voice_identification (mosfet.py's Interpretation holds
+  its VoiceIdentification), and sends it the voices to embed from
+  IdentifyingVoice and Identifying (the diarized segments),
+  IdentifyingVoiceDirect (the opening voice span of a sound, direct
+  identification) and IdentifyingOwnVoice; the interpretation's timer
+  bounds each request.
 
-    identifying { clipping -> applying } -> applied (final)
+    idle -bot.ability.hearing.voice.identification.input->
+      identifying { clipping -> applying } -> idle
 
-  Input: either the <param> segments (voice segments, each a
-  reference to its clipped PCM with its format and span), or, for
-  direct identification, audio, sample_rate_hz and channels (the sound's
-  PCM), start_seconds and end_seconds (its first voice span) and output
-  (where the clip is written); and model (LocalAI's
+  Configuration: the <param> model (LocalAI's
   voice-detect-wespeaker-resnet34 by default).
+
+  Requests: bot.ability.hearing.voice.identification.input {id,
+  segments} (voice segments, each a reference to its clipped PCM with its
+  format and span), or, for direct identification, {id, audio,
+  sample_rate_hz, channels, start_seconds, end_seconds, output} (the
+  sound's PCM, its first voice span, and where the clip is written).
 
   clipping (direct identification only): the speech service's clip step
   (the span clamped to the sound and clipped by whole frames); its done
@@ -26,10 +31,12 @@
   applying: the speech service's identify operation, answered
   bot.ability.hearing.voice.identification.output {embeddings} (in segment order).
 
-  Output: <donedata>, received by the interpretation as
-  done.invoke.voice_identification: {segments, embeddings}, or {message}
-  when a step answers bot.ability.failed, answers something else, or
-  cannot run.
+  It answers its parent with bot.ability.hearing.voice.identification.output
+  {id, segments, embeddings}, or bot.ability.failed {id, message} when a
+  step answers bot.ability.failed, answers something else, or cannot run.
+  One request is served at a time; a request that arrives while one is
+  in flight replaces it (leaving identifying cancels its service call,
+  SCXML 6.4).
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
   and FLOPPY_VOICE_API_KEY to the identify <invoke> (no default backend,
@@ -41,84 +48,115 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="voice_identification" initial="identifying">
+       version="1.0" datamodel="ecmascript" name="voice_identification" initial="idle">
   <datamodel>
-    <!-- The invoker's <param>s. -->
-    <data id="segments" expr="null"/>
-    <data id="audio" expr="null"/>
-    <data id="sample_rate_hz" expr="null"/>
-    <data id="channels" expr="null"/>
-    <data id="start_seconds" expr="null"/>
-    <data id="end_seconds" expr="null"/>
-    <data id="output" expr="null"/>
+    <!-- The invoker's <param>. -->
     <data id="model" expr="'voice-detect-wespeaker-resnet34'"/>
-    <!-- The result. -->
-    <data id="result" expr="null"/>
+    <!-- The request being served, and the segments it embeds. -->
+    <data id="request" expr="null"/>
+    <data id="segments" expr="null"/>
+    <!-- The current service call's generated invoke ids: a cancelled call's
+         late events (still delivered, SCXML 6.4) are not this request's. -->
+    <data id="clipper" expr="null"/>
+    <data id="identifier" expr="null"/>
   </datamodel>
   <script src="voice_identification.js"/>
 
-  <state id="identifying" initial="clipping">
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-      <assign location="result" expr="failedResult(_event)"/>
+  <state id="idle">
+    <transition event="bot.ability.hearing.voice.identification.input"
+                event:schema="../schemas/bot.ability.hearing.voice.identification.input.json" target="identifying">
+      <assign location="request" expr="_event.data"/>
     </transition>
-    <transition event="error.*" target="applied">
-      <assign location="result" expr="errorResult(_event)"/>
+  </state>
+
+  <!-- Any failure answers {id, message}. -->
+  <state id="identifying" initial="clipping">
+    <onentry>
+      <assign location="segments" expr="requestedSegments()"/>
+    </onentry>
+    <!-- A newer request replaces this one. -->
+    <transition event="bot.ability.hearing.voice.identification.input"
+                event:schema="../schemas/bot.ability.hearing.voice.identification.input.json" target="identifying">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === clipper || _event.invokeid === identifier" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="failedResult(_event)"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="errorResult(_event)"/>
+      </send>
     </transition>
 
     <!-- Direct identification clips the opening voice span first. -->
     <state id="clipping">
       <transition cond="hasSegments()" target="applying"/>
-      <invoke id="clipper" type="https://github.com/stateforward/floppy/services/speech">
+      <invoke idlocation="clipper" type="https://github.com/stateforward/floppy/services/speech">
         <param name="operation" expr="'clip'"/>
-        <param name="audio" expr="audio"/>
-        <param name="sample_rate_hz" expr="sample_rate_hz"/>
-        <param name="channels" expr="channels"/>
-        <param name="start_seconds" expr="start_seconds"/>
-        <param name="end_seconds" expr="end_seconds"/>
-        <param name="output" expr="output"/>
+        <param name="audio" expr="requested('audio')"/>
+        <param name="sample_rate_hz" expr="requested('sample_rate_hz')"/>
+        <param name="channels" expr="requested('channels')"/>
+        <param name="start_seconds" expr="requested('start_seconds')"/>
+        <param name="end_seconds" expr="requested('end_seconds')"/>
+        <param name="output" expr="requested('output')"/>
       </invoke>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-        <assign location="result" expr="clipFailedResult(_event)"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === clipper" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="clipFailedResult(_event)"/>
+        </send>
       </transition>
-      <transition event="done.invoke.clipper" cond="isClippedSegment(_event)" target="applying">
+      <transition event="done.invoke" cond="_event.invokeid === clipper &amp;&amp; isClippedSegment(_event)" target="applying">
         <assign location="segments" expr="clippedSegments(_event)"/>
       </transition>
-      <transition event="done.invoke.clipper" target="applied">
-        <assign location="result" expr="unclippedResult()"/>
+      <transition event="done.invoke" cond="_event.invokeid === clipper" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="unclippedResult()"/>
+        </send>
       </transition>
     </state>
 
     <state id="applying">
-      <invoke id="identifier" type="https://github.com/stateforward/floppy/services/speech"
+      <invoke idlocation="identifier" type="https://github.com/stateforward/floppy/services/speech"
               env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
         <param name="operation" expr="'identify'"/>
         <param name="model" expr="model"/>
         <param name="segments" expr="segments"/>
       </invoke>
-      <transition event="bot.ability.hearing.voice.identification.output"
-                  cond="hasEmbeddings(_event)" target="applied">
-        <assign location="result" expr="identifiedResult(_event)"/>
+      <!-- A newer request, before the catch-all below. -->
+      <transition event="bot.ability.hearing.voice.identification.input"
+                  event:schema="../schemas/bot.ability.hearing.voice.identification.input.json" target="identifying">
+        <assign location="request" expr="_event.data"/>
       </transition>
-      <transition event="done.invoke.identifier" target="applied">
-        <assign location="result" expr="unidentifiedResult()"/>
+      <transition event="bot.ability.hearing.voice.identification.output" event:schema="../schemas/bot.ability.hearing.voice.identification.output.json"
+                  cond="_event.invokeid === identifier &amp;&amp; hasEmbeddings(_event)" target="idle">
+        <send event="bot.ability.hearing.voice.identification.output" target="#_parent">
+          <content expr="identifiedResult(_event)"/>
+        </send>
+      </transition>
+      <transition event="done.invoke" cond="_event.invokeid === identifier" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="unidentifiedResult()"/>
+        </send>
       </transition>
       <!-- Failures here, as in identifying, before the catch-all below. -->
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-        <assign location="result" expr="failedResult(_event)"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === identifier" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="failedResult(_event)"/>
+        </send>
       </transition>
-      <transition event="error.*" target="applied">
-        <assign location="result" expr="errorResult(_event)"/>
+      <transition event="error.*" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="errorResult(_event)"/>
+        </send>
       </transition>
       <!-- Anything else the identifier sends. -->
-      <transition event="*" target="applied">
-        <assign location="result" expr="mismatchedResult()"/>
+      <transition event="*" cond="_event.invokeid === identifier" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="mismatchedResult()"/>
+        </send>
       </transition>
     </state>
   </state>
-
-  <final id="applied">
-    <donedata>
-      <content expr="result"/>
-    </donedata>
-  </final>
 </scxml>

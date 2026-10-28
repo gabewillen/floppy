@@ -4,6 +4,11 @@
 
 // applying
 
+// The utterance's media type, or null.
+function requestedMediaType() {
+  return request.media_type === undefined ? null : request.media_type;
+}
+
 // A decoding output with words (D41: the service's events are unchecked).
 function hasDecodedText(_event) {
   return typeof Object(_event.data).text === 'string';
@@ -11,22 +16,22 @@ function hasDecodedText(_event) {
 
 // The decoded speech, as words.
 function decodedOutput(_event) {
-  return ({text: _event.data.text});
+  return ({id: request.id, text: _event.data.text});
 }
 
 // The failure: the service's message, or a fixed one.
 function failedOutput(_event) {
-  return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'});
+  return ({id: request.id, message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'});
 }
 
 function mismatchedOutput() {
-  return ({message: 'SpeechDecoding produced output that does not match its output schema.'});
+  return ({id: request.id, message: 'SpeechDecoding produced output that does not match its output schema.'});
 }
 
 function undecodedOutput() {
-  return ({message: 'SpeechDecoding ended without decoding.'});
+  return ({id: request.id, message: 'SpeechDecoding ended without decoding.'});
 }
 
 function errorOutput(_event) {
-  return ({message: 'SpeechDecoding could not run (' + _event.name + ')'});
+  return ({id: request.id, message: 'SpeechDecoding could not run (' + _event.name + ')'});
 }

@@ -3,6 +3,12 @@
   "title": "bot.ability.hearing.speech.decoding.output",
   "description": "Speech decoded by hearing's SpeechDecoding, as text.",
   "properties": {
+    "id": {
+      "description": "The requester's id, echoed when the answer is the long-lived stage's reply to a request [floppy field].",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "text": {
       "description": "The decoded speech; empty when the audio held none [floppy field].",
       "examples": [

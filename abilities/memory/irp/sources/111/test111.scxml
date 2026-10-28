@@ -4,19 +4,18 @@
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
-    <param name="statements" expr='[{"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["a", "A"]}, {"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["b", "B"]}, {"sql": "DELETE FROM bot_memory WHERE memory_id = ?", "parameters": ["a"]}, {"sql": "SELECT content FROM bot_memory ORDER BY memory_id"}]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 4 &amp;&amp; _event.data.results[2].rowcount === 1 &amp;&amp; _event.data.results[3].rows.length === 1 &amp;&amp; _event.data.results[3].rows[0].values[0] === 'B'" target="step1"/>
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr='{"id": "r1", "statements": [{"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["a", "A"]}, {"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["b", "B"]}, {"sql": "DELETE FROM bot_memory WHERE memory_id = ?", "parameters": ["a"]}, {"sql": "SELECT content FROM bot_memory ORDER BY memory_id"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.memory.output" cond="_event.data.id === 'r1' &amp;&amp; _event.data.results.length === 4 &amp;&amp; _event.data.results[2].rowcount === 1 &amp;&amp; _event.data.results[3].rows.length === 1 &amp;&amp; _event.data.results[3].rows[0].values[0] === 'B'" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.memory" target="step2"/>
-  </state>
-  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

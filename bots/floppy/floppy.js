@@ -387,3 +387,16 @@ function staleReplyLog(_event) {
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }
+
+// live
+
+// The address of the bot's memory, the child "memory" (decision D266):
+// null without a database.
+function memoryAddress() {
+  return database === null ? null : '#_scxml_' + _sessionid + '.memory';
+}
+
+// The address of the bot's Embedding ability, the child "embedding".
+function embeddingAddress() {
+  return '#_scxml_' + _sessionid + '.embedding';
+}

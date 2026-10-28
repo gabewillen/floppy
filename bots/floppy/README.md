@@ -121,8 +121,10 @@ streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
 (a revision through the builder without progress, reflection's or a
 lesson's) and `revising_ceiling_ms` (a revision in all); absent, each is the ability's
-default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The memory ability
-(`abilities/memory/memory.scx`) keeps the bot's database,
+default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The bot's one memory
+(`abilities/memory/memory.scx`, the body's long-lived child `memory`,
+decision D266) migrates the bot's database once and serves every
+ability's transactions for as long as the bot lives; it keeps the database,
 `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
@@ -192,7 +194,9 @@ and each turn's cue reasoning recalls with, through
 `FLOPPY_EMBEDDING_BASE_URL` with `FLOPPY_EMBEDDING_API_KEY` (an
 `OpenAI`-compatible `/embeddings`, `embeddinggemma-2` at 256 dimensions,
 which `https://api.willen.dev/v1` serves). Without it floppy recalls its
-newest episodes, as before.
+newest episodes, as before. The body invokes the Embedding ability once,
+beside the memory, and the cognition's reasoning and reflection send it
+requests by its address (decision D267).
 
 Sight (D185 to D189): the body's `seeing_enabled` `<data>` (`false` by
 default; the environment's `<invoke>` may pass it as a `<param>`) turns the

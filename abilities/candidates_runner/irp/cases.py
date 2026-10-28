@@ -29,7 +29,7 @@ INPUT = {"text": "hello", "focus": None, "focus_candidates": []}
 def run(candidates, input=INPUT, turn=3, database=DB, silence_ms=None, memory_timeout_ms=None):
     params = [("turn", js(turn)), ("input", js(input)),
               ("candidates", js([{"name": name, "source": S.behavior(source)} for name, source in candidates])),
-              ("database", database)]
+              memory(database)]
     if silence_ms is not None:
         params.append(("silence_ms", js(silence_ms)))
     if memory_timeout_ms is not None:
@@ -52,11 +52,11 @@ HANDLED_SELECTED = f"_event.data.selected.length === 1 && _event.data.selected[0
 S.statement(1, "It runs the first of its `candidates` <param> (`[{name, source}]`, `source` the path of the candidate's program, decision D121) as the child `candidate` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.")
 S.statement(2, "The handled candidate's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.")
 S.statement(3, "An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled: with no candidates left, the runner ends with `{tried: [name], handled: false, selected: null, rejection: null}`.")
-S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")
+S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, memory and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")
 S.statement(5, "A candidate that does not answer within `silence_ms` is passed over, and the rest run.")
 S.statement(6, "A candidate whose source cannot run has its failure persisted, and the rest run.")
 S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.")
-S.statement(8, "Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.")
+S.statement(8, "Each persistence is one transaction of the Memory ability at the `memory` <param> (decision D266); one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.")
 
 S.case(100, 1, "a handled candidate answers the turn with its own selections.",
        [answer(["A"], True, extra=HANDLED_SELECTED)], params=run([("A", HANDLES)]))

@@ -627,6 +627,38 @@ fn a_quiet_utterance_is_dropped_and_sounds_are_interpreted_in_order() {
     );
 }
 
+/// The sound that arrives while one is in hand has its voice detection
+/// asked at once, so the closing silence is detected while the utterance
+/// still is.
+#[test]
+fn the_next_sound_is_detected_while_the_one_in_hand_is() {
+    let harness = layout(&[]);
+    let (mut run, backend) = started(
+        &harness,
+        "the_next_sound_is_detected_while_the_one_in_hand_is",
+        &[
+            ("slow.wav", spoken_wav("slow")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    let slow = sound("slow.wav", &json!({"received_level_db": 54}));
+    let silent = sound("silence.wav", &json!({"received_level_db": 54}));
+    utter(&mut run, &slow, &silent);
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, "the_next_sound_is_detected_while_the_one_in_hand_is");
+    let detected: Vec<Json> = backend
+        .received_at("/vad")
+        .into_iter()
+        .filter(|request| request["heard"] == "slow")
+        .collect();
+    assert_eq!(detected.len(), 1, "{detected:?}");
+    assert_eq!(detected[0]["overlapped"], true, "{detected:?}");
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![speech("slow", &slow)]
+    );
+}
+
 #[test]
 fn the_efference_copy_opens_a_window_that_closes_itself() {
     let harness = layout(&[]);
@@ -1094,24 +1126,18 @@ fn diarized_segments_nobody_identifies_in_time_are_heard_unidentified() {
 /// A voice identification that stands in for the real one and answers no
 /// embedding: the real one answers one per segment or fails, so only a
 /// child that answers `embeddings: []` reaches this branch.
-const NO_EMBEDDING_IDENTIFICATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="voice_identification" initial="applied">
-  <datamodel>
-    <data id="segments" expr="null"/>
-    <data id="audio" expr="null"/>
-    <data id="sample_rate_hz" expr="null"/>
-    <data id="channels" expr="null"/>
-    <data id="start_seconds" expr="null"/>
-    <data id="end_seconds" expr="null"/>
-    <data id="output" expr="null"/>
-  </datamodel>
-  <final id="applied">
-    <donedata>
-      <content expr="({segments: [], embeddings: []})"/>
-    </donedata>
-  </final>
+const NO_EMBEDDING_IDENTIFICATION: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" name="voice_identification" initial="idle">
+  <state id="idle">
+    <transition event="bot.ability.hearing.voice.identification.input"
+                event:schema="../schemas/bot.ability.hearing.voice.identification.input.json">
+      <send event="bot.ability.hearing.voice.identification.output" target="#_parent">
+        <content expr="({id: _event.data.id, segments: [], embeddings: []})"/>
+      </send>
+    </transition>
+  </state>
 </scxml>
-"#;
+"##;
 
 /// An opening voice identified with no embedding opens the window with
 /// nobody identified, and no stage fails (decision D177).

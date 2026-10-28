@@ -5,7 +5,7 @@ import json
 S = suite
 LESSON = "bot.ability.learning.lesson"
 OUTPUT = "bot.ability.learning.output"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 # Generous bounds for the wall-clock cases, so a loaded machine does not time them out.
 SLOW_SELECT = ("select_timeout_ms", "300000")
 SLOW_REVISING = ("revising_timeout_ms", "300000")

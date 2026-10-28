@@ -18,6 +18,12 @@ step is one of
 
   send(event, expr)                 sends `event` to the child with
                                     <content expr>; expr None sends no data
+  request(event, fields=(), request_id="r1")
+                                    sends a long-lived child one request:
+                                    `event` with {id: request_id} and each
+                                    (name, expr) of `fields`; its answer is
+                                    expected with answered(cond, request_id),
+                                    `cond` holding of the answer without id
   wait(delay)                       lets `delay` pass (a delayed send to
                                     itself; give the case clock="wall")
   expect(event, cond=None, assigns=())
@@ -38,6 +44,12 @@ step is one of
                                     duration; give the case clock="wall"),
                                     the case fails, logging it
   ignore(event)                     drops `event` wherever it arrives
+
+A case's params name the child's <param>s as (name, expr); memory(database)
+in a param's place is the child's `memory` <param> (decision D266): the
+harness invokes the long-lived memory ability (id `memory`) on the
+`database` expr before the child and passes the child its address, or null
+when `database` is "null".
 
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
@@ -118,8 +130,35 @@ def snapshot(cond, within="30s"):
     return Snapshot(cond, within)
 
 
+class Memory:
+    def __init__(self, database):
+        self.database = database
+
+
+def memory(database):
+    """The child's `memory` <param>: the address of a memory ability the harness serves on `database`."""
+    return ("memory", Memory(database))
+
+
 def js(value):
     return json.dumps(value, sort_keys=False)
+
+
+def request(event, fields=(), request_id="r1"):
+    """A step that sends a long-lived child one request (decision D266):
+    `event` with data {id: request_id} and each (name, expr) of `fields`."""
+    return Send(event, "({" + ", ".join([f"id: {js(request_id)}"] + [f"{name}: {expr}" for name, expr in fields]) + "})")
+
+
+def answered(cond=None, request_id="r1"):
+    """The cond of a long-lived child's answer to a request: its id is
+    `request_id`, and `cond` (when given) holds of the answer without its
+    id, as `_event`."""
+    matched = f"_event.data.id === {js(request_id)}"
+    if cond is None:
+        return matched
+    return (f"{matched} && (function (_event) {{ return {cond}; }})({{name: _event.name, data: "
+            "(function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})")
 
 
 def pcm(sample=0, seconds=0.1, rate=16000, channels=1):
@@ -193,10 +232,22 @@ class Suite:
                 lines.append(f"  <data id={quoteattr(location)} expr={quoteattr(expr)}/>")
             lines.append("</datamodel>")
         lines.append('<state id="harness" initial="boot">')
+        params = []
+        for pname, expr in case["params"]:
+            if isinstance(expr, Memory):
+                if expr.database == "null":
+                    expr = "null"
+                else:
+                    depth = "../" * (len(self.kind.split("/")) + 4)
+                    lines.append(f'  <invoke id="memory" type="scxml" src="{depth}abilities/memory/memory.scx">')
+                    lines.append(f"    <param name=\"database\" expr={quoteattr(expr.database)}/>")
+                    lines.append("  </invoke>")
+                    expr = "'#_scxml_' + _sessionid + '.memory'"
+            params.append((pname, expr))
         invoke = f'  <invoke id="{name}" type="scxml" src="../../../{name}.scx"'
-        if case["params"]:
+        if params:
             lines.append(invoke + ">")
-            for pname, expr in case["params"]:
+            for pname, expr in params:
                 lines.append(f"    <param name={quoteattr(pname)} expr={quoteattr(expr)}/>")
             lines.append("  </invoke>")
         else:
@@ -391,7 +442,8 @@ class Suite:
 def load(kind, name):
     path = os.path.join(ROOT, kind, name, "irp", "cases.py")
     suite = Suite(kind, name)
-    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, snapshot=snapshot, wait=wait, js=js, wav=wav,
+    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, snapshot=snapshot, wait=wait, js=js, memory=memory, wav=wav,
+                                           request=request, answered=answered,
                                            pcm=pcm, png=png))
     return suite
 

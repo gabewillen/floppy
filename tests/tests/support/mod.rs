@@ -661,15 +661,19 @@ pub fn speech_grant(media: &Path) -> Vec<String> {
     ]
 }
 
-/// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the service `name`'s
-/// URI. Anything that is not a readable `.scx` file names none.
+/// Whether the `.scx` document (or `.scxml` test document) at `path`, or a
+/// document it loads by a literal relative `<invoke src>` (recursively),
+/// names the service `name`'s URI. Anything else names none.
 pub fn binds(path: &Path, name: &str) -> bool {
     fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
-        if path.extension().is_none_or(|extension| extension != "scx") || seen.contains(&path) {
+        if path
+            .extension()
+            .is_none_or(|extension| extension != "scx" && extension != "scxml")
+            || seen.contains(&path)
+        {
             return false;
         }
         seen.push(path.clone());
@@ -1036,7 +1040,7 @@ pub fn copy_listening(abilities: &Path) {
 }
 
 /// The speech service `<invoke>` opening tag in `abilities/vocal/vocal.scx`.
-const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+const SPEECH_INVOKE: &str = r#"<invoke idlocation="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
 
 /// Copies the vocal ability into the laid-out `abilities` directory
@@ -1055,7 +1059,7 @@ pub fn double_speech(abilities: &Path, mode: &str) {
         &path,
         vocal.replacen(
             SPEECH_INVOKE,
-            r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
+            r#"<invoke idlocation="speech" type="scxml" src="speech_double.scx">"#,
             1,
         ),
     )

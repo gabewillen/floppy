@@ -1,18 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VoiceDetection as the interpretation applies it: the sound
-  normalized to PCM, then its voice spans. The interpretation
-  (abilities/interpretation/interpretation.scx) invokes it once per scored sound from
-  DetectingVoice and FeedingSpeech; the interpretation's stage timer bounds
-  it, and leaving the state cancels it and its service call (SCXML 6.4).
+  floppy's VoiceDetection as the interpretation applies it (mosfet.py's
+  VoiceDetection, which the interpretation holds for its lifetime): the
+  sound normalized to PCM, then its voice spans. The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it once, as its
+  long-lived child voice_detection, and sends it each sound to judge from
+  DetectingVoice, FeedingSpeech and DetectingOwnVoice; the
+  interpretation's stage timer bounds each request.
 
-    detecting { normalizing -> applying } -> applied (final)
+    idle -bot.ability.hearing.voice.detection.input-> detecting {
+      normalizing -> applying } -> idle
 
-  Input: the <param>s audio (a reference to the sound's audio, as
-  environment.sound carries it), media_type, sample_rate_hz and channels
-  (the sound's), output (where the sound's PCM is written when it is a WAV
-  container), and model (the voice activity model; LocalAI's silero-vad
-  by default).
+  Configuration: the <param> model (the voice activity model; LocalAI's
+  silero-vad by default).
+
+  Requests: bot.ability.hearing.voice.detection.input {id, audio,
+  media_type?, sample_rate_hz?, channels?, output?}: a reference to the
+  sound's audio, as environment.sound carries it, the sound's format, and
+  where the sound's PCM is written when it is a WAV container. The
+  detection answers its parent with bot.ability.hearing.voice.detection.output
+  {id, sound, segments} (the normalized sound fields and its clip-local
+  voice spans, empty for no voice), or bot.ability.failed {id, message}
+  when a step answers bot.ability.failed, answers something else, or
+  cannot run. One sound is judged at a time; a request that arrives while
+  one is in flight replaces it (leaving detecting cancels its service
+  call, SCXML 6.4), because the interpretation is serial and has given up
+  on the one it no longer waits for.
 
   normalizing: the speech service's normalize step (a WAV container's
   signed 16-bit PCM written to output; raw, audio/l16 or unnamed audio
@@ -24,14 +37,9 @@
   arrived (a WAV container keeps its true rate; raw PCM is read in the
   sound's format, 16 kHz mono when it names none): LocalAI's
   POST {base}/vad, answered bot.ability.hearing.voice.detection.output
-  {segments} (clip-local voice spans, empty for no voice).
+  {segments}.
 
-  Output: <donedata>, received by the interpretation as
-  done.invoke.voice_detection: {sound, voice_detection} (the normalized
-  sound fields and the segments), or {message} when a step answers
-  bot.ability.failed, answers something else, or cannot run.
-
-  Presence: each invocation judges one clip and announces no start or end
+  Presence: each request judges one clip and announces no start or end
   of voice across clips (the interpretation reads the segments only); the
   interpretation's own open-speech window (HearingSpeech) is that
   presence.
@@ -47,81 +55,110 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="voice_detection" initial="detecting">
+       version="1.0" datamodel="ecmascript" name="voice_detection" initial="idle">
   <datamodel>
-    <!-- The invoker's <param>s. -->
-    <data id="audio" expr="null"/>
-    <data id="media_type" expr="null"/>
-    <data id="sample_rate_hz" expr="null"/>
-    <data id="channels" expr="null"/>
-    <data id="output" expr="null"/>
+    <!-- The invoker's <param>. -->
     <data id="model" expr="'silero-vad'"/>
-    <!-- The normalized sound, and the result. -->
+    <!-- The request being judged, and its normalized sound. -->
+    <data id="request" expr="null"/>
     <data id="sound" expr="null"/>
-    <data id="result" expr="null"/>
+    <!-- The current service call's generated invoke ids: a cancelled call's
+         late events (still delivered, SCXML 6.4) are not this request's. -->
+    <data id="normalizer" expr="null"/>
+    <data id="detector" expr="null"/>
   </datamodel>
   <script src="voice_detection.js"/>
 
-  <!-- Any failure ends the detection with {message}. -->
-  <state id="detecting" initial="normalizing">
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-      <assign location="result" expr="failedResult(_event)"/>
+  <state id="idle">
+    <transition event="bot.ability.hearing.voice.detection.input"
+                event:schema="../schemas/bot.ability.hearing.voice.detection.input.json" target="detecting">
+      <assign location="request" expr="_event.data"/>
     </transition>
-    <transition event="error.*" target="applied">
-      <assign location="result" expr="errorResult(_event)"/>
+  </state>
+
+  <!-- Any failure answers {id, message}. -->
+  <state id="detecting" initial="normalizing">
+    <onentry>
+      <assign location="sound" expr="null"/>
+    </onentry>
+    <!-- A newer sound replaces this one. -->
+    <transition event="bot.ability.hearing.voice.detection.input"
+                event:schema="../schemas/bot.ability.hearing.voice.detection.input.json" target="detecting">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === normalizer || _event.invokeid === detector" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="failedResult(_event)"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="errorResult(_event)"/>
+      </send>
     </transition>
 
     <state id="normalizing">
-      <invoke id="normalizer" type="https://github.com/stateforward/floppy/services/speech">
+      <invoke idlocation="normalizer" type="https://github.com/stateforward/floppy/services/speech">
         <param name="operation" expr="'normalize'"/>
-        <param name="audio" expr="audio"/>
-        <param name="media_type" expr="media_type"/>
-        <param name="sample_rate_hz" expr="sample_rate_hz"/>
-        <param name="channels" expr="channels"/>
-        <param name="output" expr="output"/>
+        <param name="audio" expr="request.audio"/>
+        <param name="media_type" expr="requested('media_type')"/>
+        <param name="sample_rate_hz" expr="requested('sample_rate_hz')"/>
+        <param name="channels" expr="requested('channels')"/>
+        <param name="output" expr="requested('output')"/>
       </invoke>
-      <transition event="done.invoke.normalizer" cond="isNormalizedSound(_event)" target="applying">
+      <transition event="done.invoke" cond="_event.invokeid === normalizer &amp;&amp; isNormalizedSound(_event)" target="applying">
         <assign location="sound" expr="_event.data"/>
       </transition>
-      <transition event="done.invoke.normalizer" target="applied">
-        <assign location="result" expr="unnormalizedResult()"/>
+      <transition event="done.invoke" cond="_event.invokeid === normalizer" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="unnormalizedResult()"/>
+        </send>
       </transition>
     </state>
 
     <state id="applying">
-      <invoke id="detector" type="https://github.com/stateforward/floppy/services/speech"
+      <invoke idlocation="detector" type="https://github.com/stateforward/floppy/services/speech"
               env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
         <param name="operation" expr="'detect'"/>
         <param name="model" expr="model"/>
-        <param name="audio" expr="audio"/>
-        <param name="media_type" expr="media_type"/>
-        <param name="sample_rate_hz" expr="sample_rate_hz"/>
-        <param name="channels" expr="channels"/>
+        <param name="audio" expr="request.audio"/>
+        <param name="media_type" expr="requested('media_type')"/>
+        <param name="sample_rate_hz" expr="requested('sample_rate_hz')"/>
+        <param name="channels" expr="requested('channels')"/>
       </invoke>
-      <transition event="bot.ability.hearing.voice.detection.output"
-                  cond="hasSegments(_event)" target="applied">
-        <assign location="result" expr="detectedResult(_event)"/>
+      <!-- A newer sound, before the catch-all below. -->
+      <transition event="bot.ability.hearing.voice.detection.input"
+                  event:schema="../schemas/bot.ability.hearing.voice.detection.input.json" target="detecting">
+        <assign location="request" expr="_event.data"/>
       </transition>
-      <transition event="done.invoke.detector" target="applied">
-        <assign location="result" expr="undetectedResult()"/>
+      <transition event="bot.ability.hearing.voice.detection.output" event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                  cond="_event.invokeid === detector &amp;&amp; hasSegments(_event)" target="idle">
+        <send event="bot.ability.hearing.voice.detection.output" target="#_parent">
+          <content expr="detectedResult(_event)"/>
+        </send>
+      </transition>
+      <transition event="done.invoke" cond="_event.invokeid === detector" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="undetectedResult()"/>
+        </send>
       </transition>
       <!-- Failures here, as in detecting, before the catch-all below. -->
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-        <assign location="result" expr="failedResult(_event)"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === detector" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="failedResult(_event)"/>
+        </send>
       </transition>
-      <transition event="error.*" target="applied">
-        <assign location="result" expr="errorResult(_event)"/>
+      <transition event="error.*" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="errorResult(_event)"/>
+        </send>
       </transition>
       <!-- Anything else the detector sends. -->
-      <transition event="*" target="applied">
-        <assign location="result" expr="mismatchedResult()"/>
+      <transition event="*" cond="_event.invokeid === detector" target="idle">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="mismatchedResult()"/>
+        </send>
       </transition>
     </state>
   </state>
-
-  <final id="applied">
-    <donedata>
-      <content expr="result"/>
-    </donedata>
-  </final>
 </scxml>

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/voice_detection/irp/sources">
   <assert id="voice_detection-1" specnum="1" specid="#voice_detection-1">
-    <![CDATA[It normalizes the sound, then detects its voice: a WAV container's signed 16-bit PCM is written to `output` and the sound becomes `{audio: output, media_type: "audio/pcm", sample_rate_hz, channels}` (the container's own format); the speech service's `detect` (`POST {base}/vad`, model `silero-vad` by default) answers `bot.ability.hearing.voice.detection.output` `{segments}`, and the done data (`done.invoke.voice_detection`) is exactly `{sound, voice_detection: {segments}}`, each segment `{start_seconds, end_seconds, confidence}` (the answer's `confidence`, `probability` or `score`, else `null`) in ascending start order, clamped to the clip; the clip is sent between half a second of silence (a cold VAD misses voice that starts at the first sample), and the answered spans are shifted back onto it.]]>
+    <![CDATA[It serves each `bot.ability.hearing.voice.detection.input` `{id, audio, media_type?, sample_rate_hz?, channels?, output?}` by normalizing the sound, then detecting its voice: a WAV container's signed 16-bit PCM is written to `output` and the sound becomes `{audio: output, media_type: "audio/pcm", sample_rate_hz, channels}` (the container's own format); the speech service's `detect` (`POST {base}/vad`, model `silero-vad` by default) answers `bot.ability.hearing.voice.detection.output` `{segments}`, and the detection answers its parent with `bot.ability.hearing.voice.detection.output` exactly `{id, sound, segments}`, each segment `{start_seconds, end_seconds, confidence}` (the answer's `confidence`, `probability` or `score`, else `null`) in ascending start order, clamped to the clip; the clip is sent between half a second of silence (a cold VAD misses voice that starts at the first sample), and the answered spans are shifted back onto it.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -27,7 +27,7 @@
     </test>
   </assert>
   <assert id="voice_detection-3" specnum="3" specid="#voice_detection-3">
-    <![CDATA[A clip with no voice (no spans answered, or only spans outside the clip) is not a failure: its `voice_detection` is `{segments: []}`.]]>
+    <![CDATA[A clip with no voice (no spans answered, or only spans outside the clip) is not a failure: its `segments` are `[]`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="voice_detection-4" specnum="4" specid="#voice_detection-4">
-    <![CDATA[When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly `{message}`, with no sound.]]>
+    <![CDATA[When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the detection answers `bot.ability.failed` exactly `{id, message}`, with no sound.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -48,7 +48,7 @@
     </test>
   </assert>
   <assert id="voice_detection-5" specnum="5" specid="#voice_detection-5">
-    <![CDATA[When the normalization fails (`bot.ability.failed`, such as an `output` that cannot be written) it ends with that `{message}` and nothing is detected; when a step cannot run (a missing `output`, or a malformed `model`, rejects its start with `error.execution`), the done data is `{message: "VoiceDetection could not run (<error event>)"}`.]]>
+    <![CDATA[When the normalization fails (`bot.ability.failed`, such as an `output` that cannot be written) it answers that `{id, message}` and nothing is detected; when a step cannot run (a missing `output`, or a malformed `model`, rejects its start with `error.execution`), it answers `{id, message: "VoiceDetection could not run (<error event>)"}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -57,6 +57,15 @@
     </test>
     <test id="142" conformance="mandatory" manual="false">
       <start uri="142/test142.scxml"/>
+    </test>
+  </assert>
+  <assert id="voice_detection-6" specnum="6" specid="#voice_detection-6">
+    <![CDATA[It is long-lived (mosfet.py's Interpretation holds its VoiceDetection): it answers request after request, one at a time, and a request that arrives while one is in flight replaces it, so only the newer one is answered.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
     </test>
   </assert>
 </assertions>

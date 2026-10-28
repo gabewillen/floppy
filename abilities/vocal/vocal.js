@@ -4,6 +4,22 @@
 
 // applying
 
+// Where the speech service writes the audio: output_prefix + operation +
+// "." + the media subtype.
+function outputPath() {
+  return output_prefix + operation + '.' + media_type.split('/')[1];
+}
+
+// The speech service call in hand, by its generated invoke id.
+function speechTarget() {
+  return '#_' + speech;
+}
+
+// An event of the speech service call in hand, not of a cancelled one.
+function isCurrent(_event) {
+  return _event.invokeid === speech;
+}
+
 // The reply in hand is drafted (D262): it has no parts, and the speech
 // service reads it from the events sent on to it.
 function isDrafted() {

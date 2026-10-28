@@ -5,8 +5,11 @@
   <data id="snapshot" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
-  <invoke id="identity" type="scxml" src="../../../identity.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="identity" type="scxml" src="../../../identity.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="name_select" expr="&quot;SELECT content FROM (SELECT 1 AS n, '{\&quot;text\&quot;: \&quot;Pip\&quot;, \&quot;kind\&quot;: \&quot;fact\&quot;}' AS content UNION ALL SELECT 2, '{\&quot;text\&quot;: \&quot;Bo\&quot;}') AS stored WHERE ?1 = 'self_name' AND ?2 = 'self' ORDER BY n&quot;"/>
   </invoke>
   <state id="boot">

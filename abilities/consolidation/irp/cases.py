@@ -10,14 +10,14 @@
 
 S = suite
 DONE = "done.invoke.consolidation"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 
 
 def done(cond):
     return expect(DONE, cond)
 
 
-S.statement(1, "With no `database` `<param>` (null) it logs `memory` `absent` and ends at once, its donedata `{folded: 0, merged: 0, steps: 0, failed: false, reason: \"absent\"}`.")
+S.statement(1, "With no `memory` `<param>` (null) it logs `memory` `absent` and ends at once, its donedata `{folded: 0, merged: 0, steps: 0, failed: false, reason: \"absent\"}`.")
 S.statement(2, "With a database it reads the people memory holds through the Memory ability (which brings the database to the head revision), folds the voices heard for each person since into their representative and merges two people whose representatives are at the conversation's threshold, one guarded transaction per step; with nothing to do it ends with `{folded: 0, merged: 0, steps: 0, failed: false, reason: null}`.")
 S.statement(3, "A memory step that fails ends it at once with `failed: true` and the failure as its `reason`.")
 
@@ -32,4 +32,4 @@ S.case(110, 2, "a fresh database holds no people: nothing to fold or merge.",
 S.case(120, 3, "a relative database path the Memory ability refuses fails the consolidation.",
        [done("_event.data.failed === true && typeof _event.data.reason === 'string' && _event.data.reason.length > 0"
              " && _event.data.steps === 0")],
-       params=[("database", "'relative.sqlite'")], clock="wall")
+       params=[memory("'relative.sqlite'")], clock="wall")

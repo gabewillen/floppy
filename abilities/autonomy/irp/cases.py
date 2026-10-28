@@ -26,7 +26,7 @@ TEXT = {"observation": {"event": "text", "data": "hello"}}
 def run(event, data, turn=1, database="null", memory_timeout_ms=None):
     params = [("turn", js(turn)), ("input", js(INPUT)),
               ("stimulus", js({"event": event, "data": data, "source": "listening"})),
-              ("database", database)]
+              memory(database)]
     if memory_timeout_ms is not None:
         params.append(("memory_timeout_ms", js(memory_timeout_ms)))
     return params
@@ -39,7 +39,7 @@ def perceived(turn, *stimuli):
                  "participants": []} for event, data in stimuli]
     return [("turn", js(turn)), ("input", js(INPUT)),
             ("stimulus", js({"event": "bot.perceived", "data": {"percepts": percepts}, "source": "session.floppy"})),
-            ("database", "null")]
+            memory("null")]
 
 
 def answer(turn, reason, candidates, extra=None):
@@ -63,10 +63,10 @@ ADMITTED = (
     " && _event.data.selected[0].data.sample_rate_hz === 48000 && _event.data.selected[0].data.channels === 1"
     " && Object.keys(_event.data.selected[0].data).length === 6")
 
-S.statement(1, "Without memory (`database` `null`), a stimulus no seed triggers runs nothing: it ends with donedata `{turn, handled: false, candidates: [], reason: \"no-behaviors\"}`. Its donedata is its only answer: it sends its parent no event.")
+S.statement(1, "Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it ends with donedata `{turn, handled: false, candidates: [], reason: \"no-behaviors\"}`. Its donedata is its only answer: it sends its parent no event.")
 S.statement(2, "A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, candidates: [\"SpeechHeard\"], reason: \"behavior\"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`), trusted and naming no target (the body sends it to itself).")
 S.statement(3, "A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, candidates: [\"SpeechHeard\"], reason: \"unhandled\"}`.")
-S.statement(4, "With memory, one transaction of the Memory ability on the `database` <param> loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.")
+S.statement(4, "With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.")
 S.statement(5, "A load that fails or outlasts `memory_timeout_ms` matches no behaviors and the turn goes on, as a load with no rows does.")
 S.statement(6, "A `bot.perceived` stimulus (the body's percepts taken together) is matched percept by percept, in arrival order, each percept's stimulus as the stimulus: the turn is handled only when every percept was, `selected` the handling behaviors' selections in arrival order; otherwise it is `unhandled` (or `no-behaviors` when nothing was tried), and `acted` `{percepts, acts}` names the handled percepts' positions and their selections when any was.")
 

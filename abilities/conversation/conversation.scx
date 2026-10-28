@@ -41,9 +41,9 @@
   them (bot_person, and bot_person_embedding of kind voice) and one
   representative voice (bot_person_centroid: its compact text, which the
   cognition's rest reinforces, abilities/consolidation/consolidation.scx).
-  With a database, an input with an embedding among its identities is
-  identified before its relationship is found: identifying_memory invokes
-  the memory ability as "identify" with one read, every person's
+  With a memory, an input with an embedding among its identities is
+  identified before its relationship is found: identifying_memory asks
+  the bot's memory (request "identify") for one read, every person's
   representative (oldest person first), and
   <conversation:people_for_input> matches each embedding by the
   relationships' match (cosine at 0.85, its margin 0.05, decision D90):
@@ -68,12 +68,12 @@
   bytes with its columns), and past it the identification times out at
   the memory stage. The namespace element's 64 KiB value bound (about 170
   people) and the sql service's 88 KiB result bound are above it.
-  Without a database there are no people: an embedding is its own
+  Without a memory there are no people: an embedding is its own
   participant (D79). Faces and the bot's own voice are not built.
 
   Memory (before and after the turns):
-  with a database (the <param> database, the memory database file) it
-  invokes the memory ability (abilities/memory/memory.scx) as "recall",
+  with a memory (the <param> memory, the address of the bot's memory) it
+  asks the bot's memory (abilities/memory/memory.scx, decision D266) as "recall",
   before the turns, with the relationship's memories (content where
   query_tags conversation_memory and context_ref is the relationship's
   context_ref, oldest first, at most 50), and as "remember", after them,
@@ -88,7 +88,7 @@
   logged by count only, once remembered. Each is bounded by
   memory_timeout_ms (5 s); a memory failure or timeout answers
   bot.ability.conversation.failed {stage: "memory", message} and commits
-  nothing. Without a database it logs <log label="memory" expr="'absent'">
+  nothing. Without a memory it logs <log label="memory" expr="'absent'">
   once per input.
 
   Turns: each input is one turn per source identity, in identity order
@@ -179,9 +179,8 @@
   <conversation:message_for_turn> each outbound one; the document opens the exchange with an inbound one
   and appends an outbound one to it.
 
-  Bindings: the bot, conversation, identity and memory namespace packages and
-  the memory ability's sql service package (a run grants it its directory:
-  scx run's dir option).
+  Bindings: the bot, conversation, identity and memory namespace packages
+  (the bot's memory, which the body invokes, binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
@@ -227,7 +226,7 @@
          bounds them for the short-term register. -->
     <data id="message" expr="null"/>
     <data id="words" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and its statements.
+    <!-- Memory: the address of the bot's memory (null: no memory) and its statements.
          The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
@@ -235,7 +234,10 @@
          content_format, the 50 most recent by created_at,
          then memory_id (the insertion order), read oldest first. The
          count recalled, for the log. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="memory_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled" expr="0"/>
@@ -290,7 +292,7 @@
 
       <!-- Identify the input's voices; then its relationship; recall
            its memories, exchange the turns, remember the input (nothing
-           without a database); then commit the turns' product. -->
+           without a memory); then commit the turns' product. -->
       <state id="running" initial="identifying_from">
         <!-- Input that arrives meanwhile waits. -->
         <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json">
@@ -314,15 +316,17 @@
           <onexit>
             <cancel sendid="identify-after"/>
           </onexit>
-          <invoke id="identify" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="identifyStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="numbering_from">
+          <onentry>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.identify">
+              <param name="id" expr="memory_requests.identify"/>
+              <param name="statements" expr="identifyStatements()"/>
+            </send>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('identify')" event:schema="../schemas/bot.ability.memory.output.json" target="numbering_from">
             <assign location="held_voices" expr="heardVoices(_event)"/>
             <conversation:people_for_input location="people" input="input" voices="held_voices" after="0"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" cond="isMemoryReply('identify')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -349,16 +353,18 @@
           <onexit>
             <cancel sendid="number-after"/>
           </onexit>
-          <invoke id="number" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="numberStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="tagging_memory">
+          <onentry>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.number">
+              <param name="id" expr="memory_requests.number"/>
+              <param name="statements" expr="numberStatements()"/>
+            </send>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('number')" event:schema="../schemas/bot.ability.memory.output.json" target="tagging_memory">
             <conversation:people_for_input location="people" input="input" voices="held_voices"
                                            after="numbersBefore(_event)"/>
             <assign location="input" expr="people.input"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" cond="isMemoryReply('number')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -386,12 +392,14 @@
           <onexit>
             <cancel sendid="tag-after"/>
           </onexit>
-          <invoke id="tag" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="tagStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="relating"/>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <onentry>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.tag">
+              <param name="id" expr="memory_requests.tag"/>
+              <param name="statements" expr="tagStatements()"/>
+            </send>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('tag')" event:schema="../schemas/bot.ability.memory.output.json" target="relating"/>
+          <transition event="bot.ability.failed" cond="isMemoryReply('tag')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -439,14 +447,16 @@
           <onexit>
             <cancel sendid="recall-after"/>
           </onexit>
-          <invoke id="recall" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="memoryRecallStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="turn_exchange">
+          <onentry>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+              <param name="id" expr="memory_requests.recall"/>
+              <param name="statements" expr="memoryRecallStatements()"/>
+            </send>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json" target="turn_exchange">
             <assign location="recalled" expr="recalledCount(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -549,14 +559,16 @@
           <onexit>
             <cancel sendid="remember-after"/>
           </onexit>
-          <invoke id="remember" type="scxml" src="../memory/memory.scx">
-            <param name="database" expr="database"/>
-            <param name="statements" expr="memoryInsertStatements()"/>
-          </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="committing">
+          <onentry>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.remember">
+              <param name="id" expr="memory_requests.remember"/>
+              <param name="statements" expr="memoryInsertStatements()"/>
+            </send>
+          </onentry>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.memory.output.json" target="committing">
             <log label="conversation.memories" expr="memoriesLog(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <assign location="relationships[relationship_index].participants" expr="participants"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>

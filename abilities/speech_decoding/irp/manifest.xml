@@ -3,13 +3,13 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/speech_decoding/irp/sources">
   <assert id="speech_decoding-1" specnum="1" specid="#speech_decoding-1">
-    <![CDATA[By default it decodes through the OpenAI-compatible API: the speech service's `decode` with provider `null` and model `nemotron-speech-streaming-en-0.6b` (the lab's Nemotron), `POST {base}/audio/transcriptions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `text`, trimmed.]]>
+    <![CDATA[By default it decodes through the OpenAI-compatible API: the speech service's `decode` with provider `null` and model `nemotron-speech-streaming-en-0.6b` (the lab's Nemotron), `POST {base}/audio/transcriptions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` is answered to its parent as `bot.ability.hearing.speech.decoding.output` exactly `{id, text}` (the request's `id`, the answer's `text`, trimmed). It is long-lived: each utterance is a request `bot.ability.hearing.speech.decoding.input` `{id, audio, media_type?}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
   </assert>
   <assert id="speech_decoding-2" specnum="2" specid="#speech_decoding-2">
-    <![CDATA[Speech the backend heard none of decodes to empty words: done data `{text: ""}`, not a failure.]]>
+    <![CDATA[Speech the backend heard none of decodes to empty words: `{id, text: ""}`, not a failure.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="speech_decoding-3" specnum="3" specid="#speech_decoding-3">
-    <![CDATA[The `provider` and `model` `<param>`s choose the backend: provider `gemini` is Gemini's `POST {base}/interactions`, whose answer's `output_text`, or its `model_output` steps' text, trimmed, becomes the done data's `text`; provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions` and never calls Gemini's.]]>
+    <![CDATA[The `provider` and `model` `<param>`s choose the backend: provider `gemini` is Gemini's `POST {base}/interactions`, whose answer's `output_text`, or its `model_output` steps' text, trimmed, becomes the answer's `text`; provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions` and never calls Gemini's.]]>
     <test id="101" conformance="mandatory" manual="false">
       <start uri="101/test101.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="speech_decoding-4" specnum="4" specid="#speech_decoding-4">
-    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is exactly `{message}` with the service's message.]]>
+    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), it answers `bot.ability.failed` exactly `{id, message}` with the service's message.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -48,10 +48,7 @@
     </test>
   </assert>
   <assert id="speech_decoding-5" specnum="5" specid="#speech_decoding-5">
-    <![CDATA[When the decoder cannot run (a missing `audio`, or a malformed `media_type`, rejects its start with `error.execution`), the done data is `{message: "SpeechDecoding could not run (<error event>)"}`.]]>
-    <test id="140" conformance="mandatory" manual="false">
-      <start uri="140/test140.scxml"/>
-    </test>
+    <![CDATA[When the decoder cannot run (a malformed `media_type` rejects its start with `error.execution`), it answers `bot.ability.failed` `{id, message: "SpeechDecoding could not run (<error event>)"}`.]]>
     <test id="141" conformance="mandatory" manual="false">
       <start uri="141/test141.scxml"/>
     </test>

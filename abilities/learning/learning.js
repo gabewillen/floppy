@@ -10,13 +10,18 @@ function hasDeferredLesson() {
 
 // recalling
 
-function hasNoDatabase() {
-  return database === null;
+function hasNoMemory() {
+  return memory === null;
 }
 
 // A lesson that is not text: the bot learns from text only.
 function isNotText() {
   return typeof lesson.media_type === 'string' && !/^text\//.test(lesson.media_type);
+}
+
+// Whether recalling asks the memory: with a memory and a text lesson.
+function isRecallable() {
+  return !hasNoMemory() && !isNotText();
 }
 
 function notTextMessage() {
@@ -185,4 +190,12 @@ function breakFailedMessage(detail) {
 // why it failed, with the teaching turn's participants.
 function learningOutput(learned) {
   return ({lesson: lesson.content, lesson_turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D266): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

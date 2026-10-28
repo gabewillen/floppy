@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- vocal-10: a cancelled utterance is not answered, and the next one is encoded and answered. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="vocal" type="scxml" src="../../../vocal.scx">
+    <param name="model" expr="'tts-1'"/>
+    <param name="voice" expr="'alloy'"/>
+    <param name="output_prefix" expr="'media/reply-'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "first"}]}'/></send>
+      <send event="bot.ability.processing.cancel" target="#_vocal"><content expr="{}"/></send>
+      <send event="harness.waited" delay="1s"/>
+    </onentry>
+    <transition event="harness.waited" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "second"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.0.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step3"/>
+  </state>
+  <state id="step3">
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step4"/>
+  </state>
+  <state id="step4">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -501,8 +501,11 @@ impl From<HostError> for LoadFailure {
 ///
 /// The machine, the SCXML I/O processor, and the clock (which every session
 /// needs) are compiled by [`SessionHost::new`]; the compiler, the data
-/// models, and the `BasicHTTP` processor are compiled on first use. Every
-/// compilation goes through the process-wide [`compiled`] cache.
+/// models, and the `BasicHTTP` processor are compiled on first use. The
+/// extension, service, and data-model package components a host or a
+/// document binds, which only those documents use, each start compiling on
+/// their own thread when they are bound ([`LazyComponent::prefetched`]).
+/// Every compilation goes through the process-wide [`compiled`] cache.
 pub(crate) struct HostCore {
     pub(crate) engine: wasmtime::Engine,
     shared: Arc<SharedEngine>,
@@ -669,7 +672,7 @@ impl HostCore {
                 )?;
                 namespaces.push((
                     binding.package,
-                    Rc::new(LazyComponent::new(&binding.component)),
+                    Rc::new(LazyComponent::prefetched(&binding.component, &self.shared)),
                 ));
             }
         }
@@ -682,7 +685,7 @@ impl HostCore {
                     &self.config,
                 )?;
                 entries.push(ServiceEntry {
-                    component: LazyComponent::new(&component),
+                    component: LazyComponent::prefetched(&component, &self.shared),
                     package,
                     wasi,
                     pre: OnceCell::new(),
@@ -1319,7 +1322,8 @@ impl SessionHost {
             bindings
                 .into_iter()
                 .map(|binding| {
-                    let component = Rc::new(LazyComponent::new(&binding.component));
+                    let component =
+                        Rc::new(LazyComponent::prefetched(&binding.component, &core.shared));
                     (binding.package, component)
                 })
                 .collect(),
@@ -1352,7 +1356,12 @@ impl SessionHost {
         }
         core.data_model_packages = bindings
             .iter()
-            .map(|(name, component)| (name.clone(), LazyComponent::new(component)))
+            .map(|(name, component)| {
+                (
+                    name.clone(),
+                    LazyComponent::prefetched(component, &core.shared),
+                )
+            })
             .collect();
         Ok(self)
     }
@@ -1404,7 +1413,7 @@ impl SessionHost {
         core.services = bindings
             .into_iter()
             .map(|(package, component, wasi)| ServiceEntry {
-                component: LazyComponent::new(&component),
+                component: LazyComponent::prefetched(&component, &core.shared),
                 package,
                 wasi,
                 pre: OnceCell::new(),

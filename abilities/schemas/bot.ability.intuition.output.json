@@ -1,252 +1,122 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.intuition.output",
-  "description": "Typed terminal from one cognition stage back to the Cognition host.",
+  "description": "The decision layer's answer to one turn: handled with its selections, unhandled (escalating), or failed [floppy fields; mosfet.py's System 1 stage, since renamed Decision].",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "turn",
+    "handled",
+    "reason",
+    "acted",
+    "confidence_tuner",
+    "bytes_per_token"
+  ],
   "properties": {
     "turn": {
       "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
       "minimum": 1,
       "type": "integer"
     },
-    "output": {
-      "anyOf": [
-        {
-          "items": {
-            "additionalProperties": false,
-            "description": "One selected modeled HSM event. Processing dispatches it to the resolved target fire-and-forget; hosts do not re-apply OutputData. Put selection rationale on reason here — not on the event payload.",
-            "examples": [
-              {
-                "data": {
-                  "device": "device-a"
-                },
-                "event": "bot.focus_device",
-                "reason": "Attention should move to that device for this turn.",
-                "target": "bot"
-              }
-            ],
-            "properties": {
-              "target": {
-                "anyOf": [
-                  {
-                    "description": "Stable reference used by a cognition host to resolve a target or modeled event.",
-                    "examples": [
-                      "runtime"
-                    ],
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Stable reference for the host-local receiver of the modeled event. Hosts may omit this when the event resolves relative to focus or a single actor.",
-                "examples": [
-                  "bot",
-                  "device-a"
-                ],
-                "title": "Target"
-              },
-              "event": {
-                "description": "Canonical modeled HSM event name selected by cognition.",
-                "examples": [
-                  "bot.focus_device"
-                ],
-                "minLength": 1,
-                "title": "Event",
-                "type": "string"
-              },
-              "data": {
-                "anyOf": [
-                  {},
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Optional typed domain payload for the selected event. Model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
-                "examples": [
-                  {
-                    "device": "device-a"
-                  }
-                ],
-                "title": "Data"
-              },
-              "reason": {
-                "anyOf": [
-                  {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Optional reason this event was selected.",
-                "examples": [
-                  "Attention should move to that device for this turn."
-                ],
-                "title": "Reason"
-              }
-            },
-            "required": [
-              "event"
-            ],
-            "title": "EventData",
-            "type": "object"
-          },
-          "type": "array"
-        },
-        {
-          "items": {
-            "description": "One selected event to dispatch.\n\n``confidence`` / ``meta`` hold model-facing patch values lifted by ``unpatch_event_data``\n(not domain event data). ``meta`` is the full patch map; ``confidence`` is a convenience\nwhen the active patch includes that field (0–100 integer scale). Selection rationale is\n``reason`` on this envelope — not on the event payload.",
-            "properties": {
-              "event": {
-                "title": "Event",
-                "type": "string"
-              },
-              "target": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Target"
-              },
-              "data": {
-                "anyOf": [
-                  {},
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Data"
-              },
-              "reason": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Reason"
-              },
-              "confidence": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Confidence"
-              },
-              "meta": {
-                "anyOf": [
-                  {
-                    "additionalProperties": true,
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Meta"
-              }
-            },
-            "required": [
-              "event"
-            ],
-            "title": "SelectedEvent",
-            "type": "object"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Selected modeled events for Processing to dispatch fire-and-forget, or None when the stage selected nothing. Hosts do not re-apply OutputData; selection rationale belongs on each selection envelope, not here.",
-      "examples": [
-        [
-          {
-            "data": {
-              "device": "device-a"
-            },
-            "event": "bot.focus_device",
-            "target": "bot"
-          }
-        ]
-      ],
-      "title": "Output"
+    "handled": {
+      "type": "boolean",
+      "description": "Whether the decision handled the turn."
     },
-    "input": {
-      "additionalProperties": false,
-      "description": "Live body input for this turn: the stimulus plus the abilities, named actors, and focus candidates the stage may select from. Built by the Cognition host from live body context.",
-      "examples": [
-        {
-          "focus": "device-a",
-          "focus_candidates": [
-            "device-a"
-          ]
-        }
-      ],
-      "properties": {
-        "focus": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Instance name the bot is looking at, if any.",
-          "examples": [
-            "device-a"
-          ],
-          "title": "Focus"
-        },
-        "focus_candidates": {
-          "default": [],
-          "description": "Instance names that may become focus for this turn (body attention policy).",
-          "examples": [
-            [
-              "device-a"
-            ],
-            [
-              "device-a",
-              "device-b"
-            ]
-          ],
-          "items": {
-            "type": "string"
+    "selected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The selected event's name."
           },
-          "title": "Focus Candidates",
-          "type": "array"
+          "data": {
+            "description": "The selected event's data."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The session id of the event's one offerer, when one session offers it."
+          }
         }
       },
-      "title": "InputData",
-      "type": "object"
+      "description": "A handled turn's selections."
+    },
+    "acted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The selected event's name."
+          },
+          "data": {
+            "description": "The selected event's data."
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The session id of the event's one offerer, when one session offers it."
+          }
+        }
+      },
+      "description": "What the stage sent, each to its target."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "none when handled; low_confidence, deliberative_input or empty_product when it escalates; the failure when it failed."
+    },
+    "hand_to": {
+      "type": "string",
+      "enum": [
+        "intuition",
+        "reasoning"
+      ],
+      "description": "The tier a pass handed the turn to."
+    },
+    "failed": {
+      "const": true,
+      "description": "Present when the decision failed."
+    },
+    "confidence_tuner": {
+      "type": "object",
+      "description": "The decision layer's confidence tuner state, on the 0-100 scale.",
+      "required": [
+        "mean",
+        "var",
+        "n"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mean": {
+          "type": "number"
+        },
+        "var": {
+          "type": "number"
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "bytes_per_token": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The fewest bytes a token any answer showed so far."
     }
-  },
-  "required": [
-    "turn",
-    "input"
-  ],
-  "type": "object"
+  }
 }

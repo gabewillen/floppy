@@ -15,7 +15,7 @@ function segmentSeconds(segment) {
 // long enough), or null when none is at least min_segment_seconds.
 function longestSegment() {
   var longest = null;
-  var items = Array.isArray(segments) ? segments : [];
+  var items = request.segments;
   for (var index = 0; index < items.length; index++) {
     var item = items[index];
     var seconds = segmentSeconds(item);
@@ -45,8 +45,12 @@ function segmentChannels() {
   return typeof segment.channels === 'number' ? segment.channels : null;
 }
 
-function unheardResult() {
-  return ({affect: null});
+function isHeard() {
+  return result !== null;
+}
+
+function unheardFailure() {
+  return ({id: request.id, message: reason});
 }
 
 // An affect as the service answers it (D41: the service's events are
@@ -57,12 +61,12 @@ function isAffect(_event) {
 
 function heardResult(_event) {
   var data = _event.data;
-  return ({affect: {label: data.label, scores: Object(data.scores), valence: data.valence === undefined ? null : data.valence,
-    confidence: data.confidence === undefined ? null : data.confidence}});
+  return ({id: request.id, label: data.label, scores: Object(data.scores), valence: data.valence === undefined ? null : data.valence,
+    confidence: data.confidence === undefined ? null : data.confidence});
 }
 
 function heardLog() {
-  return 'heard ' + result.affect.label + (typeof result.affect.confidence === 'number' ? ' ' + result.affect.confidence : '');
+  return 'heard ' + result.label + (typeof result.confidence === 'number' ? ' ' + result.confidence : '');
 }
 
 function hasNoSegment() {

@@ -542,7 +542,7 @@ fn every_event_satisfies_its_published_schema() {
         CompiledSchema::new(&canonical_json(&value)).expect("the schema compiles")
     };
     let decoded = compile(include_str!(
-        "../schemas/bot.ability.hearing.speech.decoding.output.json"
+        "../../../abilities/schemas/bot.ability.hearing.speech.decoding.output.json"
     ));
     let encoded = compile(include_str!(
         "../../../abilities/schemas/bot.ability.vocal.speech.encoding.output.json"

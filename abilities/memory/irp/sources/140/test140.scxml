@@ -4,19 +4,18 @@
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../memory.scx">
     <param name="database" expr="'postgresql://floppy@127.0.0.1:9/floppy'"/>
-    <param name="statements" expr='[{"sql": "SELECT 1"}]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('pgsql could not connect') &gt;= 0" target="step1"/>
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr='{"id": "r1", "statements": [{"sql": "SELECT 1"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.id === 'r1' &amp;&amp; typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('pgsql could not connect') &gt;= 0" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.memory" target="step2"/>
-  </state>
-  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

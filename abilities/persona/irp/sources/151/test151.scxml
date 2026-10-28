@@ -5,9 +5,12 @@
   <data id="offers" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
   <invoke id="persona" type="scxml" src="../../../persona.scx">
     <param name="traits" expr='["curious", "  patient with children "]'/>
-    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

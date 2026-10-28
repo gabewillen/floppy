@@ -5,7 +5,7 @@
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
     <param name="model" expr="'tts-1'"/>
     <param name="voice" expr="'alloy'"/>
-    <param name="output" expr="'media/reply.mp3'"/>
+    <param name="output_prefix" expr="'media/reply-'"/>
     <param name="media_type" expr="'audio/mpeg'"/>
   </invoke>
   <state id="boot">

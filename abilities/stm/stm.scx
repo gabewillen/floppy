@@ -7,25 +7,25 @@
   invokes it as its child "stm" and reaches it by message only.
 
     opening -> serving { idle -request-> applying.<operation> -> idle }
-    opening -no database-> absent
+    opening -no memory-> absent
     opening -open failed or timed out-> degraded
 
-  Input: the <param>s database (the memory database file, or a Postgres
-  connection URI; none: absent), and its bounds:
+  Input: the <param>s memory (the address of the bot's memory, decision
+  D266; none: absent), and its bounds:
   capacity (64 stimuli), recency_window_ms (5 min), turn_capacity (32
   turns), turn_window_ms (10 min), open_timeout_ms (30 s).
 
-  opening invokes the memory
-  ability (abilities/memory/memory.scx, which migrates the database to
-  floppy's head revision, 0001, which holds bot_stm_memory and
-  bot_stm_turn) with one read of bot_stm_turn, then
+  opening asks the bot's memory (abilities/memory/memory.scx, decision
+  D266, which migrated the database to floppy's head revision, 0001,
+  which holds bot_stm_memory and bot_stm_turn) for one read of
+  bot_stm_turn, then
   sends bot.ability.ready to the parent once (decision D242): the
   register offers nothing to the cognition. A database that cannot be opened (logged as
   stm.open.failed, "short-term memory could not open its database: ...")
   or does not open within open_timeout_ms leaves it degraded, never ready, so the body's activation fails at its timeout; on entering
   degraded it sends bot.ability.failed {message: "unavailable: short-term
   memory is degraded."} to the parent.
-  Without a database it logs <log label="memory" expr="'absent'">, is ready,
+  Without a memory it logs <log label="memory" expr="'absent'">, is ready,
   and holds nothing: notifications are dropped and reads answer empty.
 
   Notifications (no reply; the sender never waits on perception upkeep):
@@ -96,18 +96,20 @@
   error.execution in its sender, and input from outside the session that
   does not is refused, so no cond rechecks a payload.
 
-  Bindings: the memory namespace package and the memory ability's sql and
-  pgsql service packages (a run grants sql its directory: scx run's dir
-  option).
+  Bindings: the memory namespace package (the bot's memory, which the
+  body invokes, binds the sql and pgsql service packages).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        version="1.0" datamodel="ecmascript" name="stm" initial="opening">
   <datamodel>
-    <!-- The invoker's <param>s: the database (null: absent) and the
+    <!-- The invoker's <param>s: the memory's address (null: absent) and the
          bounds. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="capacity" expr="64"/>
     <data id="recency_window_ms" expr="300000"/>
     <data id="turn_capacity" expr="32"/>
@@ -133,7 +135,7 @@
   </datamodel>
   <script src="stm.js"/>
 
-  <!-- Open the database (migrating it to the head revision) before
+  <!-- Open the register's tables in the memory before
        serving anything; what arrives meanwhile waits. -->
   <state id="opening" initial="opening_from">
     <transition event="bot.ability.memory.stm.record" event:schema="../schemas/bot.ability.memory.stm.record.json">
@@ -152,7 +154,7 @@
       <event:defer/>
     </transition>
     <state id="opening_from">
-      <transition cond="hasNoDatabase()" target="absent"/>
+      <transition cond="hasNoMemory()" target="absent"/>
       <transition target="opening_memory"/>
     </state>
     <state id="opening_memory">
@@ -162,14 +164,16 @@
       <onexit>
         <cancel sendid="opening-after"/>
       </onexit>
-      <invoke id="open" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="openStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="serving">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.open">
+          <param name="id" expr="memory_requests.open"/>
+          <param name="statements" expr="openStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('open')" event:schema="../schemas/bot.ability.memory.output.json" target="serving">
         <send event="bot.ability.ready" target="#_parent"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="degraded">
+      <transition event="bot.ability.failed" cond="isMemoryReply('open')" event:schema="../schemas/bot.ability.failed.json" target="degraded">
         <log label="stm.open.failed" expr="openFailedMessage(_event)"/>
       </transition>
       <transition event="error.*" target="degraded">
@@ -181,7 +185,7 @@
     </state>
   </state>
 
-  <!-- One operation at a time over the memory ability. -->
+  <!-- One operation at a time over the bot's memory. -->
   <state id="serving" initial="idle">
     <state id="idle">
       <transition event="bot.ability.memory.stm.record" event:schema="../schemas/bot.ability.memory.stm.record.json" target="recording">
@@ -223,12 +227,14 @@
       <!-- Record one stimulus projection, evicting beyond capacity in the
            same transaction. -->
       <state id="recording">
-        <invoke id="record" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="recordStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle"/>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.record">
+            <param name="id" expr="memory_requests.record"/>
+            <param name="statements" expr="recordStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('record')" event:schema="../schemas/bot.ability.memory.output.json" target="idle"/>
+        <transition event="bot.ability.failed" cond="isMemoryReply('record')" event:schema="../schemas/bot.ability.failed.json" target="idle">
           <log label="stm.failed" expr="operationFailedMessage('bot.ability.memory.stm.record', _event)"/>
         </transition>
         <transition event="error.*" target="idle">
@@ -238,12 +244,14 @@
 
       <!-- Stamp the access time on the entries grounding relied on. -->
       <state id="reinforcing">
-        <invoke id="reinforce" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="reinforceStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle"/>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.reinforce">
+            <param name="id" expr="memory_requests.reinforce"/>
+            <param name="statements" expr="reinforceStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('reinforce')" event:schema="../schemas/bot.ability.memory.output.json" target="idle"/>
+        <transition event="bot.ability.failed" cond="isMemoryReply('reinforce')" event:schema="../schemas/bot.ability.failed.json" target="idle">
           <log label="stm.failed" expr="operationFailedMessage('bot.ability.memory.stm.reinforce', _event)"/>
         </transition>
         <transition event="error.*" target="idle">
@@ -263,14 +271,16 @@
       </state>
 
       <state id="recording_turn">
-        <invoke id="turn" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="turnStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.turn">
+            <param name="id" expr="memory_requests.turn"/>
+            <param name="statements" expr="turnStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('turn')" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
           <log label="stm.turn.recorded" expr="turnRecordedLog()"/>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+        <transition event="bot.ability.failed" cond="isMemoryReply('turn')" event:schema="../schemas/bot.ability.failed.json" target="idle">
           <log label="stm.failed" expr="operationFailedMessage('bot.ability.memory.stm.turn', _event)"/>
         </transition>
         <transition event="error.*" target="idle">
@@ -280,16 +290,18 @@
 
       <!-- Read the stimuli inside the recency window, newest first. -->
       <state id="reading">
-        <invoke id="recent" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="recentStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recent">
+            <param name="id" expr="memory_requests.recent"/>
+            <param name="statements" expr="recentStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('recent')" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
           <send event="bot.ability.memory.stm.recent.output" target="#_parent">
             <param name="entries" expr="recentEntries(_event)"/>
           </send>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+        <transition event="bot.ability.failed" cond="isMemoryReply('recent')" event:schema="../schemas/bot.ability.failed.json" target="idle">
           <send event="bot.ability.failed" target="#_parent">
             <param name="message" expr="operationFailedMessage('bot.ability.memory.stm.recent', _event)"/>
           </send>
@@ -303,16 +315,18 @@
 
       <!-- Read the newest turns since the floor, answered oldest first. -->
       <state id="reading_turns">
-        <invoke id="recent_turns" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="recentTurnsStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recent_turns">
+            <param name="id" expr="memory_requests.recent_turns"/>
+            <param name="statements" expr="recentTurnsStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('recent_turns')" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
           <send event="bot.ability.memory.stm.recent_turns.output" target="#_parent">
             <param name="turns" expr="recentTurns(_event)"/>
           </send>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+        <transition event="bot.ability.failed" cond="isMemoryReply('recent_turns')" event:schema="../schemas/bot.ability.failed.json" target="idle">
           <send event="bot.ability.failed" target="#_parent">
             <param name="message" expr="operationFailedMessage('bot.ability.memory.stm.recent_turns', _event)"/>
           </send>
@@ -326,7 +340,7 @@
     </state>
   </state>
 
-  <!-- No database: ready, and holding nothing. -->
+  <!-- No memory: ready, and holding nothing. -->
   <state id="absent">
     <onentry>
       <log label="memory" expr="'absent'"/>

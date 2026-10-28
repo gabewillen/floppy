@@ -7,7 +7,7 @@ IGNORE = "bot.ability.cognition.ignore"
 RESPOND = "bot.ability.communication.respond"
 FOCUS = "bot.focus_device"
 LAMP = "lamp.on"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 
 OBJECT = {"type": "object", "properties": {}, "additionalProperties": False}
 # Respond's data is its parts, each with optional words (the reply schema's shape).
@@ -64,7 +64,7 @@ SKIP = {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": OWN}
 SAID = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'Hi! I am floppy.'")
 
 
-S.statement(1, "It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and database) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
+S.statement(1, "It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and memory) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
 S.statement(2, "With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.")
 S.statement(3, "With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
@@ -173,7 +173,7 @@ S.case(161, 7, "with a database and no choices, the recall still runs and the tu
        params=turn(choices=[], extra=[DB]))
 S.case(162, 7, "a database that cannot be opened fails the recall without a model call.",
        [failed_starting("Reasoning memory recall failed: ")],
-       params=turn(extra=[("database", "'/nowhere/floppy.sqlite'")]), backend=selection(SAY))
+       params=turn(extra=[memory("'/nowhere/floppy.sqlite'")]), backend=selection(SAY))
 
 _case(170, 8, "a streamed reply's progress reaches the parent before the turn ends, handled.",
       [expect("generate.progress", "_event.data.received > 0"), SAID,

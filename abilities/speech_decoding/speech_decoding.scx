@@ -3,24 +3,28 @@
   floppy's SpeechDecoding: speech to words through the speech service
   (services/speech, operation decode with provider "gemini": the Gemini
   API's POST {base}/interactions, decision D94). The interpretation
-  (abilities/interpretation/interpretation.scx) invokes it once per utterance from
-  DecodingSpeech; the interpretation's stage timer bounds it, and leaving
-  DecodingSpeech cancels it and the service call (SCXML 6.4).
+  (abilities/interpretation/interpretation.scx) invokes it once, as its
+  long-lived child speech_decoding (mosfet.py's Interpretation holds its
+  SpeechDecoding), and sends it each utterance from DecodingSpeech; the
+  interpretation's stage timer bounds each request.
 
-    applying (an invoked speech service) -> applied (final)
+    idle -bot.ability.hearing.speech.decoding.input-> applying -> idle
 
-  Input: the <param>s audio (a reference to the utterance's audio in the
-  directory the run grants the speech service), media_type, provider and
-  model (by default provider null, the OpenAI-compatible POST
-  {base}/audio/transcriptions, with the lab's Nemotron streaming model,
-  nemotron-speech-streaming-en-0.6b; provider gemini is Gemini's
-  Interactions API).
+  Configuration: the <param>s provider and model (by default provider
+  null, the OpenAI-compatible POST {base}/audio/transcriptions, with the
+  lab's Nemotron streaming model, nemotron-speech-streaming-en-0.6b;
+  provider gemini is Gemini's Interactions API).
 
-  Output: <donedata>, received by the interpretation as
-  done.invoke.speech_decoding: {text} (the decoded speech, as words)
-  when the service answers bot.ability.hearing.speech.decoding.output
-  {text}, or {message} (the failure) when it answers
-  bot.ability.failed {message}, answers something else, or cannot run.
+  Requests: bot.ability.hearing.speech.decoding.input {id, audio,
+  media_type?}: a reference to the utterance's audio in the directory the
+  run grants the speech service, and its media type. It answers its
+  parent with bot.ability.hearing.speech.decoding.output {id, text} (the
+  decoded speech, as words) when the service answers
+  bot.ability.hearing.speech.decoding.output {text}, or bot.ability.failed
+  {id, message} when the service answers bot.ability.failed {message},
+  answers something else, or cannot run. One utterance is decoded at a
+  time; a request that arrives while one is in flight replaces it
+  (leaving applying cancels its service call, SCXML 6.4).
 
   Bindings: the speech service package, resolved from its repository URI;
   env scopes FLOPPY_SPEECH_BASE_URL and FLOPPY_SPEECH_API_KEY to the
@@ -34,49 +38,66 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="speech_decoding" initial="applying">
+       version="1.0" datamodel="ecmascript" name="speech_decoding" initial="idle">
   <datamodel>
     <!-- The invoker's <param>s. -->
-    <data id="audio" expr="null"/>
-    <data id="media_type" expr="null"/>
     <data id="provider" expr="null"/>
     <data id="model" expr="'nemotron-speech-streaming-en-0.6b'"/>
-    <!-- The result. -->
-    <data id="output" expr="null"/>
+    <!-- The request being decoded. -->
+    <data id="request" expr="null"/>
+    <!-- The current service call's generated invoke ids: a cancelled call's
+         late events (still delivered, SCXML 6.4) are not this request's. -->
+    <data id="decoder" expr="null"/>
   </datamodel>
   <script src="speech_decoding.js"/>
 
+  <state id="idle">
+    <transition event="bot.ability.hearing.speech.decoding.input"
+                event:schema="../schemas/bot.ability.hearing.speech.decoding.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+  </state>
+
   <state id="applying">
-    <invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
+    <invoke idlocation="decoder" type="https://github.com/stateforward/floppy/services/speech"
             env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">
       <param name="operation" expr="'decode'"/>
       <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
-      <param name="audio" expr="audio"/>
-      <param name="media_type" expr="media_type"/>
+      <param name="audio" expr="request.audio"/>
+      <param name="media_type" expr="requestedMediaType()"/>
     </invoke>
-    <transition event="bot.ability.hearing.speech.decoding.output"
-                cond="hasDecodedText(_event)" target="applied">
-      <assign location="output" expr="decodedOutput(_event)"/>
+    <!-- A newer utterance replaces this one. -->
+    <transition event="bot.ability.hearing.speech.decoding.input"
+                event:schema="../schemas/bot.ability.hearing.speech.decoding.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-      <assign location="output" expr="failedOutput(_event)"/>
+    <transition event="bot.ability.hearing.speech.decoding.output" event:schema="../schemas/bot.ability.hearing.speech.decoding.output.json"
+                cond="_event.invokeid === decoder &amp;&amp; hasDecodedText(_event)" target="idle">
+      <send event="bot.ability.hearing.speech.decoding.output" target="#_parent">
+        <content expr="decodedOutput(_event)"/>
+      </send>
     </transition>
-    <transition event="done.invoke.decoder" target="applied">
-      <assign location="output" expr="undecodedOutput()"/>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === decoder" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="failedOutput(_event)"/>
+      </send>
     </transition>
-    <transition event="error.*" target="applied">
-      <assign location="output" expr="errorOutput(_event)"/>
+    <transition event="done.invoke" cond="_event.invokeid === decoder" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="undecodedOutput()"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="errorOutput(_event)"/>
+      </send>
     </transition>
     <!-- Anything else the decoder sends (the transitions above come first). -->
-    <transition event="*" target="applied">
-      <assign location="output" expr="mismatchedOutput()"/>
+    <transition event="*" cond="_event.invokeid === decoder" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="mismatchedOutput()"/>
+      </send>
     </transition>
   </state>
-
-  <final id="applied">
-    <donedata>
-      <content expr="output"/>
-    </donedata>
-  </final>
 </scxml>
