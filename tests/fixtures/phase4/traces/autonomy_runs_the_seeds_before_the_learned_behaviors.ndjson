@@ -3,6 +3,6 @@
 {"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
 {"label":"autonomy.candidate.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard (handled false)","type":"log"}
 {"label":"autonomy","parent":"session","session":"session.autonomy","text":"turn 2: 1 matched for bot.ability.listening.speech.output","type":"log"}
-{"label":"autonomy.candidate","parent":"session.autonomy","session":"session.autonomy.candidates","text":"Double","type":"log"}
-{"label":"behavior.double","parent":"session.autonomy.candidates","session":"session.autonomy.candidates.candidate","text":"turn 2","type":"log"}
+{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"Double","type":"log"}
+{"label":"behavior.double","parent":"session.autonomy","session":"session.autonomy.candidate","text":"turn 2","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\",\"Double\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"behavior: ignore\",\"target\":\"session\"}],\"turn\":2}","type":"log"}
