@@ -1325,8 +1325,8 @@ fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_or_a_srcexpr() {
     }
     for refused in [
         r#"<invoke type="scxml" srcexpr="behavior"/>"#,
-        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
-        r#"<invoke id="candidate" type="scxml"><content>text</content></invoke>"#,
+        r#"<invoke id="service" type="scxml"><content expr="source"/></invoke>"#,
+        r#"<invoke id="service" type="scxml"><content>text</content></invoke>"#,
         r#"<invoke id="child" type="scxml" src="/abs/child.scx"/>"#,
         r#"<invoke id="child" type="scxml" src="https://example.com/child.scx"/>"#,
     ] {

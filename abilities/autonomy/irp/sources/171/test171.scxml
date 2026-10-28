@@ -18,7 +18,7 @@
       <send event="bot.ability.processing.cancel" target="#_autonomy"><content expr="{}"/></send>
       <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 13, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}}'/></send>
     </onentry>
-    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 13 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 13 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.services) === "[]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

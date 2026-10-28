@@ -17,7 +17,7 @@ pins. `scripts/build-components.sh` builds, virtualizes and checks the
 component (imports: `types`, `telemetry`, `data-model-host`) and publishes
 it into the dev package cache. Autonomy
 ([`abilities/autonomy/autonomy.scx`](../../abilities/autonomy/autonomy.scx))
-runs its candidates with it, and the reflection
+runs its services with it, and the reflection
 ([`abilities/reflection/reflection.scx`](../../abilities/reflection/reflection.scx))
 tells the builder with it what a turn behavior will run with.
 

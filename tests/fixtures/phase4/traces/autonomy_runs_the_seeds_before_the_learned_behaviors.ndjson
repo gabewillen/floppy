@@ -1,8 +1,8 @@
-{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
+{"label":"autonomy.service","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{\"channels\":1,\"content\":\"what is the weather like?\",\"content_type\":\"text/plain\",\"parent\":{\"data\":{\"channels\":1,\"content\":\"what is the weather like?\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"sample_rate_hz\":48000,\"source_ids\":[\"caller\"],\"voice_detection\":{\"segments\":[{\"confidence\":0.9,\"end_seconds\":0.4,\"start_seconds\":0}]}},\"event\":\"bot.ability.listening.speech.output\"},\"sample_rate_hz\":48000,\"source_ids\":[\"caller\"],\"target_ids\":[]},\"event\":\"bot.ability.communication.input\",\"reason\":\"seeded speech admit via communication\"}],\"turn\":1}","type":"log"}
-{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard (handled false)","type":"log"}
+{"label":"autonomy.service","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
+{"label":"autonomy.service.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard (handled false)","type":"log"}
 {"label":"autonomy","parent":"session","session":"session.autonomy","text":"turn 2: 1 matched for bot.ability.listening.speech.output","type":"log"}
-{"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"Double","type":"log"}
-{"label":"behavior.double","parent":"session.autonomy","session":"session.autonomy.candidate","text":"turn 2","type":"log"}
+{"label":"autonomy.service","parent":"session","session":"session.autonomy","text":"Double","type":"log"}
+{"label":"behavior.double","parent":"session.autonomy","session":"session.autonomy.service","text":"turn 2","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\",\"Double\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{},\"event\":\"bot.ability.cognition.ignore\",\"reason\":\"behavior: ignore\",\"target\":\"session\"}],\"turn\":2}","type":"log"}

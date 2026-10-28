@@ -1019,7 +1019,7 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
 }
 
 /// Autonomy over the inventory: the ACTIVE turn behaviors the
-/// stimulus triggers run in name order as candidates (the behavior double,
+/// stimulus triggers run in name order as services (the behavior double,
 /// `tests/fixtures/phase4/behavior_double.scx`, is one); a silent one, one
 /// that declines and one that cannot run advance, and the first that
 /// handles the turn answers it before the decision layer runs. A DRAFT behavior and
@@ -1189,15 +1189,15 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         strings(&["turn 1: 4 matched for bot.input"])
     );
     assert_eq!(
-        texts(&records, "autonomy.candidate"),
+        texts(&records, "autonomy.service"),
         strings(&["Asilent", "Bdeclines", "Cbroken", "Ddouble"])
     );
     assert_eq!(
-        texts(&records, "autonomy.candidate.silent"),
+        texts(&records, "autonomy.service.silent"),
         strings(&["Asilent after 1000 ms"])
     );
     assert_eq!(
-        texts(&records, "autonomy.candidate.advance"),
+        texts(&records, "autonomy.service.advance"),
         strings(&["Bdeclines (handled false)"])
     );
     assert_eq!(texts(&records, "behavior.double"), strings(&["turn 1"]));
@@ -1260,7 +1260,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let records = until_turn_ended(&run, 1);
     let message = "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)";
     assert_eq!(
-        texts(&records, "autonomy.candidate.failed"),
+        texts(&records, "autonomy.service.failed"),
         strings(&[&format!("Unoffered ({message})")])
     );
     assert_eq!(
@@ -3010,7 +3010,7 @@ fn admitted(turn: u64) -> Json {
             },
             "reason": "seeded speech admit via communication",
         }],
-        "candidates": ["SpeechHeard"],
+        "services": ["SpeechHeard"],
         "reason": "behavior",
     })
 }
@@ -3041,7 +3041,7 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     assert!(admits(COMMUNICATION_INPUT, &first["selected"][0]["data"]));
     assert_eq!(
         autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
-        json!({"turn": 2, "handled": false, "candidates": ["SpeechHeard"], "reason": "unhandled"})
+        json!({"turn": 2, "handled": false, "services": ["SpeechHeard"], "reason": "unhandled"})
     );
     assert_eq!(
         autonomy_turn(
@@ -3050,15 +3050,15 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
             "bot.input",
             &json!({"observation": {"event": "text", "data": "hello"}})
         ),
-        json!({"turn": 3, "handled": false, "candidates": [], "reason": "no-behaviors"})
+        json!({"turn": 3, "handled": false, "services": [], "reason": "no-behaviors"})
     );
     let finished = run.close(WAIT);
     assert_eq!(
-        texts(&finished.all, "autonomy.candidate"),
+        texts(&finished.all, "autonomy.service"),
         strings(&["SpeechHeard", "SpeechHeard"])
     );
     assert_eq!(
-        texts(&finished.all, "autonomy.candidate.advance"),
+        texts(&finished.all, "autonomy.service.advance"),
         strings(&["SpeechHeard (handled false)"])
     );
     trace::assert_trace(
@@ -3106,13 +3106,13 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
             "turn": 2,
             "handled": true,
             "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": "session"}],
-            "candidates": ["SpeechHeard", "Double"],
+            "services": ["SpeechHeard", "Double"],
             "reason": "behavior",
         })
     );
     let finished = run.close(WAIT);
     assert_eq!(
-        texts(&finished.all, "autonomy.candidate"),
+        texts(&finished.all, "autonomy.service"),
         strings(&["SpeechHeard", "SpeechHeard", "Double"])
     );
     assert_eq!(

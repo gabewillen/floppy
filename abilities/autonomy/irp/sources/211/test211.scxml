@@ -28,7 +28,7 @@
     <transition event="bot.say" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 3 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;behavior&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;Focus\&quot;]&quot; &amp;&amp; _event.data.selected[0].event === 'bot.focus_device' &amp;&amp; _event.data.selected[1].event === 'bot.say'" target="step4"/>
+    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 3 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;behavior&quot; &amp;&amp; JSON.stringify(_event.data.services) === &quot;[\&quot;Focus\&quot;]&quot; &amp;&amp; _event.data.selected[0].event === 'bot.focus_device' &amp;&amp; _event.data.selected[1].event === 'bot.say'" target="step4"/>
   </state>
   <state id="step4">
     <transition target="pass"/>
