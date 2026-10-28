@@ -20,9 +20,13 @@
   (mosfet.py's speech_server defaults), product_threshold_db 3 dB (the
   interpretation's), open_timeout_ms 30 s (mosfet.py's stage timeout),
   the backoff first_backoff_ms 1 s doubled up to last_backoff_ms 30 s
-  (mosfet.py's speech_server backoff), and max_turn_frames 1500, the most
+  (mosfet.py's speech_server backoff), max_turn_frames 200, the most
   sounds a turn keeps for identifying who spoke (older ones are let go,
-  as mosfet.py's max_turn lets older audio go).
+  as mosfet.py's max_turn lets older audio go; 20 s of the talk scripts'
+  100 ms sounds, within what the speech service joins at once), and
+  lead_frames 10, the most it keeps before the turn's voice starts (1 s
+  of them: what was heard before, silence or the bot's own talk, is not
+  joined, diarized and identified with the turn).
 
   Session: Streaming invokes the speech service (operation stream,
   env:baseurl FLOPPY_SPEECH_BASE_URL and env:apikey
@@ -52,7 +56,8 @@
   (mosfet.py W3-11; the interpretation's gate). Each streamed sound joins
   the turn: the 16 kHz PCM the session wrote for it to output
   (floppy-heard-N.pcm beside the sound, a ring of twice max_turn_frames
-  files; the frame the interpretation joins into the utterance), the
+  files; the frame the interpretation joins into the utterance; until a
+  voice_started only the last lead_frames are kept), the
   loudest scored sound, and the ordered union of the
   participants stamped on it (each {ref, role} once, at most 32). The
   session's transcript {text, confidence} joins the turn's words, and
@@ -64,7 +69,9 @@
   confidence, frames, sensed, voice_detection, participants}: its words
   (turn_ended's text, else its transcripts joined), the lowest
   transcript confidence, its sounds, its loudest scored sound, its voice
-  spans in seconds from the turn's start (the previous turn's end), and
+  spans in seconds from its first kept sound (the previous turn's end,
+  past the sounds let go, each taken as an equal share of the turn's
+  time), and
   its participants. The listening hands it to the interpretation, which
   joins the frames and identifies who spoke and hears the tone, as it
   does for an utterance it decoded, and hands on one speech product. A
@@ -96,7 +103,8 @@
     <data id="open_timeout_ms" expr="30000"/>
     <data id="first_backoff_ms" expr="1000"/>
     <data id="last_backoff_ms" expr="30000"/>
-    <data id="max_turn_frames" expr="1500"/>
+    <data id="max_turn_frames" expr="200"/>
+    <data id="lead_frames" expr="10"/>
     <!-- The session: whether one was ever ready, the next backoff, and
          what it was last told about the bot's mouth (null: nothing). -->
     <data id="announced" expr="false"/>
@@ -111,6 +119,8 @@
     <data id="transcripts" expr="[]"/>
     <data id="spans" expr="[]"/>
     <data id="turn_started_at" expr="0"/>
+    <!-- How many sounds were streamed when the turn started. -->
+    <data id="turn_heard_from" expr="0"/>
     <data id="turn" expr="null"/>
   </datamodel>
   <script src="transcription.js"/>
@@ -210,6 +220,7 @@
           </send>
         </if>
         <assign location="turn_started_at" expr="_event.data.at_seconds"/>
+        <assign location="turn_heard_from" expr="heard_count"/>
         <assign location="frames" expr="[]"/>
         <assign location="loudest" expr="null"/>
         <assign location="participants" expr="[]"/>
@@ -229,6 +240,7 @@
       <assign location="transcripts" expr="[]"/>
       <assign location="spans" expr="[]"/>
       <assign location="turn_started_at" expr="0"/>
+      <assign location="turn_heard_from" expr="heard_count"/>
       <send id="backoff-timer" event="Reconnecting.after" delayexpr="delay(backoff_ms)"/>
     </onentry>
     <onexit>

@@ -149,7 +149,8 @@ turn-taking; decision D270). From the lab, `http://192.168.2.2:8090/v1` serves t
 | `abilities/transcription/transcription.scx` | `open_timeout_ms` | `30000` | opening a streaming hearing session; the first one not open by then ends the transcription, so the listening hears through the interpretation (decision D270) |
 | `abilities/transcription/transcription.scx` | `first_backoff_ms` | `1000` | the wait before reopening a lost session, doubled each time it is lost again (mosfet.py's speech server backoff) |
 | `abilities/transcription/transcription.scx` | `last_backoff_ms` | `30000` | the longest wait before reopening a lost session |
-| `abilities/transcription/transcription.scx` | `max_turn_frames` | `1500` | the most sounds a streamed turn keeps for identifying who spoke |
+| `abilities/transcription/transcription.scx` | `max_turn_frames` | `200` | the most sounds a streamed turn keeps for identifying who spoke (20 s of the talk scripts' 100 ms sounds, within what the speech service joins at once) |
+| `abilities/transcription/transcription.scx` | `lead_frames` | `10` | the most sounds a streamed turn keeps before its voice starts |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage |
 | `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (decision D177) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs |

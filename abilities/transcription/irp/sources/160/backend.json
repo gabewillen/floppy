@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [],
+  "websocket": [
+    [
+      [
+        {
+          "type": "ready"
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          "type": "speech_start",
+          "t": 0.2
+        },
+        {
+          "type": "speech_end",
+          "t": 0.3
+        },
+        {
+          "type": "final",
+          "text": "late",
+          "confidence": 0.9,
+          "words": [],
+          "t": 0.3
+        },
+        {
+          "type": "turn_end",
+          "reason": "eot",
+          "p": 0.9,
+          "text": "late",
+          "t": 0.3
+        }
+      ]
+    ]
+  ]
+}

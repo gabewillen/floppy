@@ -45,6 +45,7 @@ S.statement(3, "The bot's own voice arriving as predicted (`producing`, with a `
 S.statement(4, "A turn without words is let go; what is heard from then on is the next turn's.")
 S.statement(5, "A session lost before its first ready (here, a backend that does not stream) ends the transcription in its final state `unavailable`, logged (`transcription`), so the parent hears through the interpretation; so does `enabled` false, at once and unlogged, and a session that does not open within `open_timeout_ms`.")
 S.statement(6, "A session lost after it was ready is logged, and after the backoff (`first_backoff_ms`, doubling up to `last_backoff_ms`) a new one is opened, with no second `bot.ability.ready`; the turn it was hearing is lost.")
+S.statement(7, "Until the turn's voice starts (a `voice_started`) only its last `lead_frames` sounds are kept, and its voice spans are measured from its first kept sound, each sound taken as an equal share of the turn's time; past `max_turn_frames` its oldest sounds are let go.")
 
 S.case(100, 1, "the transcription is ready once its session is.", [READY], backend=[], websocket=[[[READY_FRAME]]])
 
@@ -81,3 +82,13 @@ S.case(150, 6, "a session lost after it was ready is reopened after the backoff,
        params=[("first_backoff_ms", "10")], backend=[],
        websocket=[[[READY_FRAME], [{"type": "error", "message": "gone"}]], [[READY_FRAME], said("again")]],
        logs={"transcription": ["the streaming session was lost (unavailable); reconnecting in 10 ms"]})
+
+S.case(160, 7, "sounds heard before the voice starts are let go past lead_frames; the spans start at the first kept sound.",
+       [READY, scored("voiced.wav"), scored("voiced.wav"), scored("voiced2.wav"),
+        expect(TURN, "_event.data.text === 'late' && _event.data.frames.length === 1"
+                     " && _event.data.frames[0].audio === 'media/floppy-heard-2.pcm'"
+                     " && _event.data.voice_detection.segments.length === 1"
+                     " && Math.abs(_event.data.voice_detection.segments[0].start_seconds) < 1e-9"
+                     " && Math.abs(_event.data.voice_detection.segments[0].end_seconds - 0.1) < 1e-9")],
+       params=[("lead_frames", "1")], backend=[],
+       websocket=[[[READY_FRAME], [], [], said("late", 0.2, 0.3)]])
