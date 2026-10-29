@@ -885,3 +885,148 @@ fn live_speech_round_trip_through_an_env_file() {
         "the decoding heard the sentence"
     );
 }
+
+/// A fake speech socket (api.willen.dev's `GET /v1/audio/speech`): it says
+/// `ready` once open, records each text frame, and answers each
+/// `{"type":"flush"}` with a tenth of a second of 24 kHz mono 16-bit PCM
+/// (4800 bytes) and `done`; `{"type":"end"}` closes it. Any other request
+/// answers 404.
+fn speech_socket() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) {
+    use support::hearing::stream::{accept_key, read_frame, write_frame};
+    let listener = TcpListener::bind("127.0.0.1:0").expect("the mock binds a loopback port");
+    let origin = format!(
+        "http://{}",
+        listener.local_addr().expect("the mock has an address")
+    );
+    let frames = Arc::new(Mutex::new(Vec::new()));
+    let log = Arc::clone(&frames);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).is_err() {
+                continue;
+            }
+            let mut key = None;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.trim_end().split_once(':')
+                    && name.trim().eq_ignore_ascii_case("sec-websocket-key")
+                {
+                    key = Some(value.trim().to_owned());
+                }
+            }
+            let (Some(key), true) = (key, request_line.starts_with("GET /v1/audio/speech ")) else {
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                );
+                continue;
+            };
+            let _ = write!(
+                stream,
+                "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: {}\r\n\r\n",
+                accept_key(&key)
+            );
+            write_frame(
+                &mut stream,
+                1,
+                br#"{"type":"ready","sample_rate":24000,"channels":1,"sample_format":"s16le"}"#,
+            );
+            while let Some((opcode, payload)) = read_frame(&mut stream) {
+                if opcode != 1 {
+                    break;
+                }
+                let frame: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
+                log.lock().expect("the log lock").push(frame.clone());
+                match frame["type"].as_str() {
+                    Some("flush") => {
+                        write_frame(&mut stream, 2, &[0_u8; 4800]);
+                        write_frame(&mut stream, 1, br#"{"type":"done"}"#);
+                    }
+                    Some("end") => break,
+                    _ => {}
+                }
+            }
+        }
+    });
+    (origin, frames)
+}
+
+/// A drafted encoding (decision D262) goes to the backend's speech socket
+/// word by word as it is written, as mosfet.py gives `ElevenLabs` its
+/// stream-input: the first input names the model, voice and format, the
+/// whole reply ends with a flush, and the audio the socket says is the
+/// encoding's.
+#[test]
+fn a_drafted_encoding_streams_every_word_to_the_speech_socket() {
+    let (origin, frames) = speech_socket();
+    let (media, args) = granted("socket", &format!("{origin}/v1"), &[]);
+    let document = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="speaking">
+  <state id="speaking">
+    <invoke id="speech" type="{service}" env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
+      <param name="operation" expr="'encode'"/>
+      <param name="model" expr="'tts-1'"/>
+      <param name="voice" expr="'alloy'"/>
+      <param name="output" expr="'media/said.pcm'"/>
+      <param name="media_type" expr="'audio/pcm'"/>
+    </invoke>
+    <transition event="bot.ability.ready">
+      <send event="bot.ability.speaking.draft" target="#_speech"><content expr="({{part: 0, words: 'Hello there. ', offset: 0}})"/></send>
+      <send event="bot.ability.speaking.draft" target="#_speech"><content expr="({{part: 0, words: 'How are you?', offset: 13}})"/></send>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_speech"><content expr="({{parts: [{{words: 'Hello there. How are you?'}}]}})"/></send>
+    </transition>
+    <transition event="bot.ability.*"><log label="event" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+    <transition event="done.invoke.speech" target="done"/>
+  </state>
+  <final id="done"><onentry><log label="final" expr="'done'"/></onentry></final>
+</scxml>"##,
+        service = speech()
+    );
+    let finished = run_document("socket.scx", &document, &args, &[], Duration::from_secs(60));
+    let logged = events(&finished);
+    assert_eq!(
+        logged.last(),
+        Some(&("final".to_owned(), "done".to_owned())),
+        "{}",
+        finished.stderr
+    );
+    assert!(
+        logged.iter().any(|(_, text)| text
+            == r#"bot.ability.vocal.speech.encoding.output {"audio":"media/said.pcm","channels":1,"duration":0.1,"media_type":"audio/pcm","sample_rate_hz":24000}"#),
+        "{logged:?}"
+    );
+    assert_eq!(
+        std::fs::read(media.join("said.pcm")).expect("the audio is written"),
+        vec![0_u8; 4800]
+    );
+    let frames = frames.lock().expect("the log lock").clone();
+    let inputs: Vec<&serde_json::Value> = frames
+        .iter()
+        .filter(|frame| frame.get("input").is_some())
+        .collect();
+    assert_eq!(inputs[0]["model"], "tts-1", "{frames:?}");
+    assert_eq!(inputs[0]["voice"], "alloy");
+    assert_eq!(inputs[0]["response_format"], "pcm");
+    assert!(
+        inputs[1..].iter().all(|input| input.get("voice").is_none()),
+        "{frames:?}"
+    );
+    let said: String = inputs
+        .iter()
+        .filter_map(|input| input["input"].as_str())
+        .collect();
+    assert_eq!(said, "Hello there. How are you?");
+    let types: Vec<&str> = frames
+        .iter()
+        .filter_map(|frame| frame["type"].as_str())
+        .collect();
+    assert_eq!(types, ["flush", "end"], "{frames:?}");
+}
