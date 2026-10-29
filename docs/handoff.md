@@ -7,7 +7,7 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-28.
+Last updated: 2026-10-29.
 
 ## Current state (2026-10-09) — resume here
 

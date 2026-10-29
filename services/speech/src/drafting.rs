@@ -10,7 +10,10 @@
 //! ([`Drafting::next_request`]): the words up to the last sentence that has ended
 //! (a `.`, `!`, `?` or `…`, with any closing quotes or brackets, followed
 //! by white space), or, past [`MAX_RUN_BYTES`] with no sentence ended, up
-//! to the last white space; a part that pauses opens a request of its
+//! to the last white space; the reply's first request, before any sentence
+//! ended, is also ready through a clause that ended (a `,`, `;`, `:` or `—`
+//! followed by white space) after at least [`MIN_CLAUSE_WORDS`] words, so
+//! the voice starts on the first words; a part that pauses opens a request of its
 //! own, its pause before its words; and, once the whole reply is known,
 //! everything left.
 //!
@@ -39,6 +42,12 @@ pub const FINAL_EVENT: &str = "bot.ability.vocal.speech.encoding.input";
 /// The most unsaid bytes held for a sentence to end: past them, the words
 /// up to the last white space are said.
 pub const MAX_RUN_BYTES: usize = 240;
+
+/// The fewest words the reply's first request says at a clause's end (a
+/// `,`, `;`, `:` or `—` followed by white space) before any sentence ended,
+/// so the voice starts on the reply's first words instead of waiting for
+/// its first sentence.
+pub const MIN_CLAUSE_WORDS: usize = 3;
 
 /// One part of the reply: the pause that opens it and its words so far.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -171,19 +180,27 @@ impl Drafting {
             let first = self.parts.get(self.part)?;
             // A part's pause is said with its first words.
             let pause = if self.byte > 0 { None } else { first.pause };
-            // The words from here to the next part that pauses.
+            // The words from here to the next part that pauses, and where
+            // each later part begins in them.
             let mut words = first.words.get(self.byte..).unwrap_or_default().to_owned();
+            let mut starts = Vec::new();
             let mut last = self.part;
             for (index, part) in self.parts.iter().enumerate().skip(self.part + 1) {
                 if part.pause.is_some() {
                     break;
                 }
+                starts.push(words.len());
                 words.push_str(&part.words);
                 last = index;
             }
             // Ended by a later part that pauses, or by the whole reply.
             let closed = self.settled || last + 1 < self.parts.len();
-            let take = if closed { words.len() } else { ready(&words) };
+            let first_request = self.part == 0 && self.byte == 0;
+            let take = if closed {
+                words.len()
+            } else {
+                ready(&words, &starts, first_request)
+            };
             if take == 0 {
                 if closed {
                     self.part = last + 1;
@@ -227,26 +244,60 @@ impl Drafting {
 
 /// The bytes of `words` ready to say before the reply is whole: through
 /// the last sentence that ended, or, past [`MAX_RUN_BYTES`] with none, to
-/// the last white space; 0 when none is ready.
-fn ready(words: &str) -> usize {
+/// the last white space; 0 when none is ready. For the reply's `first`
+/// request with no sentence ended, through the last clause that ended
+/// after at least [`MIN_CLAUSE_WORDS`] words. A later part begins at each
+/// of `starts` (byte offsets); the parts are joined exactly as written, so
+/// a part's end counts as white space.
+fn ready(words: &str, starts: &[usize], first: bool) -> usize {
     let mut ended = 0;
+    let mut clause = 0;
     let mut space = 0;
+    let mut spoken = 0_usize;
+    let mut in_word = false;
     let mut terminated = false;
-    for (at, character) in words.char_indices() {
-        if character.is_whitespace() {
-            let after = at + character.len_utf8();
+    let mut paused = false;
+    // Each character, after a `None` where a later part begins.
+    let characters = words.char_indices().flat_map(|(at, character)| {
+        let begins = starts.contains(&at).then_some((at, None));
+        begins.into_iter().chain([(at, Some(character))])
+    });
+    for (at, character) in characters {
+        let after = match character {
+            None => Some(at),
+            Some(character) if character.is_whitespace() => Some(at + character.len_utf8()),
+            Some(_) => None,
+        };
+        if let Some(after) = after {
             if terminated {
                 ended = after;
+            } else if paused && spoken >= MIN_CLAUSE_WORDS {
+                clause = after;
             }
             space = after;
             terminated = false;
-        } else if matches!(character, '.' | '!' | '?' | '…') {
-            terminated = true;
-        } else if !matches!(character, '"' | '\'' | ')' | ']' | '”' | '’' | '»') {
-            terminated = false;
+            paused = false;
+            in_word = false;
+        } else if let Some(character) = character {
+            if !in_word {
+                spoken += 1;
+                in_word = true;
+            }
+            if matches!(character, '.' | '!' | '?' | '…') {
+                terminated = true;
+                paused = false;
+            } else if matches!(character, ',' | ';' | ':' | '—') {
+                paused = true;
+                terminated = false;
+            } else if !matches!(character, '"' | '\'' | ')' | ']' | '”' | '’' | '»') {
+                terminated = false;
+                paused = false;
+            }
         }
     }
-    if ended == 0 && words.len() > MAX_RUN_BYTES {
+    if ended == 0 && first && clause > 0 {
+        clause
+    } else if ended == 0 && words.len() > MAX_RUN_BYTES {
         space
     } else {
         ended
@@ -255,7 +306,7 @@ fn ready(words: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{Drafting, MAX_RUN_BYTES, ready};
+    use super::{Drafting, MAX_RUN_BYTES, MIN_CLAUSE_WORDS, ready};
     use crate::{Pause, Stretch};
     use serde_json::json;
 
@@ -272,13 +323,39 @@ mod tests {
 
     #[test]
     fn a_sentence_is_ready_once_white_space_follows_its_end() {
-        assert_eq!(ready("Hello there"), 0);
-        assert_eq!(ready("Hello there."), 0);
-        assert_eq!(ready("Hello there. How"), "Hello there. ".len());
-        assert_eq!(ready("Wow!\" Then? Yes"), "Wow!\" Then? ".len());
-        assert_eq!(ready("3.5 is a number"), 0);
+        assert_eq!(ready("Hello there", &[], false), 0);
+        assert_eq!(ready("Hello there.", &[], false), 0);
+        assert_eq!(ready("Hello there. How", &[], false), "Hello there. ".len());
+        assert_eq!(ready("Wow!\" Then? Yes", &[], false), "Wow!\" Then? ".len());
+        assert_eq!(ready("3.5 is a number", &[], false), 0);
         let run = "word ".repeat(MAX_RUN_BYTES / 5 + 1);
-        assert_eq!(ready(&format!("{run}x")), run.len());
+        assert_eq!(ready(&format!("{run}x"), &[], false), run.len());
+    }
+
+    #[test]
+    fn the_first_request_is_ready_at_a_clause_of_enough_words() {
+        assert_eq!(MIN_CLAUSE_WORDS, 3);
+        assert_eq!(ready("Well, sure", &[], true), 0);
+        assert_eq!(
+            ready("Mount Everest, at 8,849 meters, is", &[], true),
+            "Mount Everest, at 8,849 meters, ".len()
+        );
+        assert_eq!(ready("Mount Everest, at 8,849 meters, is", &[], false), 0);
+        assert_eq!(
+            ready("Sure thing. Mount Everest, at", &[], true),
+            "Sure thing. ".len()
+        );
+        let mut drafting = Drafting::default();
+        drafting.draft(&json!({"part": 0, "words": "Oh, the tallest one; it is", "offset": 0}));
+        assert_eq!(said(&mut drafting), [words("Oh, the tallest one; ")]);
+        drafting.draft(&json!({"part": 0, "words": " Everest, at", "offset": 26}));
+        assert!(said(&mut drafting).is_empty());
+        drafting
+            .settle(&[json!({"words": "Oh, the tallest one; it is Everest, at 8,849 meters."})]);
+        assert_eq!(
+            said(&mut drafting),
+            [words("it is Everest, at 8,849 meters.")]
+        );
     }
 
     #[test]
@@ -293,6 +370,25 @@ mod tests {
         assert!(!drafting.finished());
         drafting.settle(&[json!({"words": "Hi there. How are you? I am fine."})]);
         assert_eq!(said(&mut drafting), [words("I am fine.")]);
+        assert!(drafting.finished());
+    }
+
+    #[test]
+    fn a_sentence_that_ends_a_part_is_ready_once_the_next_part_begins() {
+        let mut drafting = Drafting::default();
+        drafting
+            .draft(&json!({"part": 0, "words": "That is a great question, Gabe!", "offset": 0}));
+        assert_eq!(said(&mut drafting), [words("That is a great question, ")]);
+        drafting.draft(&json!({"part": 1, "words": "Mount Everest is", "offset": 0}));
+        assert_eq!(said(&mut drafting), [words("Gabe!")]);
+        drafting.settle(&[
+            json!({"words": "That is a great question, Gabe!"}),
+            json!({"words": "Mount Everest is the highest."}),
+        ]);
+        assert_eq!(
+            said(&mut drafting),
+            [words("Mount Everest is the highest.")]
+        );
         assert!(drafting.finished());
     }
 
