@@ -5,15 +5,15 @@
   holds its Autonomy (decision D272), and hands it each turn first. It
   runs the trusted seeds the turn's stimulus triggers, then recalls the
   learned turn behaviors whose triggers name the stimulus, and runs them
-  one at a time as candidates; the first that handles the turn answers it,
+  one at a time as services; the first that handles the turn answers it,
   and otherwise the cascade goes on to intuition.
 
     idle -bot.ability.autonomy.input-> working {
     percept { matching -> [seeding] -> inventory -> loading -> matched -> running {
-                running_candidate -> dispatching -> using -> percept_handled
-                running_candidate | dispatching -> recording_failure -> recorded_failure
+                running_service -> dispatching -> using -> percept_handled
+                running_service | dispatching -> recording_failure -> recorded_failure
                 recorded_failure -> failed | advancing
-                running_candidate -> advancing -> running_candidate (the next one) | percept_unhandled } }
+                running_service -> advancing -> running_service (the next one) | percept_unhandled } }
        |  (each percept, in arrival order)
        v
     percept_handled | percept_unhandled -> next_percept -> percept (the next one)
@@ -54,27 +54,27 @@
   triggered by
   bot.ability.listening.speech.output, runs as the child "seed" with the
   <param>s turn, input and stimulus (its input_adapter keeps the
-  cognition's input unchanged). It answers as a candidate does: handled
-  answers {turn, handled: true, selected, candidates, reason: "behavior"}
+  cognition's input unchanged). It answers as a service does: handled
+  answers {turn, handled: true, selected, services, reason: "behavior"}
   with no usage persisted (a seed is not an inventory row); not handled,
   or silent within silence_ms, goes on to the inventory; an error.* for it
   fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...").
-  candidates names it first. A seed's selections are trusted (they may name
+  services names it first. A seed's selections are trusted (they may name
   any event a recipient declares, not only the offered ones) and name no
   target: the turn's output carries them to the body, which sends itself
   the ones that name no target (its own bot.ability.communication.input).
 
   Matching: one memory transaction per percept selects the ACTIVE behaviors of lifetime 'turn' that have a
   trigger equal to the percept's event name, in inventory order (by name).
-  No match answers {turn, handled: false, candidates: [], reason:
+  No match answers {turn, handled: false, services: [], reason:
   "no-behaviors"}.
 
-  Candidates (decision D93): running tries them one at a time, in
+  Services (decision D93): running tries them one at a time, in
   inventory order (decision D273; they were a chain of candidates_runner
   children before). Each behavior's source is
   the path of its SCXML document (phase 5 plan, "Turn Behavior Contract"),
   which the builder wrote beside its schema file and script (decision
-  D121), run in running_candidate as the child "candidate" by <invoke srcexpr>, with the <param>s
+  D121), run in running_service as the child "service" by <invoke srcexpr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
   focus and focus_candidates: <autonomy:behavior_input_payload>). It answers by
@@ -82,16 +82,16 @@
     * handled with selections: dispatching sends each to the session its
       target names (decision D113; a learned behavior names its targets,
       the session ids of its turn's selections). Sent, its used_count and
-      last_used_at are persisted, then autonomy answers {turn, handled: true, selected, candidates,
+      last_used_at are persisted, then autonomy answers {turn, handled: true, selected, services,
       reason: "behavior"}. A send that fails, its failed_count and
       last_failed_at are persisted and autonomy fails with the failure's
       message, so the turn fails;
-    * not handled (candidate.advance), or no answer within silence_ms
-      (candidate.silent, decision D74): the next one runs;
-    * an error.* for it (candidate.failed): its failed_count and
+    * not handled (service.advance), or no answer within silence_ms
+      (service.silent, decision D74): the next one runs;
+    * an error.* for it (service.failed): its failed_count and
       last_failed_at are persisted, then the next one runs.
-  When none handles the turn: {turn, handled: false, candidates, reason:
-  "unhandled"}. candidates names the behaviors tried, in order.
+  When none handles the turn: {turn, handled: false, services, reason:
+  "unhandled"}. services names the behaviors tried, in order.
 
   Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
   with its statements. A transaction that fails or
@@ -101,12 +101,12 @@
   (autonomy.behavior_usage.persistence_failed).
 
   Timers: seeding and loading are entered once per percept, and
-  running_candidate, using and recording_failure once per candidate, so each
-  cancels its own timer on exit, and a later percept's or candidate's
+  running_service, using and recording_failure once per service, so each
+  cancels its own timer on exit, and a later percept's or service's
   state never takes an earlier one's.
 
   Contracts: the Memory ability's events reference abilities/schemas/ by
-  event:schema. A candidate is builder output, loaded from its path with
+  event:schema. A service is builder output, loaded from its path with
   the schema file and script beside it.
 
   Bindings: the autonomy namespace package (the Memory ability binds the
@@ -139,10 +139,10 @@
     <data id="view" expr="null"/>
     <data id="handled" expr="[]"/>
     <data id="selected" expr="[]"/>
-    <!-- The candidates left to try ([{name, source}], the first running),
-         the handled candidate's selection being sent (the <foreach> item),
+    <!-- The services left to try ([{name, source}], the first running),
+         the handled service's selection being sent (the <foreach> item),
          and why its dispatch failed (null when sent). -->
-    <data id="candidates" expr="[]"/>
+    <data id="services" expr="[]"/>
     <data id="s" expr="null"/>
     <data id="rejection" expr="null"/>
     <!-- The turn's answer, sent to the cognition. -->
@@ -200,8 +200,8 @@
       <state id="seeding">
         <onentry>
           <assign location="tried" expr="triedWithSeed()"/>
-          <log label="autonomy.candidate" expr="'SpeechHeard'"/>
-          <send id="seed-silence" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+          <log label="autonomy.service" expr="'SpeechHeard'"/>
+          <send id="seed-silence" event="bot.ability.autonomy.service.silent" delayexpr="silenceDelay()"/>
         </onentry>
         <onexit>
           <cancel sendid="seed-silence"/>
@@ -215,10 +215,10 @@
           <assign location="answer" expr="_event.data.selected"/>
         </transition>
         <transition event="done.invoke.seed" target="inventory">
-          <log label="autonomy.candidate.advance" expr="seedAdvanceLog(_event)"/>
+          <log label="autonomy.service.advance" expr="seedAdvanceLog(_event)"/>
         </transition>
-        <transition event="bot.ability.autonomy.candidate.silent" target="inventory">
-          <log label="autonomy.candidate.silent" expr="seedSilentLog()"/>
+        <transition event="bot.ability.autonomy.service.silent" target="inventory">
+          <log label="autonomy.service.silent" expr="seedSilentLog()"/>
         </transition>
         <transition event="error.*" target="failed">
           <assign location="answer" expr="seedFailedReason(_event)"/>
@@ -276,46 +276,46 @@
         <transition target="running"/>
       </state>
 
-      <!-- The candidates, one at a time (decision D93). -->
-      <state id="running" initial="running_candidate">
+      <!-- The services, one at a time (decision D93). -->
+      <state id="running" initial="running_service">
         <onentry>
           <autonomy:behavior_input_payload location="behavior_input" stimulus="view"
               focus="input.focus" focus_candidates="input.focus_candidates"/>
-          <assign location="candidates" expr="candidateRows()"/>
+          <assign location="services" expr="serviceRows()"/>
         </onentry>
 
-        <!-- The first candidate left. -->
-        <state id="running_candidate">
+        <!-- The first service left. -->
+        <state id="running_service">
           <onentry>
-            <assign location="tried" expr="triedWithCandidate()"/>
+            <assign location="tried" expr="triedWithService()"/>
             <assign location="rejection" expr="null"/>
-            <log label="autonomy.candidate" expr="candidateName()"/>
-            <send id="candidate-silence" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+            <log label="autonomy.service" expr="serviceName()"/>
+            <send id="service-silence" event="bot.ability.autonomy.service.silent" delayexpr="silenceDelay()"/>
           </onentry>
           <onexit>
-            <cancel sendid="candidate-silence"/>
+            <cancel sendid="service-silence"/>
           </onexit>
-          <invoke id="candidate" type="scxml" srcexpr="candidateSource()">
+          <invoke id="service" type="scxml" srcexpr="serviceSource()">
             <param name="turn" expr="turn"/>
             <param name="input" expr="behavior_input"/>
           </invoke>
-          <transition event="done.invoke.candidate" cond="isBehaviorHandled(_event)" target="dispatching">
+          <transition event="done.invoke.service" cond="isBehaviorHandled(_event)" target="dispatching">
             <assign location="answer" expr="_event.data.selected"/>
           </transition>
-          <transition event="done.invoke.candidate" target="advancing">
-            <log label="autonomy.candidate.advance" expr="candidateAdvanceLog(_event)"/>
+          <transition event="done.invoke.service" target="advancing">
+            <log label="autonomy.service.advance" expr="serviceAdvanceLog(_event)"/>
           </transition>
-          <transition event="bot.ability.autonomy.candidate.silent" target="advancing">
-            <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>
+          <transition event="bot.ability.autonomy.service.silent" target="advancing">
+            <log label="autonomy.service.silent" expr="serviceSilentLog()"/>
           </transition>
           <!-- A source that does not load or compile fails the invocation
                with no invokeid (SCXML 3.12.2). -->
           <transition event="error.*" target="recording_failure">
-            <log label="autonomy.candidate.failed" expr="candidateFailedLog(_event)"/>
+            <log label="autonomy.service.failed" expr="serviceFailedLog(_event)"/>
           </transition>
         </state>
 
-        <!-- The handled candidate's selections are sent before its use is
+        <!-- The handled service's selections are sent before its use is
              persisted. -->
         <state id="dispatching">
           <onentry>
@@ -328,16 +328,16 @@
           <!-- Its own block, so it runs after a send that failed above and
                the failure (raised first) preempts it. -->
           <onentry>
-            <raise event="bot.ability.autonomy.candidate.dispatch.succeeded"/>
+            <raise event="bot.ability.autonomy.service.dispatch.succeeded"/>
           </onentry>
-          <transition event="bot.ability.autonomy.candidate.dispatch.succeeded" target="using"/>
+          <transition event="bot.ability.autonomy.service.dispatch.succeeded" target="using"/>
           <transition event="error.*" target="recording_failure">
             <assign location="rejection" expr="dispatchFailure(_event)"/>
-            <log label="autonomy.candidate.failed" expr="candidateRejectedLog()"/>
+            <log label="autonomy.service.failed" expr="serviceRejectedLog()"/>
           </transition>
         </state>
 
-        <!-- The handled candidate's use is persisted, then it handles the
+        <!-- The handled service's use is persisted, then it handles the
              percept. -->
         <state id="using">
           <onentry>
@@ -364,7 +364,7 @@
           </transition>
         </state>
 
-        <!-- A failed candidate's failure is persisted, then the rest run; a
+        <!-- A failed service's failure is persisted, then the rest run; a
              rejected one's, then autonomy fails with the rejection. -->
         <state id="recording_failure">
           <onentry>
@@ -397,10 +397,10 @@
           <transition target="advancing"/>
         </state>
 
-        <!-- The next candidate, or the percept is unhandled. -->
+        <!-- The next service, or the percept is unhandled. -->
         <state id="advancing">
-          <transition cond="hasRest()" target="running_candidate">
-            <assign location="candidates" expr="restCandidates()"/>
+          <transition cond="hasRest()" target="running_service">
+            <assign location="services" expr="restServices()"/>
           </transition>
           <transition target="percept_unhandled"/>
         </state>
@@ -426,7 +426,7 @@
         <assign location="position" expr="nextPosition()"/>
       </transition>
       <transition cond="everyPerceptHandled()" target="answered"/>
-      <transition cond="hasNoCandidates()" target="done"/>
+      <transition cond="hasNoServices()" target="done"/>
       <transition target="unhandled"/>
     </state>
 

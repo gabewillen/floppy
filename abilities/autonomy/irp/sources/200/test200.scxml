@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- autonomy-8: a handled candidate answers the turn with its own selections. -->
+<!-- autonomy-8: a handled service answers the turn with its own selections. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
@@ -22,7 +22,7 @@
     <onentry>
       <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 3, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.input", "data": {"text": "hello"}, "source": "listening"}}'/></send>
     </onentry>
-    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 3 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;behavior&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;A\&quot;]&quot; &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.ability.cognition.ignore' &amp;&amp; _event.data.selected[0].reason === 'handled'" target="step2"/>
+    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 3 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;behavior&quot; &amp;&amp; JSON.stringify(_event.data.services) === &quot;[\&quot;A\&quot;]&quot; &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.ability.cognition.ignore' &amp;&amp; _event.data.selected[0].reason === 'handled'" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

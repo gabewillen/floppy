@@ -13,7 +13,7 @@
     <onentry>
       <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 11, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.perceived", "data": {"percepts": [{"stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}, "source": "listening", "participants": []}, {"stimulus": {"event": "environment.sound", "data": "noise", "source": "listening"}, "source": "listening", "participants": []}]}, "source": "session.floppy"}}'/></send>
     </onentry>
-    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 11 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.acted === undefined' target="step1"/>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 11 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.services) === "[]" &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.acted === undefined' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

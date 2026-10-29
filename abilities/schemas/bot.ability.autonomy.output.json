@@ -7,7 +7,7 @@
   "required": [
     "turn",
     "handled",
-    "candidates",
+    "services",
     "reason"
   ],
   "properties": {
@@ -46,7 +46,7 @@
       },
       "description": "A handled turn's selections, in the percepts' arrival order."
     },
-    "candidates": {
+    "services": {
       "type": "array",
       "items": {
         "type": "string"

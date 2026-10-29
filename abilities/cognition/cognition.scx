@@ -202,7 +202,7 @@
   intuition and
   reasoning (its dispatch tool; autonomy's learned behaviors name their
   targets themselves), and each stage sends its selections to their
-  targets. A send a stage cannot make (an autonomy candidate's)
+  targets. A send a stage cannot make (an autonomy service's)
   fails the stage, which this ability answers as bot.ability.failed.
 
   Effort ceilings (decisions D196 and D206): a choice carries the effort its
@@ -552,7 +552,7 @@
       </transition>
       <transition event="bot.ability.autonomy.output" event:schema="../schemas/bot.ability.autonomy.output.json" cond="isUnhandled(_event)" target="after_autonomy">
         <log label="cognition.stage" expr="stageLog('autonomy unhandled', _event)"/>
-        <assign location="declined" expr="declinedCandidates(_event)"/>
+        <assign location="declined" expr="declinedServices(_event)"/>
         <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>

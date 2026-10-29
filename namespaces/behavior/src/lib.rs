@@ -116,7 +116,7 @@
 //! disagrees with `input`): none when the
 //! donedata is `{turn, handled, selected}` with the live turn,
 //! `handled` true and at least one selection, each with an event, a target
-//! among `targets` (floppy's check, decision D104: the candidates runner
+//! among `targets` (floppy's check, decision D104: autonomy
 //! sends each selection to its target, so an empty `targets` refuses every
 //! selection) and data whose members agree with the string, number and
 //! boolean members of `input` of the same names (compared as JSON
@@ -124,7 +124,7 @@
 //! evaluates to the turn's choices, `[{event, target, schema}]`, or `null`:
 //! with any, a selection whose event is not one its target takes on that
 //! turn, or whose data its choice's schema does not admit, is a message too
-//! (decision D221), since the candidates runner's send of it is checked
+//! (decision D221), since autonomy's send of it is checked
 //! against the receiving transition and fails with `error.execution`.
 //! `handled` (optional, default `true`) evaluates to whether the run must
 //! handle the turn: `false` for a turn that taught the behavior, whose
@@ -1422,7 +1422,7 @@ const NO_SELECTION: &str =
 /// A turn behavior that did not finish on the live turn.
 const NO_FINAL: &str = "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once.";
 
-/// A turn behavior whose donedata is not the candidates runner's contract.
+/// A turn behavior whose donedata is not autonomy's contract.
 const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections.";
 
 /// `<behavior:verify_apply>`'s targets that are not strings.
@@ -1582,7 +1582,7 @@ fn verify_apply_element<H: BehaviorHost>(
 }
 
 /// The live-turn check of a turn behavior (decision D131) with the donedata
-/// contract (the candidates runner's) and target check (decision D104); see
+/// contract (autonomy's) and target check (decision D104); see
 /// the crate documentation, `<behavior:verify_apply>`.
 #[must_use]
 pub fn verify_apply(
@@ -1660,8 +1660,8 @@ pub fn verify_apply(
     errors
 }
 
-/// Why the target would refuse a selection (decision D221): the candidates
-/// runner's send to it is checked against the receiving transition's
+/// Why the target would refuse a selection (decision D221): autonomy's
+/// send to it is checked against the receiving transition's
 /// schema, so data the turn's choice of that event and target does not
 /// admit fails the dispatch with `error.execution`. `None` without choices,
 /// or when the choice admits the data.
