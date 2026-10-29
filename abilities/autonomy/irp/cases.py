@@ -61,9 +61,9 @@ def case(test_id, number, comment, steps, turn, database="null", memory_timeout_
     S.case(test_id, number, comment, [turn] + steps, params=params(database, memory_timeout_ms), **kwargs)
 
 
-def answer(turn, reason, candidates, extra=None):
+def answer(turn, reason, services, extra=None):
     cond = (f"_event.data.turn === {turn} && _event.data.handled === false && _event.data.reason === {js(reason)}"
-            f" && JSON.stringify(_event.data.candidates) === {js(compact(candidates))} && _event.data.selected === undefined")
+            f" && JSON.stringify(_event.data.services) === {js(compact(services))} && _event.data.selected === undefined")
     if extra:
         cond += " && " + extra
     return expect(DONE, cond)
@@ -71,7 +71,7 @@ def answer(turn, reason, candidates, extra=None):
 
 ADMITTED = (
     "_event.data.turn === 2 && _event.data.handled === true && _event.data.reason === 'behavior'"
-    " && JSON.stringify(_event.data.candidates) === '[\"SpeechHeard\"]'"
+    " && JSON.stringify(_event.data.services) === '[\"SpeechHeard\"]'"
     " && _event.data.selected.length === 1"
     " && _event.data.selected[0].event === 'bot.ability.communication.input'"
     " && _event.data.selected[0].reason === 'seeded speech admit via communication'"
@@ -83,10 +83,10 @@ ADMITTED = (
     " && _event.data.selected[0].data.parent.event === 'bot.ability.listening.speech.output'"
     " && Object.keys(_event.data.selected[0].data).length === 7")
 
-S.statement(1, "Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it answers `bot.ability.autonomy.output` `{turn, handled: false, candidates: [], reason: \"no-behaviors\"}`, once.")
-S.statement(2, "A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, candidates: [\"SpeechHeard\"], reason: \"behavior\"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`, and `parent`, the speech itself), trusted and naming no target (the body sends it to itself).")
-S.statement(3, "A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, candidates: [\"SpeechHeard\"], reason: \"unhandled\"}`.")
-S.statement(4, "With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.")
+S.statement(1, "Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it answers `bot.ability.autonomy.output` `{turn, handled: false, services: [], reason: \"no-behaviors\"}`, once.")
+S.statement(2, "A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, services: [\"SpeechHeard\"], reason: \"behavior\"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`, and `parent`, the speech itself), trusted and naming no target (the body sends it to itself).")
+S.statement(3, "A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, services: [\"SpeechHeard\"], reason: \"unhandled\"}`.")
+S.statement(4, "With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `services` when a seed ran.")
 S.statement(5, "A load that fails or outlasts `memory_timeout_ms` matches no behaviors and the turn goes on, as a load with no rows does.")
 S.statement(6, "A `bot.perceived` stimulus (the body's percepts taken together) is matched percept by percept, in arrival order, each percept's stimulus as the stimulus: the turn is handled only when every percept was, `selected` the handling behaviors' selections in arrival order; otherwise it is `unhandled` (or `no-behaviors` when nothing was tried), and `acted` `{percepts, acts}` names the handled percepts' positions and their selections when any was.")
 
@@ -116,7 +116,7 @@ case(141, 5, "a load that outlasts memory_timeout_ms matches nothing, and the tu
 
 case(160, 6, "two sourced speech percepts are each admitted: the turn is handled with both selections.",
      [expect(DONE, "_event.data.turn === 9 && _event.data.handled === true && _event.data.reason === 'behavior'"
-                     " && JSON.stringify(_event.data.candidates) === '[\"SpeechHeard\",\"SpeechHeard\"]'"
+                     " && JSON.stringify(_event.data.services) === '[\"SpeechHeard\",\"SpeechHeard\"]'"
                      " && _event.data.selected.length === 2"
                      " && _event.data.selected[0].data.source_ids[0] === 'caller'"
                      " && _event.data.selected[1].data.source_ids[0] === 'gabe'")],
@@ -140,7 +140,7 @@ case(171, 7, "a cancelled turn is never answered; the next turn is.",
       answer(13, "no-behaviors", [])],
      turn=run("bot.input", TEXT, turn=12), database=DB)
 
-# Learned candidates (decision D273): the harness stores turn behaviors in
+# Learned services (decision D273): the harness stores turn behaviors in
 # the memory it serves, each triggered by bot.input, then hands the turn.
 IGNORE = "bot.ability.cognition.ignore"
 # The harness is the run's root session ("session"); a selection for it
@@ -165,11 +165,11 @@ DECLINES = behavior("({turn: turn, handled: false})")
 HANDLES = behavior(f"({{turn: turn, handled: true, selected: [{{event: '{IGNORE}', data: {{}}, reason: 'handled', target: '{OWN}'}}]}})")
 
 
-def stored(candidates):
-    """The steps that store candidates ((name, source) each, tried in name
+def stored(services):
+    """The steps that store services ((name, source) each, tried in name
     order) as ACTIVE turn behaviors triggered by bot.input."""
     statements = []
-    for name, source in candidates:
+    for name, source in services:
         statements.append({"sql": "INSERT INTO bot_behavior (name, source) VALUES (?, ?)",
                            "parameters": [name, S.behavior(source)]})
         statements.append({"sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, 'bot.input')",
@@ -178,9 +178,9 @@ def stored(candidates):
             expect("bot.ability.memory.output", "_event.data.id === 'stored'")]
 
 
-def tried(candidates, handled, reason, extra=None, turn=3):
+def tried(services, handled, reason, extra=None, turn=3):
     cond = (f"_event.data.turn === {turn} && _event.data.handled === {js(handled)} && _event.data.reason === {js(reason)}"
-            f" && JSON.stringify(_event.data.candidates) === {js(compact(candidates))}")
+            f" && JSON.stringify(_event.data.services) === {js(compact(services))}")
     if not handled:
         cond += " && _event.data.selected === undefined"
     if extra:
@@ -188,34 +188,34 @@ def tried(candidates, handled, reason, extra=None, turn=3):
     return expect(DONE, cond)
 
 
-def learned(test_id, number, comment, candidates, steps, turn=3, database=DB, **kwargs):
-    """A case that stores candidates, then hands autonomy one bot.input turn."""
-    S.case(test_id, number, comment, stored(candidates) + [run("bot.input", HELLO, turn=turn)] + steps,
+def learned(test_id, number, comment, services, steps, turn=3, database=DB, **kwargs):
+    """A case that stores services, then hands autonomy one bot.input turn."""
+    S.case(test_id, number, comment, stored(services) + [run("bot.input", HELLO, turn=turn)] + steps,
            params=params(database, kwargs.pop("memory_timeout_ms", None)) + kwargs.pop("extra_params", []), **kwargs)
 
 
-def failed(candidates, rejection):
+def failed(services, rejection):
     return expect(DONE, f"_event.data.turn === 3 && _event.data.handled === false && _event.data.failed === true"
-                        f" && _event.data.reason === {js(rejection)} && JSON.stringify(_event.data.candidates) === {js(compact(candidates))}")
+                        f" && _event.data.reason === {js(rejection)} && JSON.stringify(_event.data.services) === {js(compact(services))}")
 
 
 HANDLED_SELECTED = (f"_event.data.selected.length === 1 && _event.data.selected[0].event === '{IGNORE}'"
                     " && _event.data.selected[0].reason === 'handled'")
 
-S.statement(8, "Each matched candidate (`{name, source}`, `source` the path of its program, decision D121) runs in turn as the child `candidate` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input` (the percept's data with `focus` and `focus_candidates`). A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted (one transaction of the Memory ability at the `memory` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect) and handles the percept: `{turn, handled: true, selected, candidates, reason: \"behavior\"}`, `selected` the candidate's own selections.")
-S.statement(9, "The handled candidate's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.")
-S.statement(10, "An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled, and the next candidate runs; when none is left, the turn is `unhandled`, `candidates` naming each one tried, in order.")
-S.statement(11, "A candidate that does not answer within `silence_ms` is passed over, and the next runs.")
-S.statement(12, "A candidate whose source cannot run has its failure persisted, and the next runs.")
-S.statement(13, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and autonomy fails the turn: `{turn, handled: false, failed: true, candidates, reason}`, reason `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.")
-learned(200, 8, "a handled candidate answers the turn with its own selections.", [("A", HANDLES)],
+S.statement(8, "Each matched service (`{name, source}`, `source` the path of its program, decision D121) runs in turn as the child `service` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input` (the percept's data with `focus` and `focus_candidates`). A service that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted (one transaction of the Memory ability at the `memory` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect) and handles the percept: `{turn, handled: true, selected, services, reason: \"behavior\"}`, `selected` the service's own selections.")
+S.statement(9, "The handled service's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.")
+S.statement(10, "An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled, and the next service runs; when none is left, the turn is `unhandled`, `services` naming each one tried, in order.")
+S.statement(11, "A service that does not answer within `silence_ms` is passed over, and the next runs.")
+S.statement(12, "A service whose source cannot run has its failure persisted, and the next runs.")
+S.statement(13, "A handled service a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and autonomy fails the turn: `{turn, handled: false, failed: true, services, reason}`, reason `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.")
+learned(200, 8, "a handled service answers the turn with its own selections.", [("A", HANDLES)],
         [tried(["A"], True, "behavior", HANDLED_SELECTED)])
-learned(201, 8, "the candidate gets the turn and input <param>s.",
+learned(201, 8, "the service gets the turn and input <param>s.",
         [("Echo", behavior(f"({{turn: turn, handled: true, selected: [{{event: '{IGNORE}', data: {{turn: turn, text: input.text}}, target: '{OWN}'}}]}})"))],
         [tried(["Echo"], True, "behavior", "_event.data.selected[0].data.turn === 7 && _event.data.selected[0].data.text === 'hello'", turn=7)],
         turn=7)
 
-learned(210, 9, "a selection is sent to its target, and the candidate answers.",
+learned(210, 9, "a selection is sent to its target, and the service answers.",
         [("Say", behavior(f"({{turn: turn, handled: true, selected: [{{event: 'bot.say', data: {{text: 'hi'}}, target: '{HARNESS}'}}]}})"))],
         [expect("bot.say", "_event.data.text === 'hi'"),
          tried(["Say"], True, "behavior", "_event.data.selected.length === 1 && _event.data.selected[0].event === 'bot.say'")])
@@ -230,17 +230,17 @@ learned(221, 10, "handled with no selections is not handled.",
 learned(222, 10, "an answer for another turn is not handled.",
         [("Stale", behavior(f"({{turn: turn + 1, handled: true, selected: [{{event: '{IGNORE}', data: {{}}}}]}})"))],
         [tried(["Stale"], False, "unhandled")])
-learned(223, 10, "the next runs after a declining candidate, and the first that handles answers.",
+learned(223, 10, "the next runs after a declining service, and the first that handles answers.",
         [("A", DECLINES), ("B", HANDLES)], [tried(["A", "B"], True, "behavior", HANDLED_SELECTED)])
-learned(224, 10, "every candidate declining leaves the turn unhandled, each named in order.",
+learned(224, 10, "every service declining leaves the turn unhandled, each named in order.",
         [("A", DECLINES), ("B", DECLINES), ("C", DECLINES)], [tried(["A", "B", "C"], False, "unhandled")])
-learned(225, 10, "a candidate after the one that handles never runs.",
+learned(225, 10, "a service after the one that handles never runs.",
         [("A", HANDLES), ("B", BROKEN)], [tried(["A"], True, "behavior", HANDLED_SELECTED)])
 
-learned(230, 11, "a silent candidate is passed over after silence_ms.",
+learned(230, 11, "a silent service is passed over after silence_ms.",
         [("A", SILENT), ("B", HANDLES)], [tried(["A", "B"], True, "behavior", HANDLED_SELECTED)],
         extra_params=[("silence_ms", js(200))], clock="wall")
-learned(231, 11, "a silent last candidate leaves the turn unhandled.",
+learned(231, 11, "a silent last service leaves the turn unhandled.",
         [("A", SILENT)], [tried(["A"], False, "unhandled")], extra_params=[("silence_ms", js(200))], clock="wall")
 
 learned(240, 12, "a source that cannot run is passed over, and the next runs.",

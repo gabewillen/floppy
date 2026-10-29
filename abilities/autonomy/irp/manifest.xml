@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/autonomy/irp/sources">
   <assert id="autonomy-1" specnum="1" specid="#autonomy-1">
-    <![CDATA[Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it answers `bot.ability.autonomy.output` `{turn, handled: false, candidates: [], reason: "no-behaviors"}`, once.]]>
+    <![CDATA[Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it answers `bot.ability.autonomy.output` `{turn, handled: false, services: [], reason: "no-behaviors"}`, once.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="autonomy-2" specnum="2" specid="#autonomy-2">
-    <![CDATA[A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, candidates: ["SpeechHeard"], reason: "behavior"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`, and `parent`, the speech itself), trusted and naming no target (the body sends it to itself).]]>
+    <![CDATA[A `bot.ability.listening.speech.output` stimulus runs the SpeechHeard seed first, with the <param>s turn, input and stimulus. Speech with a source is handled: it ends with `{turn, handled: true, selected, services: ["SpeechHeard"], reason: "behavior"}`, `selected` the seed's one `bot.ability.communication.input` selection (the speech's `source_ids`, empty `target_ids`, `content`, `content_type`, `sample_rate_hz`, `channels`, and `parent`, the speech itself), trusted and naming no target (the body sends it to itself).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -21,13 +21,13 @@
     </test>
   </assert>
   <assert id="autonomy-3" specnum="3" specid="#autonomy-3">
-    <![CDATA[A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, candidates: ["SpeechHeard"], reason: "unhandled"}`.]]>
+    <![CDATA[A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, services: ["SpeechHeard"], reason: "unhandled"}`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
   </assert>
   <assert id="autonomy-4" specnum="4" specid="#autonomy-4">
-    <![CDATA[With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.]]>
+    <![CDATA[With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `services` when a seed ran.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -66,7 +66,7 @@
     </test>
   </assert>
   <assert id="autonomy-8" specnum="8" specid="#autonomy-8">
-    <![CDATA[Each matched candidate (`{name, source}`, `source` the path of its program, decision D121) runs in turn as the child `candidate` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input` (the percept's data with `focus` and `focus_candidates`). A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted (one transaction of the Memory ability at the `memory` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect) and handles the percept: `{turn, handled: true, selected, candidates, reason: "behavior"}`, `selected` the candidate's own selections.]]>
+    <![CDATA[Each matched service (`{name, source}`, `source` the path of its program, decision D121) runs in turn as the child `service` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input` (the percept's data with `focus` and `focus_candidates`). A service that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted (one transaction of the Memory ability at the `memory` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect) and handles the percept: `{turn, handled: true, selected, services, reason: "behavior"}`, `selected` the service's own selections.]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.scxml"/>
     </test>
@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="autonomy-9" specnum="9" specid="#autonomy-9">
-    <![CDATA[The handled candidate's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.]]>
+    <![CDATA[The handled service's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.]]>
     <test id="210" conformance="mandatory" manual="false">
       <start uri="210/test210.scxml"/>
     </test>
@@ -84,7 +84,7 @@
     </test>
   </assert>
   <assert id="autonomy-10" specnum="10" specid="#autonomy-10">
-    <![CDATA[An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled, and the next candidate runs; when none is left, the turn is `unhandled`, `candidates` naming each one tried, in order.]]>
+    <![CDATA[An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled, and the next service runs; when none is left, the turn is `unhandled`, `services` naming each one tried, in order.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.scxml"/>
     </test>
@@ -105,7 +105,7 @@
     </test>
   </assert>
   <assert id="autonomy-11" specnum="11" specid="#autonomy-11">
-    <![CDATA[A candidate that does not answer within `silence_ms` is passed over, and the next runs.]]>
+    <![CDATA[A service that does not answer within `silence_ms` is passed over, and the next runs.]]>
     <test id="230" conformance="mandatory" manual="false">
       <start uri="230/test230.scxml"/>
     </test>
@@ -114,7 +114,7 @@
     </test>
   </assert>
   <assert id="autonomy-12" specnum="12" specid="#autonomy-12">
-    <![CDATA[A candidate whose source cannot run has its failure persisted, and the next runs.]]>
+    <![CDATA[A service whose source cannot run has its failure persisted, and the next runs.]]>
     <test id="240" conformance="mandatory" manual="false">
       <start uri="240/test240.scxml"/>
     </test>
@@ -123,7 +123,7 @@
     </test>
   </assert>
   <assert id="autonomy-13" specnum="13" specid="#autonomy-13">
-    <![CDATA[A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and autonomy fails the turn: `{turn, handled: false, failed: true, candidates, reason}`, reason `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.]]>
+    <![CDATA[A handled service a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and autonomy fails the turn: `{turn, handled: false, failed: true, services, reason}`, reason `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.]]>
     <test id="250" conformance="mandatory" manual="false">
       <start uri="250/test250.scxml"/>
     </test>

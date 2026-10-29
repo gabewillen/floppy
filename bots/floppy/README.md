@@ -91,8 +91,8 @@ printf '%s\n' \
 
 The files service's grant is the `behaviors/` directory beside `bots/`
 and `abilities/` (create it first; it is ignored by git), where the builder
-reflection invokes writes a learned behavior's three documents and the
-candidates and routines runners load it by its path (decision D121).
+reflection invokes writes a learned behavior's three documents and
+autonomy and the routines runner load it by its path (decision D121).
 
 `--fuel 9223372036854775807` (2^63 - 1, the most fuel Wasmtime puts into a store at
 once) gives every host call the fuel a bot's start needs. Entering the environment

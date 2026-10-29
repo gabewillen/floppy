@@ -11,7 +11,7 @@ Last updated: 2026-10-28.
 
 ## Current state (2026-10-09) — resume here
 
-- **Latency hill climb: fanout (2026-10-28, D274):** the tier after the
+- **Latency hill climb: fanout (2026-10-28, D275):** the tier after the
   decision layer (intuition, else reasoning) gets the turn with
   `reached: false` as the decision layer starts, recalls and asks its model
   beside it, and withholds what it selects until the turn reaches it

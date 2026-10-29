@@ -187,8 +187,8 @@ function isUnhandled(_event) {
 }
 
 // The learned behaviors that ran and declined this turn (decision D230).
-function declinedCandidates(_event) {
-  return Array.isArray(_event.data.candidates) ? _event.data.candidates.filter(function (c) { return typeof c === 'string'; }) : [];
+function declinedServices(_event) {
+  return Array.isArray(_event.data.services) ? _event.data.services.filter(function (c) { return typeof c === 'string'; }) : [];
 }
 
 // Any well-formed done.invoke.<stage> for the turn in hand (after isHandled and isUnhandled: a failure).

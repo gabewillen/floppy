@@ -22,7 +22,7 @@
     <onentry>
       <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 3, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.input", "data": {"text": "hello"}, "source": "listening"}}'/></send>
     </onentry>
-    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 3 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "unhandled" &amp;&amp; JSON.stringify(_event.data.candidates) === "[\"Declines\"]" &amp;&amp; _event.data.selected === undefined' target="step2"/>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 3 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "unhandled" &amp;&amp; JSON.stringify(_event.data.services) === "[\"Declines\"]" &amp;&amp; _event.data.selected === undefined' target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

@@ -40,14 +40,14 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// seeding and candidate: the seed or candidate answered the turn with at
+// seeding and service: the seed or service answered the turn with at
 // least one selection (an empty one is unhandled).
 function isBehaviorHandled(event) {
   return unhandledReason(event.data) === null;
 }
 
 // Why the seed finished without handling the turn, the reason
-// candidateAdvanceLog gives for a learned candidate.
+// serviceAdvanceLog gives for a learned service.
 function seedAdvanceLog(event) {
   return 'SpeechHeard (' + unhandledReason(event.data) + ')';
 }
@@ -121,37 +121,37 @@ function hasNoMatch() {
 
 // running
 
-// The matched rows as the candidates, [{name, source}] in inventory order.
-function candidateRows() {
+// The matched rows as the services, [{name, source}] in inventory order.
+function serviceRows() {
   return rows.map(function (row) { return {name: row.values[0], source: row.values[1]}; });
 }
 
-// candidate: the first of the candidates left.
+// running_service: the first of the services left.
 
-function candidateName() {
-  return candidates[0].name;
+function serviceName() {
+  return services[0].name;
 }
 
-// The path of the candidate's program (its source).
-function candidateSource() {
-  return candidates[0].source;
+// The path of the service's program (its source).
+function serviceSource() {
+  return services[0].source;
 }
 
-function triedWithCandidate() {
-  return tried.concat([candidateName()]);
+function triedWithService() {
+  return tried.concat([serviceName()]);
 }
 
-// Why a candidate that finished did not handle the turn.
-function candidateAdvanceLog(event) {
-  return candidateName() + ' (' + unhandledReason(event.data) + ')';
+// Why a service that finished did not handle the turn.
+function serviceAdvanceLog(event) {
+  return serviceName() + ' (' + unhandledReason(event.data) + ')';
 }
 
-function candidateSilentLog() {
-  return candidateName() + ' after ' + silence_ms + ' ms';
+function serviceSilentLog() {
+  return serviceName() + ' after ' + silence_ms + ' ms';
 }
 
-function candidateFailedLog(event) {
-  return candidateName() + ' (' + event.name + ')';
+function serviceFailedLog(event) {
+  return serviceName() + ' (' + event.name + ')';
 }
 
 // dispatching and recorded_failure
@@ -162,7 +162,7 @@ function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }
 
-// A dispatch that failed, with the error and what the candidate selected
+// A dispatch that failed, with the error and what the service selected
 // (an error.execution is most often data its target's schema refuses,
 // decision D221).
 function dispatchFailure(_event) {
@@ -178,20 +178,20 @@ function isRejected() {
   return rejection !== null;
 }
 
-function candidateRejectedLog() {
-  return candidateName() + ' (' + rejection + ')';
+function serviceRejectedLog() {
+  return serviceName() + ' (' + rejection + ')';
 }
 
 // using and recording_failure
 
-// The handled candidate's use.
+// The handled service's use.
 function usedPersistenceStatements() {
-  return [{sql: used_sql, parameters: [candidateName()]}];
+  return [{sql: used_sql, parameters: [serviceName()]}];
 }
 
-// The candidate's failure.
+// The service's failure.
 function failedPersistenceStatements() {
-  return [{sql: failed_sql, parameters: [candidateName()]}];
+  return [{sql: failed_sql, parameters: [serviceName()]}];
 }
 
 function usageFailedReason(detail) {
@@ -205,11 +205,11 @@ function usageTimedOutReason() {
 // advancing
 
 function hasRest() {
-  return candidates.length > 1;
+  return services.length > 1;
 }
 
-function restCandidates() {
-  return candidates.slice(1);
+function restServices() {
+  return services.slice(1);
 }
 
 // percept_handled
@@ -236,20 +236,20 @@ function everyPerceptHandled() {
   return handled.length === percepts.length;
 }
 
-function hasNoCandidates() {
+function hasNoServices() {
   return tried.length === 0;
 }
 
 // done, unhandled, answered, failed
 
 function noBehaviorsOutput() {
-  return {turn: turn, handled: false, candidates: [], reason: 'no-behaviors'};
+  return {turn: turn, handled: false, services: [], reason: 'no-behaviors'};
 }
 
 // Unhandled, with what the behaviors that handled some percepts did
 // (acted) when any did.
 function unhandledOutput() {
-  var output = {turn: turn, handled: false, candidates: tried, reason: 'unhandled'};
+  var output = {turn: turn, handled: false, services: tried, reason: 'unhandled'};
   if (handled.length > 0) {
     output.acted = {percepts: handled, acts: selected};
   }
@@ -257,11 +257,11 @@ function unhandledOutput() {
 }
 
 function answeredOutput() {
-  return {turn: turn, handled: true, selected: selected, candidates: tried, reason: 'behavior'};
+  return {turn: turn, handled: true, selected: selected, services: tried, reason: 'behavior'};
 }
 
 function failedOutput() {
-  return {turn: turn, handled: false, failed: true, candidates: tried, reason: answer};
+  return {turn: turn, handled: false, failed: true, services: tried, reason: answer};
 }
 
 // memory
