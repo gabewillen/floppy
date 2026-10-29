@@ -470,7 +470,7 @@ impl Pause {
 }
 
 /// One stretch of a reply between pauses: one synthesis request.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Stretch {
     /// The pause that opens it.
     pub pause: Option<Pause>,
@@ -1846,6 +1846,21 @@ mod guest {
             }
             Operation::Encode(encoding) => {
                 if let Some(events) = events {
+                    let events = if encoding.provider == super::Provider::OpenaiCompat
+                        && super::drafting::SOCKET_FORMATS
+                            .contains(&encoding.format.response_format)
+                    {
+                        match encode_socket(
+                            &operation, encoding, base_url, api_key, events, returned,
+                        )
+                        .await
+                        {
+                            Ok(finished) => return finished,
+                            Err(events) => events,
+                        }
+                    } else {
+                        events
+                    };
                     return encode_drafted(
                         &operation, encoding, base_url, api_key, events, returned,
                     )
@@ -2195,6 +2210,245 @@ mod guest {
             answered,
             super::write_audio,
         )))
+    }
+
+    /// A drafted encoding over the backend's speech socket (`GET
+    /// {base}/audio/speech`, as mosfet.py gives `ElevenLabs` its
+    /// stream-input): every word is sent as it is written and the server
+    /// says each sentence as it completes; a stretch's pause flushes what
+    /// was given, and its silence follows once that is said. `Err` gives
+    /// the events back when the socket cannot open, for the HTTP path.
+    async fn encode_socket(
+        operation: &Operation,
+        encoding: &super::Encoding,
+        base_url: u32,
+        api_key: Option<u32>,
+        events: wit_bindgen::StreamReader<Event>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Result<Option<super::Finished>, wit_bindgen::StreamReader<Event>> {
+        use super::drafting::{
+            DRAFT_EVENT, Drafting, END_FRAME, FINAL_EVENT, FLUSH_FRAME, READY_EVENT, Said,
+            input_frame, said,
+        };
+        use super::{Finished, Stretch};
+        let request = WebsocketRequest {
+            url: vec![
+                TextPart::Reference(base_url),
+                TextPart::Literal(super::SPEECH_PATH.into()),
+            ],
+            headers: super::bearer(api_key)
+                .map(|(name, value)| WebsocketHeader {
+                    name,
+                    value: text_parts(&value),
+                })
+                .into_iter()
+                .collect(),
+            protocols: Vec::new(),
+        };
+        let (mut outgoing, outgoing_reader) = wit_stream::new::<Message>();
+        let Ok((_, incoming, end)) = outbound_websocket::connect(request, outgoing_reader).await
+        else {
+            return Err(events);
+        };
+        let failed = |code| Ok(Some(Finished::event(Returned::failed(operation, code))));
+        let ready = Returned {
+            name: READY_EVENT,
+            data: "{}".into(),
+        };
+        if returned.write_one(event(&ready)).await.is_some() {
+            return Ok(None);
+        }
+        let mut chunker = super::chunks::Chunker::new(encoding);
+        let mut drafting = Drafting::default();
+        // The stretches said, and each one's audio with words.
+        let mut said_stretches: Vec<Stretch> = Vec::new();
+        let mut answered = Vec::new();
+        // The stretch being said, its audio so far, and whether its flush
+        // was sent; the stretches written after it, waiting.
+        let mut saying: Option<(Stretch, Vec<u8>, bool)> = None;
+        let mut waiting: std::collections::VecDeque<Stretch> = std::collections::VecDeque::new();
+        let mut server_ready = false;
+        let mut unsent: Vec<String> = Vec::new();
+        let mut first = true;
+        let mut held = 0_usize;
+        let mut from_session = Some(next_event(events));
+        let mut from_server = Some(next_message(incoming));
+        loop {
+            // Take what was written: words join the stretch being said
+            // (sent at once) unless one waits; a pause opens a new one.
+            while let Some(written) = drafting.next_written() {
+                let joins = written.pause.is_none() && waiting.is_empty();
+                match (&mut saying, joins) {
+                    (Some((stretch, _, false)), true) => {
+                        stretch.words.push_str(&written.words);
+                        if !written.words.is_empty() {
+                            unsent.push(input_frame(encoding, &written.words, first));
+                            first = false;
+                        }
+                    }
+                    _ => match waiting.back_mut() {
+                        Some(last) if written.pause.is_none() => {
+                            last.words.push_str(&written.words);
+                        }
+                        _ => waiting.push_back(written),
+                    },
+                }
+            }
+            // The stretch being said is flushed once a later one waits or
+            // the reply is whole; the next starts once nothing is being said.
+            if let Some((stretch, _, flushed)) = &mut saying
+                && !*flushed
+                && (!waiting.is_empty() || drafting.finished())
+            {
+                *flushed = true;
+                if stretch.words.trim().is_empty() && stretch.pause.is_none() {
+                    // Nothing was given to it: it is no stretch.
+                    saying = None;
+                } else if stretch.words.trim().is_empty() {
+                    let (stretch, _, _) = saying.take().unwrap_or_default();
+                    said_stretches.push(stretch);
+                } else {
+                    unsent.push(FLUSH_FRAME.into());
+                }
+            }
+            if saying.is_none()
+                && let Some(next) = waiting.pop_front()
+            {
+                match emit(encoding, chunker.open(next.pause), returned).await {
+                    Ok(()) => {}
+                    Err(Stopped::Gone) => return Ok(None),
+                    Err(Stopped::Failed(code)) => return failed(code),
+                }
+                if !next.words.is_empty() {
+                    unsent.push(input_frame(encoding, &next.words, first));
+                    first = false;
+                }
+                saying = Some((next, Vec::new(), false));
+                continue;
+            }
+            if saying.is_none() && waiting.is_empty() && drafting.finished() {
+                break;
+            }
+            // Nothing was written yet: the first words open a stretch.
+            if saying.is_none() && waiting.is_empty() && !drafting.finished() {
+                saying = Some((Stretch::default(), Vec::new(), false));
+            }
+            if server_ready {
+                for frame in unsent.drain(..) {
+                    if outgoing.write_one(Message::Text(frame)).await.is_some() {
+                        return failed(super::FailureCode::Transport);
+                    }
+                }
+            }
+            let woke = std::future::poll_fn(|cx| {
+                if let Some(next) = from_session.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_session = None;
+                    return std::task::Poll::Ready(Woke::Session(item, reader));
+                }
+                if let Some(next) = from_server.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_server = None;
+                    return std::task::Poll::Ready(Woke::Server(item, reader));
+                }
+                std::task::Poll::Pending
+            })
+            .await;
+            match woke {
+                // The invoking session stopped: the encoding is cancelled.
+                Woke::Session(None, _) => return Ok(None),
+                Woke::Session(Some(sent), reader) => {
+                    from_session = Some(next_event(reader));
+                    let Ok(scxml_types::DataValue::JsonObject(object)) = native_value(sent.data)
+                    else {
+                        continue;
+                    };
+                    let data =
+                        serde_json::from_str::<serde_json::Value>(&object).unwrap_or_default();
+                    match sent.name.as_str() {
+                        DRAFT_EVENT => drafting.draft(&data),
+                        FINAL_EVENT => {
+                            let parts = data.get("parts").cloned().unwrap_or_default();
+                            let checked = scxml_types::DataValue::canonical_json_array(
+                                &serde_json::to_string(&parts).unwrap_or_default(),
+                            )
+                            .ok()
+                            .and_then(|parts| super::stretches(&parts).ok());
+                            match (checked, parts.as_array()) {
+                                (Some(_), Some(parts)) => drafting.settle(parts),
+                                _ => drafting.settle(&[]),
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Woke::Server(Some(Message::Text(text)), reader) => {
+                    from_server = Some(next_message(reader));
+                    match said(&text) {
+                        Said::Ready => server_ready = true,
+                        Said::Other => {}
+                        Said::Failed => return failed(super::FailureCode::Status),
+                        Said::Done => {
+                            let Some((stretch, audio, true)) = saying.take() else {
+                                return failed(super::FailureCode::Malformed);
+                            };
+                            match emit(encoding, chunker.end(), returned).await {
+                                Ok(()) => {}
+                                Err(Stopped::Gone) => return Ok(None),
+                                Err(Stopped::Failed(code)) => return failed(code),
+                            }
+                            said_stretches.push(stretch);
+                            answered.push(Ok(Response {
+                                status: 200,
+                                body: audio,
+                            }));
+                        }
+                    }
+                }
+                Woke::Server(Some(Message::Binary(bytes)), reader) => {
+                    from_server = Some(next_message(reader));
+                    let Some((_, audio, _)) = &mut saying else {
+                        return failed(super::FailureCode::Malformed);
+                    };
+                    held = held.saturating_add(bytes.len());
+                    if scxml_types::exceeds_wasm_bound(held, super::MAX_ASSEMBLED_BYTES) {
+                        return failed(super::FailureCode::Malformed);
+                    }
+                    let chunks = match chunker.read(&bytes) {
+                        Ok(chunks) => chunks,
+                        Err(code) => return failed(code),
+                    };
+                    match emit(encoding, chunks, returned).await {
+                        Ok(()) => {}
+                        Err(Stopped::Gone) => return Ok(None),
+                        Err(Stopped::Failed(code)) => return failed(code),
+                    }
+                    audio.extend_from_slice(&bytes);
+                }
+                Woke::Server(None, _) => {
+                    drop(end);
+                    return failed(super::FailureCode::Transport);
+                }
+            }
+        }
+        let _ = outgoing.write_one(Message::Text(END_FRAME.into())).await;
+        drop(from_session);
+        match emit(encoding, chunker.close(), returned).await {
+            Ok(()) => {}
+            Err(Stopped::Gone) => return Ok(None),
+            Err(Stopped::Failed(code)) => return failed(code),
+        }
+        let said = Operation::Encode(super::Encoding {
+            stretches: said_stretches,
+            ..encoding.clone()
+        });
+        Ok(Some(Finished::event(super::encoding_outcome(
+            &said,
+            answered,
+            super::write_audio,
+        ))))
     }
 
     /// Runs a drafted encoding ([`super::drafting`]): reads the drafts and

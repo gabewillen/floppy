@@ -26,7 +26,8 @@
 
 use serde_json::Value as Json;
 
-use crate::{MAX_PARTS, MAX_TEXT_BYTES, Pause, Stretch, UNSPOKEN_CHARS, expression_cues};
+use crate::{Encoding, MAX_PARTS, MAX_TEXT_BYTES, Pause, Stretch, UNSPOKEN_CHARS, expression_cues};
+use scxml_event_schema::canonical_json;
 use scxml_types::exceeds_wasm_bound;
 
 /// What a drafted encoding returns first, once it reads its events, so the
@@ -49,6 +50,59 @@ pub const MAX_RUN_BYTES: usize = 240;
 /// its first sentence.
 pub const MIN_CLAUSE_WORDS: usize = 3;
 
+/// The encoding formats the speech socket answers in.
+pub const SOCKET_FORMATS: [&str; 2] = ["pcm", "wav"];
+
+/// The speech socket's text frame that says what was given so far
+/// (`{"type":"flush"}`), each stretch's end.
+pub const FLUSH_FRAME: &str = "{\"type\":\"flush\"}";
+
+/// The speech socket's text frame that closes it once its audio is said.
+pub const END_FRAME: &str = "{\"type\":\"end\"}";
+
+/// The speech socket's text frame appending `words` to what it says, with
+/// the encoding's model, voice and format on the `first` (they apply to the
+/// sentences that follow).
+#[must_use]
+pub fn input_frame(encoding: &Encoding, words: &str, first: bool) -> String {
+    let mut frame = serde_json::Map::new();
+    frame.insert("input".into(), words.into());
+    if first {
+        frame.insert("model".into(), encoding.model.clone().into());
+        frame.insert("voice".into(), encoding.voice.clone().into());
+        frame.insert(
+            "response_format".into(),
+            encoding.format.response_format.into(),
+        );
+    }
+    canonical_json(&Json::Object(frame))
+}
+
+/// A text frame the speech socket sent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Said {
+    /// `ready`: it takes input.
+    Ready,
+    /// `done`: everything given before a flush is said.
+    Done,
+    /// `error`, or a frame outside the protocol.
+    Failed,
+    /// `speech_start`, `speech_end`: nothing to do.
+    Other,
+}
+
+/// What the speech socket's text frame `text` says.
+#[must_use]
+pub fn said(text: &str) -> Said {
+    let frame: Json = serde_json::from_str(text).unwrap_or_default();
+    match frame.get("type").and_then(Json::as_str) {
+        Some("ready") => Said::Ready,
+        Some("done") => Said::Done,
+        Some("speech_start" | "speech_end") => Said::Other,
+        _ => Said::Failed,
+    }
+}
+
 /// One part of the reply: the pause that opens it and its words so far.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct Drafted {
@@ -69,6 +123,9 @@ pub struct Drafting {
     diverged: bool,
     /// The bytes of words drafted, bounded by [`MAX_TEXT_BYTES`].
     bytes: usize,
+    /// Whether the part being said has been opened (its pause taken) by
+    /// [`Drafting::next_written`].
+    opened: bool,
 }
 
 impl Drafting {
@@ -224,6 +281,43 @@ impl Drafting {
         }
     }
 
+    /// Everything written and not yet taken, for a voice that is given the
+    /// words as they are written and decides itself when to say them (the
+    /// speech socket, as mosfet.py gives `ElevenLabs` its stream-input):
+    /// the words up to a part that pauses, which opens the next stretch
+    /// with its pause. `None` when nothing new was written.
+    pub fn next_written(&mut self) -> Option<Stretch> {
+        if self.diverged {
+            return None;
+        }
+        let mut pause = None;
+        let mut words = String::new();
+        while let Some(part) = self.parts.get(self.part) {
+            if self.byte == 0 && !self.opened {
+                if part.pause.is_some() {
+                    if pause.is_some() || !words.is_empty() {
+                        break;
+                    }
+                    pause = part.pause;
+                }
+                self.opened = true;
+            }
+            words.push_str(part.words.get(self.byte..).unwrap_or_default());
+            self.byte = part.words.len();
+            if self.part + 1 < self.parts.len() || self.settled {
+                self.part += 1;
+                self.byte = 0;
+                self.opened = false;
+            } else {
+                break;
+            }
+        }
+        (pause.is_some() || !words.is_empty()).then(|| Stretch {
+            pause,
+            words: words.replace(UNSPOKEN_CHARS, ""),
+        })
+    }
+
     /// Moves what is said on by `take` bytes of the words from here.
     fn advance(&mut self, mut take: usize) {
         while let Some(part) = self.parts.get(self.part) {
@@ -371,6 +465,54 @@ mod tests {
         drafting.settle(&[json!({"words": "Hi there. How are you? I am fine."})]);
         assert_eq!(said(&mut drafting), [words("I am fine.")]);
         assert!(drafting.finished());
+    }
+
+    #[test]
+    fn every_word_written_is_taken_as_it_is_written_and_a_pause_opens_a_stretch() {
+        let mut drafting = Drafting::default();
+        assert_eq!(drafting.next_written(), None);
+        drafting.draft(&json!({"part": 0, "words": "That is", "offset": 0}));
+        assert_eq!(drafting.next_written(), Some(words("That is")));
+        assert_eq!(drafting.next_written(), None);
+        drafting.draft(&json!({"part": 0, "words": " great!", "offset": 7}));
+        drafting.draft(&json!({"part": 1, "words": "Mount", "offset": 0}));
+        assert_eq!(drafting.next_written(), Some(words(" great!Mount")));
+        drafting
+            .draft(&json!({"part": 2, "words": "", "offset": 0, "expression": {"pause": "short"}}));
+        drafting.draft(&json!({"part": 2, "words": "So", "offset": 0}));
+        assert_eq!(
+            drafting.next_written(),
+            Some(Stretch {
+                pause: Some(Pause::Short),
+                words: "So".into()
+            })
+        );
+        drafting.settle(&[
+            json!({"words": "That is great!"}),
+            json!({"words": "Mount"}),
+            json!({"expression": {"pause": "short"}, "words": "So it is."}),
+        ]);
+        assert_eq!(drafting.next_written(), Some(words(" it is.")));
+        assert_eq!(drafting.next_written(), None);
+        assert!(drafting.finished());
+    }
+
+    #[test]
+    fn the_socket_frames_are_the_backends() {
+        assert_eq!(
+            super::said(r#"{"type":"ready","sample_rate":24000}"#),
+            super::Said::Ready
+        );
+        assert_eq!(super::said(r#"{"type":"done"}"#), super::Said::Done);
+        assert_eq!(
+            super::said(r#"{"type":"speech_start","text":"Hi."}"#),
+            super::Said::Other
+        );
+        assert_eq!(
+            super::said(r#"{"type":"error","message":"x"}"#),
+            super::Said::Failed
+        );
+        assert_eq!(super::said("not json"), super::Said::Failed);
     }
 
     #[test]
