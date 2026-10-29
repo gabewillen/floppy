@@ -111,7 +111,9 @@
 //! offset, expression?}`, the words newly written into a part, and then
 //! [`drafting::FINAL_EVENT`] `{parts}`, the whole reply. Each request says
 //! what is ready as soon as it is: the words through the last sentence
-//! written, a part that pauses opening a request of its own, and the rest
+//! written (the first request also through a clause of at least
+//! [`drafting::MIN_CLAUSE_WORDS`] words), a part that pauses opening a
+//! request of its own, and the rest
 //! once the whole reply is in. The whole reply is authoritative: when it
 //! diverges from what was said, nothing more is said. The answers are
 //! joined into the output as a reply with a pause is, and the chunks are
