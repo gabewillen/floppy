@@ -320,6 +320,10 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
 /// How long the fake decision service takes to decide.
 const DECIDING: Duration = Duration::from_secs(1);
 
+/// How long reasoning takes a turn intuition handed it, so what intuition
+/// said is said before reasoning's reply arrives.
+const HANDED: Duration = Duration::from_secs(1);
+
 fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
@@ -412,6 +416,14 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     // decision is the same every run.
     if target.ends_with("/v1/systemone") {
         std::thread::sleep(DECIDING);
+    }
+    // Reasoning answers a handed turn after what intuition said first is
+    // said, so that reply never waits behind it.
+    if target == format!("/{}/v1/chat/completions", Generation::HandOff.path())
+        && body["model"] != INTUITION_MODEL
+        && !is_reflection(&body)
+    {
+        std::thread::sleep(HANDED);
     }
     let reply = answer(&target, &body)
         .map(|(status, text)| (status, support::answer_as_asked(&body, text)));

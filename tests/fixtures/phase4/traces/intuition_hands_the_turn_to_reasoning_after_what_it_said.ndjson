@@ -20,8 +20,6 @@
 {"label":"reflection","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1: 0 episodes, 0 behaviors","type":"log"}
 {"label":"reflection.selected","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1","type":"log"}
-{"label":"communication.late","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.draft","type":"log"}
-{"label":"communication.deferred","parent":"session.floppy","session":"session.floppy.communication","text":"bot.ability.communication.respond","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"1","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"2","type":"log"}
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 0","type":"log"}
@@ -30,7 +28,8 @@
 {"label":"floppy.say","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"Hi! I am floppy.","type":"log"}
 {"label":"speech.draft","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.0","text":"Let me think.","type":"log"}
 {"label":"speech.final","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.0","text":"Let me think.","type":"log"}
-{"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.1","text":"encode Hi! I am floppy. -> media/speaking-2.pcm","type":"log"}
+{"label":"speech.draft","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.1","text":"Hi! I am floppy.","type":"log"}
+{"label":"speech.final","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.1","text":"Hi! I am floppy.","type":"log"}
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
