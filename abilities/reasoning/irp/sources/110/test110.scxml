@@ -11,7 +11,7 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.processing.input" target="#_reasoning"><content expr='({turn: 1, stimulus: {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}, focus: null, focus_candidates: [], choices: [], held: [], environment: null, self: null, acted: [], recent: [], max_context_tokens: null, completion_reserve_tokens: 0, bytes_per_token: 3})'/></send>
+      <send event="bot.ability.processing.input" target="#_reasoning"><content expr='({turn: 1, stimulus: {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}, focus: null, focus_candidates: [], choices: [], held: [], environment: null, self: null, acted: [], recent: [], max_context_tokens: null, completion_reserve_tokens: 0, bytes_per_token: 3, reached: true})'/></send>
     </onentry>
     <transition event="bot.ability.processing.output" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "the reasoning has no choices to select from"' target="step1"/>
   </state>

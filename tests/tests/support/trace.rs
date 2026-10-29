@@ -5,10 +5,11 @@
 //! A trace is NDJSON, one line per item, in order:
 //!
 //! * every `log`, `done` and `error` record of the run (every session's,
-//!   with its `session` and `parent`), as `scx run` wrote it;
+//!   with its `session` and `parent`), as `scx run` wrote it, grouped by
+//!   session (by id; each session's own records in order);
 //! * then every request a fake backend received, as
 //!   `{"type":"request","target":…,"body":…}` (the choices, strict
-//!   schemas and prompts the services sent).
+//!   schemas and prompts the services sent), sorted by their text.
 //!
 //! Values that differ per run are normalized: the test's scratch directory
 //! (`target/test-scratch/<pid>-<name>-<n>`) becomes `<scratch>`, the
@@ -103,21 +104,33 @@ fn shapes_normalized(text: &str, shape: &[u8], replacement: &str) -> String {
 }
 
 /// The trace of `records` (a run's records, in order) and `requests`
-/// (`(target, body)` of each backend request, in order).
+/// (`(target, body)` of each backend request, in order): the records
+/// grouped by session (sessions by id, each session's own records in
+/// order), then the requests sorted by their text. Sessions run side by
+/// side (a deliberative tier takes a turn as the decision layer does), so
+/// only each session's own order, and which requests were made, are
+/// stable from run to run.
 pub fn render(records: &[Json], requests: &[(String, Json)]) -> String {
+    let mut records: Vec<(String, String)> = records
+        .iter()
+        .filter(|record| record["type"].as_str().is_some_and(|t| KEPT.contains(&t)))
+        .map(|record| {
+            let session = record["session"].as_str().unwrap_or_default().to_owned();
+            (session, normalized(&record.to_string()))
+        })
+        .collect();
+    records.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut requests: Vec<String> = requests
+        .iter()
+        .map(|(target, body)| {
+            normalized(&json!({"type": "request", "target": target, "body": body}).to_string())
+        })
+        .collect();
+    requests.sort();
     let mut text = String::new();
-    let records = records
-        .iter()
-        .filter(|record| record["type"].as_str().is_some_and(|t| KEPT.contains(&t)));
-    let requests = requests
-        .iter()
-        .map(|(target, body)| json!({"type": "request", "target": target, "body": body}));
     let mut voices = Vec::new();
-    for item in records.cloned().chain(requests) {
-        text.push_str(&voices_normalized(
-            &normalized(&item.to_string()),
-            &mut voices,
-        ));
+    for line in records.into_iter().map(|(_, line)| line).chain(requests) {
+        text.push_str(&voices_normalized(&line, &mut voices));
         text.push('\n');
     }
     text

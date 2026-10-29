@@ -258,6 +258,29 @@ function takesIntuition() {
   return intuition_model !== null && hand_to !== 'reasoning' && !perceivesFailureOf(['intuition']);
 }
 
+// running_decision
+
+// The tier the decision layer would hand the turn to were it to choose
+// none, which takes the turn as the decision layer does.
+function earlyTier() {
+  return intuition_model !== null && !perceivesFailureOf(['intuition']) ? 'intuition' : 'reasoning';
+}
+
+function earlyTierTarget() {
+  return '#_' + earlyTier();
+}
+
+function isEarlyIntuition() {
+  return earlyTier() === 'intuition';
+}
+
+// failing
+
+// The turn failed in the decision layer's stage, while a tier held it early.
+function isFailingDecision() {
+  return stage === 'decision';
+}
+
 // running_intuition
 
 // The turn's choices and the deliberative handoff, offered by this ability

@@ -1,19 +1,19 @@
 {"label":"harness.ready","session":"session","text":"communication","type":"log"}
-{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"one","type":"log"}
-{"label":"memory","parent":"session.communication","session":"session.communication.conversation","text":"absent","type":"log"}
-{"label":"conversation","parent":"session.communication","session":"session.communication.conversation","text":"inbound from [\"gabe\"] in relationship 0","type":"log"}
-{"label":"communication.product","parent":"session","session":"session.communication","text":"input-1:turn:gabe","type":"log"}
 {"label":"harness.product","session":"session","text":"1","type":"log"}
-{"label":"communication.hop.timed_out","parent":"session","session":"session.communication","text":"response 1 after 4000 ms","type":"log"}
 {"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Speaking response timed out.\"}","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Communication is holding too many responses; this one is refused.\"}","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Speaking response timed out.\"}","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Speaking response timed out.\"}","type":"log"}
+{"label":"communication.product","parent":"session","session":"session.communication","text":"input-1:turn:gabe","type":"log"}
+{"label":"communication.hop.timed_out","parent":"session","session":"session.communication","text":"response 1 after 4000 ms","type":"log"}
 {"label":"communication.late","parent":"session","session":"session.communication","text":"r1","type":"log"}
-{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"two","type":"log"}
 {"label":"communication.late","parent":"session","session":"session.communication","text":"r2","type":"log"}
 {"label":"communication.deferred","parent":"session","session":"session.communication","text":"bot.ability.communication.respond","type":"log"}
 {"label":"communication.rejected","parent":"session","session":"session.communication","text":"holding 1 responses, the most it holds","type":"log"}
-{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Communication is holding too many responses; this one is refused.\"}","type":"log"}
 {"label":"communication.hop.timed_out","parent":"session","session":"session.communication","text":"response 2 after 4000 ms","type":"log"}
-{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Speaking response timed out.\"}","type":"log"}
-{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"three","type":"log"}
 {"label":"communication.hop.timed_out","parent":"session","session":"session.communication","text":"response 3 after 4000 ms","type":"log"}
-{"label":"harness.answer","session":"session","text":"bot.ability.communication.failed {\"message\":\"Speaking response timed out.\"}","type":"log"}
+{"label":"memory","parent":"session.communication","session":"session.communication.conversation","text":"absent","type":"log"}
+{"label":"conversation","parent":"session.communication","session":"session.communication.conversation","text":"inbound from [\"gabe\"] in relationship 0","type":"log"}
+{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"one","type":"log"}
+{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"two","type":"log"}
+{"label":"deaf.input","parent":"session.communication","session":"session.communication.speaking","text":"three","type":"log"}

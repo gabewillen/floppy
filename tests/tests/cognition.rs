@@ -317,6 +317,9 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     }
 }
 
+/// How long the fake decision service takes to decide.
+const DECIDING: Duration = Duration::from_secs(1);
+
 fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
     let mut request_line = String::new();
@@ -402,6 +405,13 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
             );
             return;
         }
+    }
+    // The decision layer answers after the tier that took the turn as it
+    // did (not yet reached, decision D275) has asked its model, as a real
+    // decision outlasts a local recall, so what that tier does before the
+    // decision is the same every run.
+    if target.ends_with("/v1/systemone") {
+        std::thread::sleep(DECIDING);
     }
     let reply = answer(&target, &body)
         .map(|(status, text)| (status, support::answer_as_asked(&body, text)));
@@ -637,6 +647,11 @@ fn until_all(run: &Run, labels: &[&str]) -> Vec<Json> {
     })
 }
 
+/// Whether `record` is the cognition's log of a turn it takes.
+fn turn_started(record: &Json) -> bool {
+    record["type"] == "log" && record["label"] == "cognition"
+}
+
 fn turn_ended(record: &Json) -> bool {
     record["type"] == "log"
         && matches!(
@@ -758,7 +773,25 @@ fn close(run: Run, mock: &Mock, test: &str) -> Finished {
 /// the reply's playout and the interpretation of the bot's own voice run
 /// side by side, and which logs first depends on the load.
 fn settled_order(records: &[Json]) -> Vec<Json> {
-    let mut ordered = records.to_vec();
+    // The reply's records said while its turn was still in hand (a tier's
+    // first words, sent before the turn ended, decision D275) follow the
+    // turn's end, as the rest of the reply does.
+    let mut ordered = Vec::with_capacity(records.len());
+    let mut early = Vec::new();
+    for record in records {
+        if turn_started(record) {
+            ordered.append(&mut early);
+            ordered.push(record.clone());
+        } else if of_the_reply(record) {
+            early.push(record.clone());
+        } else if turn_ended(record) {
+            ordered.push(record.clone());
+            ordered.append(&mut early);
+        } else {
+            ordered.push(record.clone());
+        }
+    }
+    ordered.append(&mut early);
     for end in SETTLED.take() {
         let end = end.min(ordered.len());
         let Some(start) = ordered[..end].iter().rposition(turn_ended) else {
@@ -854,22 +887,24 @@ fn the_decision_layer_handles_an_ignore_without_reasoning() {
     // logs it.
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     // The decision offered the turn's choices it could fill (respond's
-    // text and adopt's name have no grounded value); reasoning asked no
-    // model.
+    // text and adopt's name have no grounded value). Reasoning took the
+    // turn as the decision layer did, not yet reached, and asked its model
+    // once (the backend fails it); the decision layer's ignore left it, so
+    // it answered nothing and no reasoning stage ran.
     assert_eq!(selection_labels(&mock), strings(&["__reasoning__", IGNORE]));
-    assert!(reasoning_requests(&mock).is_empty());
+    assert_eq!(reasoning_requests(&mock).len(), 1);
     let finished = close(
         run,
         &mock,
         "the_decision_layer_handles_an_ignore_without_reasoning",
     );
     // Reflection reflected on the turn after its output (the backend's
-    // empty selection) and asked the model once.
+    // empty selection) and asked the model once, beside reasoning's one.
     assert_eq!(
         texts(&finished.all, "bot.ability.reflection.output"),
         strings(&["turn 1"])
     );
-    assert_eq!(mock.received("/chat/completions").len(), 1);
+    assert_eq!(mock.received("/chat/completions").len(), 2);
     // The body read the cognition's two offers, ignore and a lesson, from
     // its live session (decision D242).
     let mut all = records;
@@ -1907,7 +1942,10 @@ fn a_pass_to_reasoning_skips_the_intuition_tier() {
         ]),
         "{records:?}"
     );
-    assert!(intuition_requests(&mock).is_empty());
+    // Intuition took the turn as the decision layer did, not yet reached,
+    // and the pass to reasoning left it: it asked its model at most once,
+    // and nothing it selected was sent (no intuition stage ran).
+    assert!(intuition_requests(&mock).len() <= 1);
     let decisions = mock.received("/systemone");
     let criteria = &decisions[0].body["questions"]["selection"]["criteria"];
     assert!(criteria.get("__intuition__").is_some(), "{criteria}");
@@ -2197,9 +2235,12 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         decisions[0].body["questions"][format!("{RESPOND}::parts")]["criteria"],
         json!({r#"[{"words":"hi"}]"#: format!("Which value fills \"parts\" for {RESPOND}?")})
     );
+    // Reasoning asked twice: once as it took the turn beside the decision
+    // layer, not yet told what the decision layer did, and again once the
+    // turn reached it with the decision layer's acts (decision D275).
     let reasoning = reasoning_requests(&mock);
-    assert_eq!(reasoning.len(), 1);
-    let user = reasoning[0].body["messages"]
+    assert_eq!(reasoning.len(), 2);
+    let user = reasoning[1].body["messages"]
         .as_array()
         .and_then(|messages| messages.iter().find(|message| message["role"] == "user"))
         .and_then(|message| message["content"].as_str())

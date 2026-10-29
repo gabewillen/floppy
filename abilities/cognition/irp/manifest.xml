@@ -143,4 +143,13 @@
       <start uri="240/test240.scxml"/>
     </test>
   </assert>
+  <assert id="cognition-16" specnum="16" specid="#cognition-16">
+    <![CDATA[As the decision layer takes a turn, the tier it would hand the turn to (intuition when composed, else reasoning) is sent the turn too, not yet reached (`reached` false), so it recalls and asks its model meanwhile; a turn the decision layer handles leaves that tier, and nothing it selected is sent, while a turn it hands on reaches the tier and is answered by its selections.]]>
+    <test id="250" conformance="mandatory" manual="false">
+      <start uri="250/test250.scxml"/>
+    </test>
+    <test id="251" conformance="mandatory" manual="false">
+      <start uri="251/test251.scxml"/>
+    </test>
+  </assert>
 </assertions>

@@ -1,6 +1,6 @@
-{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"no streaming session (Speech streaming failed: the backend is not configured.): the listening hears through the interpretation","type":"log"}
-{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
-{"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled \"I like to ask questions.\"","type":"log"}
-{"label":"double.persona","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"description\":{\"kind\":\"fact\",\"reason\":\"I noticed I keep asking them.\",\"text\":\"I like to ask questions.\",\"traits\":[\"warm\",\"patient\",\"curious\",\"honest\"]},\"traits\":[\"warm\",\"patient\",\"curious\",\"honest\"]}","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
+{"label":"double.persona","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"description\":{\"kind\":\"fact\",\"reason\":\"I noticed I keep asking them.\",\"text\":\"I like to ask questions.\",\"traits\":[\"warm\",\"patient\",\"curious\",\"honest\"]},\"traits\":[\"warm\",\"patient\",\"curious\",\"honest\"]}","type":"log"}
 {"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
+{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
+{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"no streaming session (Speech streaming failed: the backend is not configured.): the listening hears through the interpretation","type":"log"}
+{"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled \"I like to ask questions.\"","type":"log"}

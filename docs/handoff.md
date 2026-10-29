@@ -7,10 +7,17 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-26.
+Last updated: 2026-10-28.
 
 ## Current state (2026-10-09) — resume here
 
+- **Latency hill climb: fanout (2026-10-28, D275):** the tier after the
+  decision layer (intuition, else reasoning) gets the turn with
+  `reached: false` as the decision layer starts, recalls and asks its model
+  beside it, and withholds what it selects until the turn reaches it
+  (mosfet.py's `_reached`). Next on this line: say a reply's first clause
+  before its first sentence ends (speech's drafting), the TTS WebSocket,
+  and handing hearing's words on before the voices are identified.
 - **Latency hill climb: long-lived hearing (2026-10-27, D264):** the
   interpretation invokes its six hearing stages once and sends each a
   request per sound (`<name>.input {id, ...}`, answered by `<name>.output`

@@ -145,9 +145,22 @@
   a token any reply showed, and the output carries it back to the
   cognition, which passes it in the next turn's input.
 
+  Reached: the cognition sends a turn to the tier its decision layer would
+  hand it to as the decision layer takes it (reached false), so the tier
+  recalls and asks its model while the decision layer decides. Until the
+  turn reaches the tier (an input for the same turn with reached true and
+  the same frame: focus, focus_candidates, choices, held, environment,
+  self, acted and recent), every selection and draft it would send is kept
+  in withheld, in order, and it does not answer; once reached, they are
+  sent in order and the turn goes on as one sent reached. An input for
+  another turn, or the same turn with another frame, while the turn in
+  hand has not reached the tier leaves that turn unanswered and starts the
+  new one; a bot.ability.processing.cancel ends it as any turn.
+
   Input: bot.ability.processing.input {turn, stimulus, focus,
   focus_candidates, choices, held, environment, self, acted, recent,
-  max_context_tokens, completion_reserve_tokens, bytes_per_token}; the
+  max_context_tokens, completion_reserve_tokens, bytes_per_token,
+  reached}; the
   <param>s are tier, model, memory and embedding. A turn starts with
   nothing of the turn before. Output: bot.ability.processing.output, to
   the cognition:
@@ -247,6 +260,10 @@
     <data id="budget" expr="null"/>
     <data id="fit" expr="null"/>
     <data id="result" expr="null"/>
+    <!-- Whether the turn in hand has reached this tier, and what it would
+         have sent before it did: {event, target, data} each, in order. -->
+    <data id="reached" expr="true"/>
+    <data id="withheld" expr="[]"/>
     <!-- The dispatch call and the selection being sent (the <foreach>
          items). -->
     <data id="call" expr="null"/>
@@ -314,6 +331,8 @@
       <assign location="max_context_tokens" expr="_event.data.max_context_tokens"/>
       <assign location="completion_reserve_tokens" expr="_event.data.completion_reserve_tokens"/>
       <assign location="bytes_per_token" expr="_event.data.bytes_per_token"/>
+      <assign location="reached" expr="_event.data.reached"/>
+      <assign location="withheld" expr="[]"/>
       <assign location="system" expr="null"/>
       <assign location="schema" expr="null"/>
       <assign location="prompt" expr="null"/>
@@ -346,6 +365,20 @@
     <onentry>
       <assign location="context_ref" expr="contextRefFromInput()"/>
     </onentry>
+    <!-- The turn reaches this tier: nothing is withheld yet. -->
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                cond="isReaching(_event)">
+      <assign location="reached" expr="true"/>
+    </transition>
+    <!-- Another turn, or this one framed anew, before this one reached
+         the tier: this one is left and the input taken afresh, as the
+         next internal event. -->
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                cond="!reached" target="idle">
+      <send event="bot.ability.processing.input" target="#_internal">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
     <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json">
       <event:defer/>
     </transition>
@@ -486,6 +519,23 @@
       <param name="stream" expr="stream"/>
     </invoke>
 
+    <!-- The turn reaches this tier: what it withheld is sent, in order. -->
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                cond="isReaching(_event)">
+      <assign location="reached" expr="true"/>
+      <foreach array="withheld" item="s">
+        <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+          <content expr="s.data"/>
+        </send>
+      </foreach>
+      <assign location="withheld" expr="[]"/>
+    </transition>
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                cond="!reached" target="idle">
+      <send event="bot.ability.processing.input" target="#_internal">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
     <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json">
       <event:defer/>
     </transition>
@@ -508,10 +558,13 @@
         <foreach array="call.args.events" item="s">
           <if cond="isHandoff(s)">
             <assign location="handed_on" expr="true"/>
-          <else/>
+          <elseif cond="reached"/>
             <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
               <content expr="selectionData(s)"/>
             </send>
+            <assign location="selected[selected.length]" expr="s"/>
+          <else/>
+            <assign location="withheld[withheld.length]" expr="withheldSelection(s)"/>
             <assign location="selected[selected.length]" expr="s"/>
           </if>
         </foreach>
@@ -547,19 +600,48 @@
          and goes to the one target that offers the drafted event; a draft
          whose event more than one target offers is dropped. -->
     <transition event="*" cond="isDraft(_event)">
-      <send eventexpr="_event.name" targetexpr="'#_scxml_' + draftTarget(_event)">
-        <content expr="_event.data"/>
-      </send>
+      <if cond="reached">
+        <send eventexpr="_event.name" targetexpr="'#_scxml_' + draftTarget(_event)">
+          <content expr="_event.data"/>
+        </send>
+      <else/>
+        <assign location="withheld[withheld.length]" expr="withheldDraft(_event)"/>
+      </if>
     </transition>
   </state>
 
-  <!-- The turn's answer to the cognition, then the next turn. -->
+  <!-- The turn's answer to the cognition, then the next turn; a turn that
+       has not reached this tier is answered once it does. -->
   <state id="done">
     <onentry>
-      <send event="bot.ability.processing.output" target="#_parent">
-        <content expr="withFit(result)"/>
-      </send>
+      <!-- What was withheld and could not all be sent fails the turn. -->
+      <if cond="isWithheldUnsent()">
+        <assign location="result" expr="withheldUnsentResult()"/>
+      </if>
+      <if cond="reached">
+        <send event="bot.ability.processing.output" target="#_parent">
+          <content expr="withFit(result)"/>
+        </send>
+      </if>
     </onentry>
-    <transition target="idle"/>
+    <transition cond="reached" target="idle"/>
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                cond="isReaching(_event)" target="done">
+      <assign location="reached" expr="true"/>
+      <foreach array="withheld" item="s">
+        <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+          <content expr="s.data"/>
+        </send>
+      </foreach>
+      <assign location="withheld" expr="[]"/>
+    </transition>
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                target="idle">
+      <send event="bot.ability.processing.input" target="#_internal">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
   </state>
 </scxml>

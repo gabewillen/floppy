@@ -25,6 +25,34 @@ function isCurrentTurn(_event) {
   return _event.data.turn === turn;
 }
 
+// reaching
+
+// The input that brings the turn in hand, sent before it reached this
+// tier, to it: the same turn and frame, reached.
+function isReaching(_event) {
+  var given = _event.data;
+  return !reached && given.reached === true && given.turn === turn && isSameFrame(given);
+}
+
+// Whether an input frames the turn as the one in hand was framed.
+function isSameFrame(given) {
+  var frame = {focus: focus, focus_candidates: focus_candidates, choices: choices, held: held,
+    environment: environment, self: self, acted: acted, recent: recent};
+  return Object.keys(frame).every(function (key) {
+    return JSON.stringify(given[key]) === JSON.stringify(frame[key]);
+  });
+}
+
+// A selection kept until the turn reaches this tier.
+function withheldSelection(s) {
+  return ({event: s.event, target: s.target, data: selectionData(s)});
+}
+
+// A draft kept until the turn reaches this tier.
+function withheldDraft(_event) {
+  return ({event: _event.name, target: draftTarget(_event), data: _event.data});
+}
+
 // recalling
 
 // The context: the stimulus's target_device, or null.
@@ -299,6 +327,15 @@ function isHandoff(s) {
 }
 
 // done
+
+// What was withheld until the turn reached this tier could not all be sent.
+function isWithheldUnsent() {
+  return reached && withheld.length > 0;
+}
+
+function withheldUnsentResult() {
+  return ({turn: turn, handled: false, failed: true, reason: 'the ' + tier + ' could not run (withheld)'});
+}
 
 // Handled, or handed on to reasoning with what was dispatched first as the
 // turn's acted.
