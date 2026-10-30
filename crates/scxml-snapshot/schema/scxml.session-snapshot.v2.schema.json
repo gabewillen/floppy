@@ -39,14 +39,23 @@
             "now_ms"
           ]
         },
-        "root": {
-          "$ref": "#/$defs/session"
+        "sessions": {
+          "type": "array",
+          "minItems": 1,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/session"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/invokedSession"
+          }
         }
       },
       "required": [
         "components",
         "clock",
-        "root"
+        "sessions"
       ]
     }
   },
@@ -77,13 +86,11 @@
     },
     "name": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 1024
+      "minLength": 1
     },
     "id": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 1024
+      "minLength": 1
     },
     "valueText": {
       "type": "string"
@@ -368,8 +375,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 1024
+          "minLength": 1
         },
         "type": {
           "enum": [
@@ -414,15 +420,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/event"
-          },
-          "maxItems": 10000
+          }
         },
         "external": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/event"
-          },
-          "maxItems": 10000
+          }
         }
       },
       "required": [
@@ -479,20 +483,17 @@
       "additionalProperties": false,
       "properties": {
         "event": {
-          "type": "string",
-          "maxLength": 1024
+          "type": "string"
         },
         "params": {
           "type": "array",
-          "maxItems": 256,
           "items": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
               "name": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 1024
+                "minLength": 1
               },
               "value": {
                 "$ref": "#/$defs/value"
@@ -529,18 +530,15 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 1024
+            "minLength": 1
           },
-          "minItems": 1,
-          "maxItems": 10000
+          "minItems": 1
         },
         "targets": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
-          },
-          "maxItems": 10000
+          }
         },
         "type": {
           "enum": [
@@ -549,8 +547,7 @@
           ]
         },
         "cond": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "has_cond": {
           "type": "boolean"
@@ -562,15 +559,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
-          },
-          "maxItems": 10000
+          }
         },
         "entry": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
-          },
-          "maxItems": 10000
+          }
         },
         "event_schema": {
           "$ref": "#/$defs/eventSchema"
@@ -632,8 +627,7 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/transition"
-      },
-      "maxItems": 10000
+      }
     },
     "historyValue": {
       "type": "object",
@@ -646,8 +640,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
-          },
-          "maxItems": 10000
+          }
         }
       },
       "required": [
@@ -661,8 +654,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 1024
+          "minLength": 1
         },
         "value": {
           "$ref": "#/$defs/variableValue"
@@ -681,8 +673,7 @@
           "$ref": "#/$defs/name"
         },
         "name": {
-          "type": "string",
-          "maxLength": 1024
+          "type": "string"
         },
         "ioprocessors": {
           "$ref": "#/$defs/value"
@@ -701,8 +692,7 @@
           "$ref": "#/$defs/name"
         },
         "name": {
-          "type": "string",
-          "maxLength": 1024
+          "type": "string"
         },
         "datamodel_name": {
           "enum": [
@@ -758,15 +748,13 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/name"
-              },
-              "maxItems": 10000
+              }
             },
             "full": {
               "type": "array",
               "items": {
                 "$ref": "#/$defs/name"
-              },
-              "maxItems": 10000
+              }
             }
           },
           "required": [
@@ -778,16 +766,14 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/historyValue"
-          },
-          "maxItems": 10000
+          }
         },
         "bound_states": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
           },
-          "uniqueItems": true,
-          "maxItems": 10000
+          "uniqueItems": true
         },
         "counters": {
           "type": "object",
@@ -812,8 +798,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/variable"
-          },
-          "maxItems": 256
+          }
         },
         "queues": {
           "$ref": "#/$defs/queues"
@@ -822,8 +807,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/pendingSend"
-          },
-          "maxItems": 1024
+          }
         },
         "transitions": {
           "$ref": "#/$defs/transitions"
@@ -832,8 +816,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/invocation"
-          },
-          "maxItems": 255
+          }
         }
       },
       "required": [
@@ -854,8 +837,7 @@
           "$ref": "#/$defs/name"
         },
         "name": {
-          "type": "string",
-          "maxLength": 1024
+          "type": "string"
         },
         "datamodel_name": {
           "enum": [
@@ -911,15 +893,13 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/name"
-              },
-              "maxItems": 10000
+              }
             },
             "full": {
               "type": "array",
               "items": {
                 "$ref": "#/$defs/name"
-              },
-              "maxItems": 10000
+              }
             }
           },
           "required": [
@@ -931,16 +911,14 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/historyValue"
-          },
-          "maxItems": 10000
+          }
         },
         "bound_states": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/name"
           },
-          "uniqueItems": true,
-          "maxItems": 10000
+          "uniqueItems": true
         },
         "counters": {
           "type": "object",
@@ -965,8 +943,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/variable"
-          },
-          "maxItems": 256
+          }
         },
         "queues": {
           "$ref": "#/$defs/queues"
@@ -975,8 +952,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/pendingSend"
-          },
-          "maxItems": 1024
+          }
         },
         "transitions": {
           "$ref": "#/$defs/transitions"
@@ -985,8 +961,7 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/invocation"
-          },
-          "maxItems": 255
+          }
         }
       },
       "required": [
@@ -1023,9 +998,6 @@
         },
         "finished": {
           "type": "boolean"
-        },
-        "session": {
-          "$ref": "#/$defs/invokedSession"
         }
       },
       "required": [
@@ -1034,8 +1006,7 @@
         "state",
         "index",
         "autoforward",
-        "finished",
-        "session"
+        "finished"
       ]
     }
   }

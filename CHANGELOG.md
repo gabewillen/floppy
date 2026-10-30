@@ -442,7 +442,7 @@ hard cutover.
   invoked sessions under one root session; an invocation beyond them fails
   as that `<invoke>`'s `error.execution`. Cancelling a session cancels the
   sessions it invoked. Session snapshots carry `internal` and `external`
-  queues and `invocations` nested up to the format's 32 levels.
+  queues and every invoked session at any depth.
 - Live sessions: `SessionHost::open` returns a `LiveSession` (`send`,
   `advance`, `advance_to`, `run_until_idle`, `snapshot`, `close`) on a
   pluggable clock (`WallClock`, `ManualClock`, or logical), with `<log>`
@@ -781,6 +781,27 @@ hard cutover.
   member, a lone surrogate, deep nesting, or a number `serde_json` might
   not read exactly) is still evaluated, so every value is the one its
   literal gives.
+- The ECMAScript data model validates an event once: the machine passes
+  the same event to every condition, value, assignment, script, and log of
+  a macrostep, and each of them checked the event's JSON data (a parse, a
+  serialization, and a comparison) and wrote its `_event` source again to
+  find that it was the event already bound. An event equal to the last one
+  validated is now admitted without its data being checked again, and an
+  event whose fields `_event` shows equal the bound one's is the same
+  `_event` object without its source being written (one that differs only
+  in its trace context still is, as before). Replaying a recorded live
+  session of about forty sessions with large events, the engine's time in
+  its three turns went from 6.4 to 6.8 s to 5.8 to 6.2 s (release, Linux
+  x86_64).
+- The pre-initialized ECMAScript data-model component starts each instance
+  with 4 MiB of free heap: its `wizer-initialize` grows the heap by that
+  much and frees it, so the snapshot's initial memory holds it, as zero
+  pages that carry no data. A memory is copied whole each time it grows
+  (docs/limits.md) and the allocator grows it 64 KiB at a time, so a
+  session whose heap grew by a few megabytes copied its whole memory
+  dozens of times. In the same replay the bytes copied by memory growth
+  went from 3.3 GB to 1.4 GB and the engine's time in the three turns to
+  4.5 to 4.8 s.
 - The ECMAScript data model makes a bound `_event` read-only natively: the
   value it just built gets the same read-only proxies, in the same maps,
   with the same properties redefined and the same objects frozen as the
@@ -1027,6 +1048,12 @@ hard cutover.
   snapshot lists only declared `<data>` ids, each a portable value or
   `{"type":"text","typeof":K,"text":S}` (WIT `variable-value`
   `text(variable-text)` replaces the function and opaque forms).
+- `scxml.session-snapshot/v2` lists its sessions flat: `snapshot.sessions`
+  holds the root session first and then every invoked session in
+  invocation order, each linked to its parent by `invoked_by`. It replaces
+  `snapshot.root` and the `session` each invocation nested, so a document
+  holds an invocation chain of any depth. Error pointers into a session
+  read `/snapshot/sessions/<index>/...`.
 - XPath data model: a `<foreach index>` counts from 1 (CR C.3.10; the
   ECMAScript index still counts from 0); `<data>` string content, inline or
   `src`, is space-normalized (C.3.1); `_event.data` follows C.3.7.1
@@ -1314,7 +1341,7 @@ hard cutover.
   string, and event field crossing its interface; and the session
   snapshot's 64 KiB bound on event data and `raw` and 16 KiB bound on event
   metadata, a pending send's `target` and `type`, and an invocation's
-  `type`. Names, trace context, and the snapshot's variable `oversized`
+  `type`. Trace context and the snapshot's variable `oversized`
   threshold keep their bounds. The `types.event` and `data-model-api` WIT
   texts say so.
 - The ECMAScript data model's 64 KiB bound on what one built-in call makes
@@ -1326,6 +1353,43 @@ hard cutover.
   native stack, and still reject an array-like whose length is not a plain
   data property.
 
+- Resource caps the SCXML specification does not require. The bundled
+  data models no longer bound source, expression, or script length,
+  declared variables, aggregate value bytes, `<foreach>` frames or items,
+  or `In()` queries, and the ECMAScript model sets no Boa loop-iteration
+  or value-stack limit: fuel and memory bound runaway work, so a loop
+  that never ends now exhausts the data model's fuel and ends the session
+  instead of raising `error.execution`. The session clock drops its
+  schedule, id, and payload bounds and the `clock-error` cases
+  `payload-too-large` and `capacity-exhausted`; the delayed-send record
+  and processor sends drop their field and parameter caps
+  (`MAX_DELAYED_SEND_BYTES`, `MAX_SEND_MESSAGE_PARAMS`,
+  `MAX_PROCESSOR_SEND_*`), and the session snapshot their
+  processor-message bounds; the machine drops its invoke parameter cap;
+  the engine drops `MAX_EFFECTS_PER_COMMAND`; and the XPath parser drops
+  its expression byte bound. The WIT bound text for each is gone.
+- The 1024-byte bound on names (`scxml_types::MAX_NAME_BYTES` and
+  `NameError::TooLong`): SCXML sets no length on a state ID, event name,
+  send ID, invoke ID, session ID, or variable name, so none applies on any
+  build, at any boundary (the machine, data models, processors, compiler,
+  both hosts, and the snapshot format). The validator rules `LIMIT006` and
+  `LIMIT007` are gone with it, and a generated invoke id or `done.invoke`
+  event of any length starts.
+- The `scxml.session-snapshot/v2` count, length, and size bounds: 255
+  invoked sessions, 10,000 queue entries, transitions, events per
+  transition, and configuration states, 1,024 pending sends, 256
+  variables, 16 KiB conditions, 1024-byte session ids and names, and the
+  32 MiB document (`MAX_INVOKED_SESSIONS`, `MAX_QUEUE_ENTRIES`,
+  `MAX_PENDING_SENDS`, `MAX_TRANSITIONS`, `MAX_CONFIGURATION_STATES`,
+  `MAX_VARIABLES`, `MAX_COND_BYTES`, `MAX_SESSION_ID_BYTES`,
+  `MAX_DOCUMENT_BYTES`, the error code `too-large`, its `SNAP-too-large`
+  explanation, and the browser host's `MAX_SNAPSHOT_BYTES` and
+  `MAX_SNAPSHOT_INVOKED_SESSIONS`), with their JSON Schema `maxItems` and
+  `maxLength`. The inline value threshold stays.
+- The `scxml.session-snapshot/v2` nesting bound of 32 invoke levels
+  (`MAX_INVOKE_DEPTH`, the error code `depth-exceeded`, its
+  `SNAP-depth-exceeded` explanation, and the browser host's
+  `MAX_SNAPSHOT_INVOKE_DEPTH`): the flat session list has no depth.
 - The bounded logical `scxml-invoked-service` component and its 0.1.0
   `invoke-request` WIT record (`invoker-type`, text `content`; the name is
   now the invoked-service request), `ArtifactKind::InvokedService`, the

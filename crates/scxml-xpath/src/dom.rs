@@ -165,7 +165,7 @@ impl QName {
     /// # Errors
     ///
     /// [`Error::Xml`] with [`XmlError::Malformed`] when `name` is not an
-    /// `NCName` within [`limits::MAX_NAME_BYTES`].
+    /// `NCName`.
     pub fn local(name: &str) -> Result<Self, Error> {
         Self::new(None, name, None)
     }

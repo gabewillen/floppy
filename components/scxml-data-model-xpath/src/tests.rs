@@ -8,9 +8,8 @@ use scxml_types::{
 };
 
 use crate::{
-    DataModelError, ExecutionHost, MAX_VALUE_BYTES, MAX_VARIABLES, SyntaxKind, SystemContext,
-    VariableMarkup, XPathDataModel, accepts_event_data, check_syntax, event_data, markup_value,
-    namelist_name,
+    DataModelError, ExecutionHost, MAX_VALUE_BYTES, SyntaxKind, SystemContext, VariableMarkup,
+    XPathDataModel, accepts_event_data, check_syntax, event_data, markup_value, namelist_name,
 };
 
 /// Host whose configuration is a fixed list; `fail` makes every query fail.
@@ -760,14 +759,14 @@ fn declare_and_set_declared_follow_late_binding_and_invoke_rules() {
     assert_eq!(model.declare("_name"), Err(DataModelError::InvalidInput));
     let mut full = XPathDataModel::new();
     let mut source = String::new();
-    for index in 0..MAX_VARIABLES {
+    for index in 0..300 {
         source.push_str("<data id=\"v");
         source.push_str(&index.to_string());
         source.push_str("\"/>");
     }
     full.initialize(&source, system())
-        .expect("the bound is inclusive");
-    assert_eq!(full.declare("overflow"), Err(DataModelError::InvalidInput));
+        .expect("variables have no count bound");
+    assert_eq!(full.declare("another"), Ok(()));
 }
 
 #[test]
@@ -1053,20 +1052,14 @@ fn snapshot_serializes_every_variable_in_document_order_and_changes_nothing() {
 }
 
 #[test]
-fn a_variable_name_is_bounded_like_an_scxml_name() {
-    let at_bound = "n".repeat(scxml_types::MAX_NAME_BYTES);
-    let over = "n".repeat(scxml_types::MAX_NAME_BYTES + 1);
+fn a_variable_name_has_no_byte_bound() {
+    let long = "n".repeat(4_096);
     let mut model = XPathDataModel::new();
     model
-        .initialize_declarations([at_bound.as_str()], system())
-        .expect("a name of exactly MAX_NAME_BYTES declares");
-    assert_eq!(
-        XPathDataModel::new().initialize_declarations([over.as_str()], system()),
-        Err(DataModelError::InvalidInput),
-        "one byte over the bound is rejected"
-    );
+        .initialize_declarations([long.as_str()], system())
+        .expect("a long name declares");
     let image = model.snapshot().expect("snapshot");
-    assert_eq!(image.variables[0].name, at_bound);
+    assert_eq!(image.variables[0].name, long);
 }
 
 #[test]

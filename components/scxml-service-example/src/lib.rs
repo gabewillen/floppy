@@ -985,7 +985,7 @@ mod tests {
     fn invalid_echo_names_fail_closed() {
         let (mut echo, _) = Echo::start([]).expect("start");
         assert_eq!(
-            echo.send(&"a".repeat(1_100), DataValue::Absent),
+            echo.send("a b", DataValue::Absent),
             Err(EchoError::InvalidEventName)
         );
     }

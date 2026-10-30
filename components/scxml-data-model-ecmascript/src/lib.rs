@@ -10,7 +10,6 @@
 )]
 
 use std::fmt;
-use std::io::{self, Write};
 
 use boa_engine::context::HostHooks;
 use boa_engine::realm::Realm;
@@ -18,46 +17,16 @@ use boa_engine::{Context, JsNativeError, JsResult, JsString};
 use scxml_telemetry::{ErrorCategory, FunctionSpan, Module, Operation, SignalEvent, observe};
 use scxml_types::{AssignPlacement, AssignSource, DataInitializer, DataValue, Event, FiniteNumber};
 
-/// Maximum initialization source bytes (every build: the `data-model-api`
-/// `initialize` bound of the WIT contract, "the declarations' placeholder
-/// encoding at most 65536 bytes").
-pub const MAX_SOURCE_BYTES: usize = 65_536;
-/// Maximum expression or location bytes (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
-/// Maximum executable script bytes (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_SCRIPT_BYTES: usize = scxml_types::wasm_bound(65_536);
 /// Longest rendered text a data-model snapshot carries for one variable;
 /// longer text is [`VariableValue::Oversized`] (the WIT `variable-value`
 /// contract). No value has a byte bound (SCXML sets none): not one crossing
 /// the data model's interface, a built-in's result, a JSON tree's text, nor
 /// `log` text.
 pub const MAX_VALUE_BYTES: usize = 65_536;
-/// Maximum declared `<data>` ids of one instance, so every snapshot fits one
-/// `data-model-api.snapshot` image (every build: the WIT contract's "data
-/// locations ... to 256").
-pub const MAX_VARIABLES: usize = 256;
-/// Maximum aggregate bytes of the initial values or of one operation's
-/// inputs (wasm builds only; unbounded natively, see
-/// [`scxml_types::wasm_bound`]).
-pub const MAX_AGGREGATE_BYTES: usize = scxml_types::wasm_bound(1_048_576);
-/// Boa loop-iteration limit per operation (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-/// A native operation's loop runs until the program ends it.
-pub const MAX_LOOP_ITERATIONS: u64 = scxml_types::wasm_bound(100_000) as u64;
 /// Boa recursion limit per operation, on every build: Boa recurses natively
 /// for some calls (native functions, accessors), so this guards the native
 /// stack rather than bounding a resource.
 pub const MAX_RECURSION_DEPTH: usize = 128;
-/// Boa value-stack limit per operation (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_STACK_SIZE: usize = scxml_types::wasm_bound(16_384);
-/// Most `<foreach>` loops a data model tracks at once; starting another
-/// forgets the oldest (a loop an error left unfinished) (wasm builds only;
-/// unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_FOREACH_FRAMES: usize = scxml_types::wasm_bound(32);
-/// Most items one `<foreach>` array may have (WIT `foreach-result`).
-pub const MAX_FOREACH_ITEMS: usize = 10_000;
-/// Most distinct state ids one operation may ask `In()` about (wasm builds
-/// only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_IN_QUERIES: usize = scxml_types::wasm_bound(128);
 /// Maximum value nesting accepted by guarded built-ins whose Boa
 /// implementation recurses natively (`JSON.stringify`, `Array.prototype.join`,
 /// `toString`, `toLocaleString`, `flat`, `flatMap`). Kept well below
@@ -97,9 +66,8 @@ impl HostHooks for BoundedHostHooks {
     /// `AsyncGeneratorFunction` constructors. Every program text handed to
     /// Boa must pass [`check_nesting`] (Boa's parser recurses natively), so
     /// the text the call compiles (the `eval` string, or the constructor's
-    /// `function anonymous(...)` text) must pass it too and be at most
-    /// [`MAX_SCRIPT_BYTES`]; otherwise the call throws a catchable
-    /// `TypeError` and parses nothing.
+    /// `function anonymous(...)` text) must pass it too; otherwise the call
+    /// throws a catchable `TypeError` and parses nothing.
     fn ensure_can_compile_strings(
         &self,
         _realm: Realm,
@@ -119,9 +87,7 @@ impl HostHooks for BoundedHostHooks {
                 .join(",");
             format!("(function anonymous({parameters}\n) {{\n{body}\n}})")
         };
-        if scxml_types::exceeds_wasm_bound(text.len(), MAX_SCRIPT_BYTES)
-            || check_nesting(&text).is_err()
-        {
+        if check_nesting(&text).is_err() {
             return Err(JsNativeError::typ()
                 .with_message("runtime source exceeds the data model's parse bounds")
                 .into());
@@ -362,6 +328,11 @@ pub struct EcmaScriptDataModel {
     system: Option<SystemContext>,
     declared: Vec<String>,
     engine: session::Engine,
+    /// The last event [`validate_event`] admitted. The machine passes the
+    /// same event to every evaluation of a macrostep's executable content
+    /// and conditions, so an equal event is admitted without validating its
+    /// data again (validation is a pure function of the event).
+    event: std::cell::RefCell<Option<Event>>,
 }
 
 impl fmt::Debug for EcmaScriptDataModel {
@@ -381,6 +352,17 @@ impl EcmaScriptDataModel {
         Self::default()
     }
 
+    /// [`validate_event`], skipped for an event equal to the last one it
+    /// admitted.
+    fn validate_event(&self, event: &Event) -> Result<(), DataModelError> {
+        if self.event.borrow().as_ref() == Some(event) {
+            return Ok(());
+        }
+        validate_event(event)?;
+        *self.event.borrow_mut() = Some(event.clone());
+        Ok(())
+    }
+
     /// Creates the session's realm from a bounded canonical JSON object of
     /// initial values (its members declared in key order) and `system`.
     ///
@@ -398,7 +380,6 @@ impl EcmaScriptDataModel {
             Operation::DataModelInitialize,
         );
         let result = (|| {
-            bounded(source, MAX_SOURCE_BYTES)?;
             let parsed: serde_json::Value = if source.trim().is_empty() {
                 serde_json::json!({})
             } else {
@@ -460,21 +441,9 @@ impl EcmaScriptDataModel {
         system: SystemContext,
     ) -> Result<(), DataModelError> {
         validate_system(&system)?;
-        if declarations.len() > MAX_VARIABLES {
-            return Err(DataModelError::InvalidInput);
-        }
-        let mut total = checked_sum([
-            system.session_id.len(),
-            system.machine_name.as_ref().map_or(0, String::len),
-            value_bytes(&system.io_processors),
-        ])?;
         for (name, value) in &declarations {
             validate_data_id(name)?;
             validate_value(value)?;
-            total = checked_sum([total, name.len(), value_bytes(value)])?;
-        }
-        if scxml_types::exceeds_wasm_bound(total, MAX_AGGREGATE_BYTES) {
-            return Err(DataModelError::InvalidInput);
         }
         self.system = None;
         self.declared.clear();
@@ -548,7 +517,7 @@ impl EcmaScriptDataModel {
         let name = id.to_owned();
         match initializer {
             DataInitializer::Expression(expression) => {
-                validate_program(expression, MAX_EXPRESSION_BYTES)?;
+                validate_program(expression)?;
                 let source = checked_source(value_expression_source(expression))?;
                 self.engine.run(host, None, move |session| {
                     let value = session
@@ -584,9 +553,8 @@ impl EcmaScriptDataModel {
             Operation::DataModelEvaluateCondition,
         );
         let result = (|| {
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
-            validate_event(event)?;
-            bounded_total([expression.len(), event_bytes(event)?], MAX_AGGREGATE_BYTES)?;
+            validate_program(expression)?;
+            self.validate_event(event)?;
             self.evaluate(expression, Some(event), host, |value, _| {
                 Ok(value.to_boolean())
             })
@@ -612,7 +580,7 @@ impl EcmaScriptDataModel {
             Operation::DataModelEvaluateCondition,
         );
         let result = (|| {
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
+            validate_program(expression)?;
             self.evaluate(expression, None, host, |value, _| Ok(value.to_boolean()))
         })();
         complete(&span, &result);
@@ -641,9 +609,8 @@ impl EcmaScriptDataModel {
             Operation::DataModelEvaluateValue,
         );
         let result = (|| {
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
-            validate_event(event)?;
-            bounded_total([expression.len(), event_bytes(event)?], MAX_AGGREGATE_BYTES)?;
+            validate_program(expression)?;
+            self.validate_event(event)?;
             self.evaluate(expression, Some(event), host, |value, session| {
                 session.portable_value(value)
             })
@@ -668,7 +635,7 @@ impl EcmaScriptDataModel {
             Operation::DataModelEvaluateValue,
         );
         let result = (|| {
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
+            validate_program(expression)?;
             self.evaluate(expression, None, host, |value, session| {
                 session.portable_value(value)
             })
@@ -700,12 +667,10 @@ impl EcmaScriptDataModel {
         );
         let result = (|| {
             if nesting::is_blank(expression) {
-                bounded(expression, MAX_EXPRESSION_BYTES)?;
                 return Ok(String::new());
             }
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
-            validate_event(event)?;
-            bounded_total([expression.len(), event_bytes(event)?], MAX_AGGREGATE_BYTES)?;
+            validate_program(expression)?;
+            self.validate_event(event)?;
             self.evaluate(expression, Some(event), host, |value, session| {
                 session.log_text(value)
             })
@@ -732,10 +697,9 @@ impl EcmaScriptDataModel {
         );
         let result = (|| {
             if nesting::is_blank(expression) {
-                bounded(expression, MAX_EXPRESSION_BYTES)?;
                 return Ok(String::new());
             }
-            validate_program(expression, MAX_EXPRESSION_BYTES)?;
+            validate_program(expression)?;
             self.evaluate(expression, None, host, |value, session| {
                 session.log_text(value)
             })
@@ -851,10 +815,6 @@ impl EcmaScriptDataModel {
         self.system_context()?;
         let assigner = checked_location(location)?;
         validate_value(value)?;
-        bounded_total(
-            [location.len(), checked_scale(value_bytes(value), 6)?, 48],
-            MAX_AGGREGATE_BYTES,
-        )?;
         let value = value.clone();
         self.engine.run(host, None, move |session| {
             let value = session.value_of(&value)?;
@@ -887,11 +847,7 @@ impl EcmaScriptDataModel {
             Operation::DataModelAssign,
         );
         let result = (|| {
-            validate_event(event)?;
-            bounded_total(
-                [location.len(), expression.len(), event_bytes(event)?],
-                MAX_AGGREGATE_BYTES,
-            )?;
+            self.validate_event(event)?;
             self.run_assignment(location, expression, Some(event), host)
         })();
         complete(&span, &result);
@@ -929,7 +885,7 @@ impl EcmaScriptDataModel {
     ) -> Result<(), DataModelError> {
         self.system_context()?;
         let assigner = checked_location(location)?;
-        validate_program(expression, MAX_EXPRESSION_BYTES)?;
+        validate_program(expression)?;
         let value = checked_source(value_expression_source(expression))?;
         self.engine.run(host, event, move |session| {
             let value = session
@@ -981,7 +937,6 @@ impl EcmaScriptDataModel {
         host: &mut impl ExecutionHost,
     ) -> Result<(), DataModelError> {
         self.system_context()?;
-        bounded(name, scxml_types::MAX_NAME_BYTES)?;
         if !syntax::is_variable_name(name) {
             return Err(DataModelError::InvalidInput);
         }
@@ -1017,9 +972,8 @@ impl EcmaScriptDataModel {
             Operation::DataModelExecute,
         );
         let result = (|| {
-            validate_program(script, MAX_SCRIPT_BYTES)?;
-            validate_event(event)?;
-            bounded_total([script.len(), event_bytes(event)?], MAX_AGGREGATE_BYTES)?;
+            validate_program(script)?;
+            self.validate_event(event)?;
             self.run_script(script, Some(event), host)
         })();
         complete(&span, &result);
@@ -1043,7 +997,7 @@ impl EcmaScriptDataModel {
             Operation::DataModelExecute,
         );
         let result = (|| {
-            validate_program(script, MAX_SCRIPT_BYTES)?;
+            validate_program(script)?;
             self.run_script(script, None, host)
         })();
         complete(&span, &result);
@@ -1194,151 +1148,18 @@ const fn category(error: DataModelError) -> ErrorCategory {
     }
 }
 
-fn bounded(value: &str, max: usize) -> Result<(), DataModelError> {
-    if value.len() <= max {
-        Ok(())
-    } else {
-        Err(DataModelError::InvalidInput)
-    }
-}
-
-fn checked_sum(values: impl IntoIterator<Item = usize>) -> Result<usize, DataModelError> {
-    values.into_iter().try_fold(0_usize, |total, value| {
-        total.checked_add(value).ok_or(DataModelError::InvalidInput)
-    })
-}
-
-fn checked_scale(value: usize, factor: usize) -> Result<usize, DataModelError> {
-    value
-        .checked_mul(factor)
-        .ok_or(DataModelError::InvalidInput)
-}
-
-fn bounded_total(
-    values: impl IntoIterator<Item = usize>,
-    max: usize,
-) -> Result<(), DataModelError> {
-    if checked_sum(values)? <= max {
-        Ok(())
-    } else {
-        Err(DataModelError::InvalidInput)
-    }
-}
-
-fn value_bytes(value: &DataValue) -> usize {
-    match value {
-        DataValue::String(value)
-        | DataValue::JsonArray(value)
-        | DataValue::JsonObject(value)
-        | DataValue::Xml(value) => value.len(),
-        DataValue::Absent
-        | DataValue::Undefined
-        | DataValue::Null
-        | DataValue::Bool(_)
-        | DataValue::Number(_) => 8,
-    }
-}
-
 fn validate_event(event: &Event) -> Result<(), DataModelError> {
-    bounded(event.name.as_str(), scxml_types::MAX_NAME_BYTES)?;
-    if let Some(value) = event.send_id.as_ref() {
-        bounded(value.as_str(), scxml_types::MAX_NAME_BYTES)?;
-    }
-    if let Some(value) = event.invoke_id.as_ref() {
-        bounded(value.as_str(), scxml_types::MAX_NAME_BYTES)?;
-    }
     validate_value(&event.data)?;
     if let Some(context) = event.trace_context.as_ref() {
         context
             .validate()
             .map_err(|_| DataModelError::InvalidInput)?;
     }
-    bounded_total([event_bytes(event)?], MAX_AGGREGATE_BYTES)?;
-    bounded_total(
-        [
-            checked_scale(event.name.as_str().len(), 6)?,
-            event
-                .send_id
-                .as_ref()
-                .map_or(Ok(0), |value| checked_scale(value.as_str().len(), 6))?,
-            event
-                .origin
-                .as_ref()
-                .map_or(Ok(0), |value| checked_scale(value.len(), 6))?,
-            event
-                .origin_type
-                .as_ref()
-                .map_or(Ok(0), |value| checked_scale(value.len(), 6))?,
-            event
-                .invoke_id
-                .as_ref()
-                .map_or(Ok(0), |value| checked_scale(value.as_str().len(), 6))?,
-            checked_scale(value_bytes(&event.data), 6)?,
-            160,
-        ],
-        MAX_AGGREGATE_BYTES,
-    )
-}
-
-fn event_bytes(event: &Event) -> Result<usize, DataModelError> {
-    checked_sum([
-        event.name.as_str().len(),
-        event
-            .send_id
-            .as_ref()
-            .map_or(0, |value| value.as_str().len()),
-        event.origin.as_ref().map_or(0, String::len),
-        event.origin_type.as_ref().map_or(0, String::len),
-        event
-            .invoke_id
-            .as_ref()
-            .map_or(0, |value| value.as_str().len()),
-        value_bytes(&event.data),
-        event.trace_context.as_ref().map_or(0, |context| {
-            context.traceparent.len()
-                + context.tracestate.as_ref().map_or(0, String::len)
-                + context.baggage.as_ref().map_or(0, String::len)
-        }),
-    ])
-}
-
-struct BoundedBytes {
-    bytes: Vec<u8>,
-    max: usize,
-}
-
-impl BoundedBytes {
-    fn new(max: usize) -> Self {
-        Self {
-            bytes: Vec::new(),
-            max,
-        }
-    }
-}
-
-impl Write for BoundedBytes {
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        let next = self
-            .bytes
-            .len()
-            .checked_add(buffer.len())
-            .ok_or_else(|| io::Error::other("bounded serialization overflow"))?;
-        if next > self.max {
-            return Err(io::Error::other("bounded serialization limit exceeded"));
-        }
-        self.bytes.extend_from_slice(buffer);
-        Ok(buffer.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+    Ok(())
 }
 
 fn quote_bounded(value: &str) -> Result<String, DataModelError> {
-    let mut output = BoundedBytes::new(MAX_AGGREGATE_BYTES);
-    serde_json::to_writer(&mut output, value).map_err(|_| DataModelError::UnsupportedValue)?;
-    String::from_utf8(output.bytes).map_err(|_| DataModelError::UnsupportedValue)
+    serde_json::to_string(value).map_err(|_| DataModelError::UnsupportedValue)
 }
 
 fn validate_system(value: &SystemContext) -> Result<(), DataModelError> {
@@ -1357,19 +1178,16 @@ pub(crate) const SYSTEM_VARIABLES: [&str; 4] = ["_event", "_sessionid", "_name",
 /// A user location name: any property key a program can create on the
 /// global object (B.2.10 accepts any program, whose global variables
 /// become data locations, SCXML 5.8), except the empty name and the system
-/// variables, at most [`scxml_types::MAX_NAME_BYTES`] bytes.
+/// variables.
 pub(crate) fn validate_location_name(name: &str) -> Result<(), DataModelError> {
-    if name.is_empty()
-        || name.len() > scxml_types::MAX_NAME_BYTES
-        || SYSTEM_VARIABLES.contains(&name)
-    {
+    if name.is_empty() || SYSTEM_VARIABLES.contains(&name) {
         Err(DataModelError::InvalidInput)
     } else {
         Ok(())
     }
 }
 
-/// A `<data>` id: any bounded name that does not begin with `_` (5.10: "A
+/// A `<data>` id: any name that does not begin with `_` (5.10: "A
 /// conformant SCXML document MUST NOT contain ids beginning with '_' in the
 /// <data> element"). B.2.1: "the SCXML Processor MUST create an ECMAScript
 /// variable object whose name is the value of the 'id' attribute of
@@ -1377,23 +1195,17 @@ pub(crate) fn validate_location_name(name: &str) -> Result<(), DataModelError> {
 /// (`retry-count`, `class`) is declared too, as a property of the global
 /// (variable) object ([`EcmaScriptDataModel::initialize_data`]).
 pub(crate) fn validate_data_id(name: &str) -> Result<(), DataModelError> {
-    if name.is_empty()
-        || name.starts_with('_')
-        || name.contains('\0')
-        || name.len() > scxml_types::MAX_NAME_BYTES
-    {
+    if name.is_empty() || name.starts_with('_') || name.contains('\0') {
         Err(DataModelError::InvalidInput)
     } else {
         Ok(())
     }
 }
 
-/// Bounds one expression or script text and rejects blank or NUL-bearing
-/// input. It does not inspect what the program names: removed built-ins
+/// Rejects blank or NUL-bearing expression or script text. It does not inspect what the program names: removed built-ins
 /// are enforced by the realm ([`BOOTSTRAP`]), so a guard such as
 /// `endDate > 0` or `_event.name == 'evaluate'` evaluates faithfully.
-fn validate_program(value: &str, max: usize) -> Result<(), DataModelError> {
-    bounded(value, max)?;
+fn validate_program(value: &str) -> Result<(), DataModelError> {
     if nesting::is_blank(value) || value.as_bytes().contains(&0) {
         return Err(DataModelError::InvalidInput);
     }
@@ -1539,7 +1351,6 @@ fn to_source(value: &DataValue) -> Result<String, DataModelError> {
         DataValue::JsonObject(v) => Ok(format!("({v})")),
         DataValue::Xml(v) => dom::dom_source(v),
     }?;
-    bounded(&source, MAX_AGGREGATE_BYTES)?;
     Ok(source)
 }
 
@@ -1568,7 +1379,6 @@ fn event_to_source(event: &Event) -> Result<String, DataModelError> {
         // (BasicHTTP), undefined when the processor retains none.
         optional(event.raw.as_deref())?
     );
-    bounded(&source, MAX_AGGREGATE_BYTES)?;
     Ok(source)
 }
 
@@ -1681,11 +1491,9 @@ fn assignment_function(location: &str) -> String {
 }
 
 /// The checked program text of the function that assigns its one argument
-/// to `location` ([`assignment_function`]): `location` is at most
-/// [`MAX_EXPRESSION_BYTES`], not blank, without NUL, and passes
-/// [`check_nesting`] on its own.
+/// to `location` ([`assignment_function`]): `location` is not blank, has
+/// no NUL, and passes [`check_nesting`] on its own.
 fn checked_location(location: &str) -> Result<String, DataModelError> {
-    bounded(location, MAX_EXPRESSION_BYTES)?;
     if nesting::is_blank(location) || location.as_bytes().contains(&0) {
         return Err(DataModelError::InvalidInput);
     }
@@ -2742,10 +2550,6 @@ mod tests {
     fn bounds_fail_closed() {
         let mut m = EcmaScriptDataModel::new();
         assert_eq!(
-            m.initialize(&"x".repeat(MAX_SOURCE_BYTES + 1), system()),
-            Err(DataModelError::InvalidInput)
-        );
-        assert_eq!(
             m.initialize(r#"{"slot":null,"slot":true}"#, system()),
             Err(DataModelError::InvalidInput)
         );
@@ -2770,24 +2574,6 @@ mod tests {
 
     #[test]
     fn ingress_field_bounds_accept_exactly_and_reject_plus_one() {
-        assert_eq!(
-            bounded(&"x".repeat(MAX_SOURCE_BYTES), MAX_SOURCE_BYTES),
-            Ok(())
-        );
-        assert_eq!(
-            bounded(&"x".repeat(MAX_SOURCE_BYTES + 1), MAX_SOURCE_BYTES),
-            Err(DataModelError::InvalidInput)
-        );
-        // The wasm expression and script bounds; natively both are unbounded.
-        assert_eq!(MAX_EXPRESSION_BYTES, scxml_types::wasm_bound(16_384));
-        assert_eq!(MAX_SCRIPT_BYTES, scxml_types::wasm_bound(65_536));
-        for max in [16_384, 65_536] {
-            assert_eq!(bounded(&"x".repeat(max), max), Ok(()));
-            assert_eq!(
-                bounded(&"x".repeat(max + 1), max),
-                Err(DataModelError::InvalidInput)
-            );
-        }
         // Values, metadata, and system strings have no byte bound (SCXML
         // sets none).
         let large = 4 * 65_536;
@@ -2820,29 +2606,22 @@ mod tests {
         );
     }
 
+    /// The initial values are not bounded in aggregate or in count: more
+    /// than 1 MiB of them, in more than 256 variables, initialize.
     #[test]
-    fn initial_values_and_bounded_encoding_are_capped() {
-        // 1 MiB of initial values: over the 64 KiB `initialize` bound.
-        let data = (0..=1_048_576 / MAX_VALUE_BYTES)
-            .map(|index| format!("\"value{index}\":\"{}\"", "x".repeat(MAX_VALUE_BYTES - 32)))
+    fn initial_values_have_no_aggregate_or_count_bound() {
+        let data = (0..300)
+            .map(|index| format!("\"value{index:03}\":\"{}\"", "x".repeat(4_096)))
             .collect::<Vec<_>>()
             .join(",");
         let mut m = EcmaScriptDataModel::new();
-        assert_eq!(
-            m.initialize(&format!("{{{data}}}"), system()),
-            Err(DataModelError::InvalidInput)
-        );
-        let mut writer = BoundedBytes::new(4);
-        assert!(writer.write_all(b"1234").is_ok());
-        assert!(writer.write_all(b"5").is_err());
-        assert_eq!(writer.bytes, b"1234");
+        assert_eq!(m.initialize(&format!("{{{data}}}"), system()), Ok(()));
     }
 
-    /// Natively one operation's inputs are not bounded in aggregate: an
-    /// expression longer than the wasm builds' 1 MiB evaluates.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// One operation's inputs are not bounded in aggregate: an expression
+    /// longer than 1 MiB evaluates.
     #[test]
-    fn native_operations_have_no_aggregate_input_bound() {
+    fn operations_have_no_aggregate_input_bound() {
         let mut model = EcmaScriptDataModel::new();
         model.initialize("{}", system()).expect("initialize");
         let mut host = Host::Inactive;

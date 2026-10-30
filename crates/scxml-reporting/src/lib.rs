@@ -3170,7 +3170,7 @@ mod tests {
             "ENV001",
             "EVENT010",
             "LINT021",
-            "LIMIT007",
+            "LIMIT005",
             "XSD-cvc-complex-type.2.4",
             "example::bad_value",
         ] {

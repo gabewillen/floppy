@@ -1017,8 +1017,7 @@ pub enum LowerError {
     InvalidEventSchema(String),
     /// A field the engine turns into an event name, send ID, or invoke ID
     /// (or a `done.state.<ID>` or `done.invoke.<ID>` event it raises) is
-    /// not a name: empty, containing white space, or over
-    /// [`scxml_types::MAX_NAME_BYTES`] bytes.
+    /// not a name: empty or containing white space.
     InvalidName(&'static str),
 }
 
@@ -1077,8 +1076,7 @@ impl fmt::Display for LowerError {
             }
             Self::InvalidName(field) => write!(
                 formatter,
-                "invalid IR name: {field} is empty, contains white space, or exceeds {} bytes",
-                scxml_types::MAX_NAME_BYTES
+                "invalid IR name: {field} is empty or contains white space"
             ),
         }
     }

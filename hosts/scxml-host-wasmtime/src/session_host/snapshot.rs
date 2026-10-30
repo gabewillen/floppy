@@ -350,7 +350,7 @@ fn capture(
     let order = if gather.excluded(Section::Invocations) {
         vec![SessionKey::ROOT]
     } else {
-        within_document_bounds(invoked_sessions)?
+        invoked_sessions.keys()
     };
     let finished: Vec<bool> = {
         let records = sessions.shared().sessions.borrow();
@@ -402,37 +402,6 @@ fn capture(
         sessions: captured,
     };
     scxml_snapshot::encode(&capture, options).map_err(|error| SnapshotFailure::Codec(error).into())
-}
-
-/// The run's sessions in invocation order when a
-/// `scxml.session-snapshot/v2` document can hold them: at most
-/// [`scxml_snapshot::MAX_INVOKED_SESSIONS`] invoked sessions, none deeper
-/// than [`scxml_snapshot::MAX_INVOKE_DEPTH`] (the format's bounds, with the
-/// error [`scxml_snapshot::encode`] reports for them). Checked before any
-/// session is read, so a run of any size fails at once.
-fn within_document_bounds(
-    invoked_sessions: &RunInvokedSessions,
-) -> Result<Vec<SessionKey>, RunFailure> {
-    if invoked_sessions.invoked_len() > scxml_snapshot::MAX_INVOKED_SESSIONS {
-        return Err(SnapshotFailure::Codec(SnapshotError {
-            code: SnapshotErrorCode::BoundsExceeded,
-            pointer: Some("/sessions".into()),
-        })
-        .into());
-    }
-    let order = invoked_sessions.keys();
-    if let Some(index) = order.iter().position(|key| {
-        invoked_sessions
-            .depth(*key)
-            .is_some_and(|depth| depth > scxml_snapshot::MAX_INVOKE_DEPTH)
-    }) {
-        return Err(SnapshotFailure::Codec(SnapshotError {
-            code: SnapshotErrorCode::DepthExceeded,
-            pointer: Some(format!("/sessions/{index}/parent")),
-        })
-        .into());
-    }
-    Ok(order)
 }
 
 /// Provenance: clock, the data models linked in the root session and its invoked sessions, the SCXML

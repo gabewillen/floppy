@@ -15,16 +15,6 @@
     )
 )]
 
-/// Maximum executable script bytes (and the `initialize` declaration bytes,
-/// which must be zero for this provider).
-pub const MAX_SOURCE_BYTES: usize = 65_536;
-/// Maximum expression or assignment-location bytes (wasm builds only;
-/// unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
-/// Maximum aggregate bytes accepted at one WIT ingress boundary (wasm builds
-/// only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_AGGREGATE_BYTES: usize = scxml_types::wasm_bound(1_048_576);
-
 #[cfg(target_arch = "wasm32")]
 #[allow(
     clippy::same_length_and_capacity,
@@ -32,8 +22,6 @@ pub const MAX_AGGREGATE_BYTES: usize = scxml_types::wasm_bound(1_048_576);
 )]
 mod guest {
     use std::cell::RefCell;
-
-    use super::{MAX_AGGREGATE_BYTES, MAX_EXPRESSION_BYTES, MAX_SOURCE_BYTES};
 
     wit_bindgen::generate!({
         world: "data-model",
@@ -108,11 +96,6 @@ mod guest {
         ) -> Result<(), ComponentError> {
             observed(telemetry::Operation::Initialize, None, || {
                 validate_system(&context)?;
-                validate_total([
-                    context.session_id.len(),
-                    context.machine_name.as_ref().map_or(0, String::len),
-                    value_bytes(&context.io_processors),
-                ])?;
                 // SCXML B.1: the null data model has no data locations.
                 if !declarations.is_empty() {
                     return Err(error(
@@ -125,31 +108,28 @@ mod guest {
             })
         }
 
-        fn declare(id: String) -> Result<(), ComponentError> {
+        fn declare(_id: String) -> Result<(), ComponentError> {
             observed(telemetry::Operation::Assign, None, || {
-                bounded(&id, MAX_EXPRESSION_BYTES)?;
                 require_initialized()?;
                 Err(no_locations())
             })
         }
 
-        fn initialize_data(id: String, initializer: DataInitializer) -> Result<(), ComponentError> {
+        fn initialize_data(
+            _id: String,
+            initializer: DataInitializer,
+        ) -> Result<(), ComponentError> {
             observed(telemetry::Operation::Assign, None, || {
-                bounded(&id, MAX_EXPRESSION_BYTES)?;
-                match &initializer {
-                    DataInitializer::Expression(expression) => {
-                        bounded(expression, MAX_EXPRESSION_BYTES)?;
-                    }
-                    DataInitializer::Value(value) => validate_value(value)?,
+                if let DataInitializer::Value(value) = &initializer {
+                    validate_value(value)?;
                 }
                 require_initialized()?;
                 Err(no_locations())
             })
         }
 
-        fn set_parameter(name: String, value: DataValue) -> Result<bool, ComponentError> {
+        fn set_parameter(_name: String, value: DataValue) -> Result<bool, ComponentError> {
             observed(telemetry::Operation::Assign, None, || {
-                bounded(&name, MAX_EXPRESSION_BYTES)?;
                 validate_value(&value)?;
                 require_initialized()?;
                 Err(no_locations())
@@ -157,12 +137,12 @@ mod guest {
         }
 
         fn evaluate_location(
-            location: String,
+            _location: String,
             event: Option<Event>,
         ) -> Result<DataValue, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &location, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     Err(no_location_expressions())
@@ -171,12 +151,12 @@ mod guest {
         }
 
         fn evaluate_text(
-            expression: String,
+            _expression: String,
             event: Option<Event>,
         ) -> Result<Option<String>, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &expression, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     Err(no_value_expressions())
@@ -185,12 +165,12 @@ mod guest {
         }
 
         fn evaluate_log(
-            expression: String,
+            _expression: String,
             event: Option<Event>,
         ) -> Result<String, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &expression, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     Err(no_value_expressions())
@@ -199,13 +179,13 @@ mod guest {
         }
 
         fn evaluate_form_value(
-            source: String,
+            _source: String,
             _location: bool,
             event: Option<Event>,
         ) -> Result<DataValue, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &source, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     Err(no_value_expressions())
@@ -217,12 +197,12 @@ mod guest {
         fn release_foreach() {}
 
         fn foreach_items(
-            expression: String,
+            _expression: String,
             event: Option<Event>,
         ) -> Result<ForeachResult, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &expression, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     // SCXML B.1.4 "There is no value expression language.",
@@ -270,7 +250,7 @@ mod guest {
         ) -> Result<bool, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateCondition,
-                validated_event(event.as_ref(), &expression, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     // SCXML B.1: the only condition is `In()`, answered by
@@ -288,12 +268,12 @@ mod guest {
         }
 
         fn evaluate_value(
-            expression: String,
+            _expression: String,
             event: Option<Event>,
         ) -> Result<DataValue, ComponentError> {
             observed_context(
                 telemetry::Operation::EvaluateValue,
-                validated_event(event.as_ref(), &expression, MAX_EXPRESSION_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     Err(no_value_expressions())
@@ -302,30 +282,17 @@ mod guest {
         }
 
         fn assign(
-            location: String,
+            _location: String,
             source: AssignSource,
-            placement: AssignPlacement,
+            _placement: AssignPlacement,
             event: Option<Event>,
             context: Option<TraceContext>,
         ) -> Result<(), ComponentError> {
-            let attribute_bytes = match &placement {
-                AssignPlacement::AddAttribute(name) => name.len(),
-                _ => 0,
-            };
             let validated_context = (|| {
-                validated_event(event.as_ref(), &location, MAX_EXPRESSION_BYTES)?;
-                bounded_len(attribute_bytes, MAX_EXPRESSION_BYTES)?;
-                let source_bytes = match &source {
-                    AssignSource::Expression(expression) => {
-                        bounded(expression, MAX_EXPRESSION_BYTES)?;
-                        expression.len()
-                    }
-                    AssignSource::Value(value) | AssignSource::ForeachValue(value) => {
-                        validate_value(value)?;
-                        value_bytes(value)
-                    }
-                };
-                validate_total([location.len(), attribute_bytes, source_bytes])?;
+                validated_event(event.as_ref())?;
+                if let AssignSource::Value(value) | AssignSource::ForeachValue(value) = &source {
+                    validate_value(value)?;
+                }
                 validated_raw_context(context.as_ref())
             })()
             .map_err(evaluation_input);
@@ -338,10 +305,10 @@ mod guest {
             })
         }
 
-        fn execute(script: String, event: Option<Event>) -> Result<(), ComponentError> {
+        fn execute(_script: String, event: Option<Event>) -> Result<(), ComponentError> {
             observed_context(
                 telemetry::Operation::Execute,
-                validated_event(event.as_ref(), &script, MAX_SOURCE_BYTES),
+                validated_event(event.as_ref()),
                 || {
                     require_initialized()?;
                     // SCXML B.1.5: "There is no scripting language."
@@ -467,52 +434,27 @@ mod guest {
     /// Bounds `input` and, when present, `_event`; `none` means SCXML defines
     /// no current event, so there is nothing further to validate. Over a
     /// bound is `invalid-input` ([`evaluation_input`]).
-    fn validated_event(
-        event: Option<&Event>,
-        input: &str,
-        input_max: usize,
-    ) -> Result<Option<TraceContext>, ComponentError> {
-        validated_event_bounds(event, input, input_max).map_err(evaluation_input)
+    fn validated_event(event: Option<&Event>) -> Result<Option<TraceContext>, ComponentError> {
+        validated_event_bounds(event).map_err(evaluation_input)
     }
 
     fn validated_event_bounds(
         event: Option<&Event>,
-        input: &str,
-        input_max: usize,
     ) -> Result<Option<TraceContext>, ComponentError> {
-        bounded(input, input_max)?;
         let Some(event) = event else {
-            validate_total([input.len()])?;
             return Ok(None);
         };
-        bounded(&event.name, scxml_types::MAX_NAME_BYTES)?;
         scxml_types::EventName::new(event.name.clone())
             .map_err(|_| error(ErrorCode::InvalidInput, "event name is invalid"))?;
         if let Some(value) = event.send_id.as_deref() {
-            bounded(value, scxml_types::MAX_NAME_BYTES)?;
             scxml_types::SendId::new(value.to_owned())
                 .map_err(|_| error(ErrorCode::InvalidInput, "send id is invalid"))?;
         }
         if let Some(value) = event.invoke_id.as_deref() {
-            bounded(value, scxml_types::MAX_NAME_BYTES)?;
             scxml_types::InvokeId::new(value.to_owned())
                 .map_err(|_| error(ErrorCode::InvalidInput, "invoke id is invalid"))?;
         }
         validate_value(&event.data)?;
-        validate_total([
-            input.len(),
-            event.name.len(),
-            event.send_id.as_ref().map_or(0, String::len),
-            event.origin.as_ref().map_or(0, String::len),
-            event.origin_type.as_ref().map_or(0, String::len),
-            event.invoke_id.as_ref().map_or(0, String::len),
-            value_bytes(&event.data),
-            event.trace_context.as_ref().map_or(0, |context| {
-                context.traceparent.len()
-                    + context.tracestate.as_ref().map_or(0, String::len)
-                    + context.baggage.as_ref().map_or(0, String::len)
-            }),
-        ])?;
         validated_raw_context(event.trace_context.as_ref())
     }
 
@@ -560,11 +502,7 @@ mod guest {
         if !matches!(value.io_processors, DataValue::JsonObject(_)) {
             return Err(error(ErrorCode::InvalidInput, "system value is invalid"));
         }
-        validate_total([
-            value.session_id.len(),
-            value.machine_name.as_ref().map_or(0, String::len),
-            value_bytes(&value.io_processors),
-        ])
+        Ok(())
     }
 
     fn validate_value(value: &DataValue) -> Result<(), ComponentError> {
@@ -600,26 +538,8 @@ mod guest {
         }
     }
 
-    fn value_bytes(value: &DataValue) -> usize {
-        match value {
-            DataValue::Text(value)
-            | DataValue::JsonArray(value)
-            | DataValue::JsonObject(value)
-            | DataValue::Xml(value) => value.len(),
-            DataValue::Absent
-            | DataValue::Undefined
-            | DataValue::Null
-            | DataValue::Boolean(_)
-            | DataValue::Number(_) => 8,
-        }
-    }
-
     fn bounded(value: &str, max: usize) -> Result<(), ComponentError> {
-        bounded_len(value.len(), max)
-    }
-
-    fn bounded_len(len: usize, max: usize) -> Result<(), ComponentError> {
-        if len <= max {
+        if value.len() <= max {
             Ok(())
         } else {
             Err(error(
@@ -627,26 +547,6 @@ mod guest {
                 "input exceeds byte bound",
             ))
         }
-    }
-
-    fn validate_total(values: impl IntoIterator<Item = usize>) -> Result<(), ComponentError> {
-        values
-            .into_iter()
-            .try_fold(0_usize, |total, value| {
-                total.checked_add(value).ok_or_else(|| {
-                    error(ErrorCode::PayloadTooLarge, "input exceeds aggregate bound")
-                })
-            })
-            .and_then(|total| {
-                if total <= MAX_AGGREGATE_BYTES {
-                    Ok(())
-                } else {
-                    Err(error(
-                        ErrorCode::PayloadTooLarge,
-                        "input exceeds aggregate bound",
-                    ))
-                }
-            })
     }
 
     fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
@@ -759,9 +659,6 @@ fn complete<T>(span: &scxml_telemetry::FunctionSpan, result: &Result<T, NullData
 /// The state id of an expression that is exactly one `In('state-id')`
 /// call, optionally surrounded by XML white space (#x20, #x9, #xD, #xA).
 fn in_predicate_state(expression: &str) -> Result<&str, NullDataModelError> {
-    if scxml_types::exceeds_wasm_bound(expression.len(), MAX_EXPRESSION_BYTES) {
-        return Err(NullDataModelError::InvalidInput);
-    }
     let argument = expression
         .trim_matches(scxml_types::is_xml_space)
         .strip_prefix("In")
@@ -862,20 +759,12 @@ mod tests {
         );
     }
 
+    /// A condition has no byte bound of its own.
     #[test]
-    fn expression_bound_accepts_exactly_and_does_not_apply_natively() {
-        assert_eq!(MAX_EXPRESSION_BYTES, scxml_types::wasm_bound(16_384));
-        let padded = format!("In('p'){}", " ".repeat(16_384 - 7));
+    fn long_conditions_evaluate() {
+        let padded = format!("In('p'){}", " ".repeat(1_048_576));
         assert_eq!(
             NullDataModel.evaluate_condition(&padded, &mut Configuration(&["p"])),
-            Ok(true)
-        );
-        // Natively the expression bound does not apply. The host's component
-        // tests check that one byte past it is false with error.execution in
-        // the shipped data model
-        // (`a_condition_over_the_null_byte_bound_is_false_and_raises_error_execution`).
-        assert_eq!(
-            NullDataModel.evaluate_condition(&format!("{padded} "), &mut Configuration(&["p"])),
             Ok(true)
         );
     }

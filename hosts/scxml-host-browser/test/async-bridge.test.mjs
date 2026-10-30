@@ -814,9 +814,8 @@ test('worker: the page prefetch reaches the worker, with the synchronous platfor
     { ir: scripted, resolve: async () => Promise.reject(new Error('offline')) },
     // An empty static script is `payload-too-large`: the document is rejected.
     { ir: scripted, resolve: async () => '' },
-    // A static script over 64 KiB loads: the host bounds no script text, as
-    // under Wasmtime; the data model's own bound refuses to run it
-    // (error.execution), so `libValue` stays undefined.
+    // A static script over 64 KiB loads and runs: neither the host nor the
+    // data model bounds script text, as under Wasmtime.
     { ir: scripted, resolve: async () => `var libValue = 7; //${'x'.repeat(65 * 1024)}` },
     // A static document over 4 MiB loads.
     { ir: text, resolve: async () => `x${' '.repeat(4 * 1024 * 1024)}y` },
@@ -827,7 +826,7 @@ test('worker: the page prefetch reaches the worker, with the synchronous platfor
     { configuration: ['ok'], status: 'finished' },
     { error: 'ScxmlSessionError:platform', sessionFailed: true },
     { error: 'ScxmlSessionError:payload-too-large', sessionFailed: true },
-    { configuration: ['a'], status: 'running' },
+    { configuration: ['ok'], status: 'finished' },
     { configuration: ['loaded'], status: 'finished' },
     { configuration: ['loaded'], status: 'finished' },
   ];

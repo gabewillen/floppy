@@ -258,9 +258,6 @@ impl Expression {
     /// unknown functions, wrong arity, and undeclared prefixes);
     /// [`Error::Limit`] when a bound in [`limits`] is exceeded.
     pub fn parse(source: &str, options: &ParseOptions) -> Result<Self, Error> {
-        if scxml_types::exceeds_wasm_bound(source.len(), limits::MAX_EXPRESSION_BYTES) {
-            return Err(Error::Limit(Limit::ExpressionBytes));
-        }
         let tokens = tokenize(source)?;
         let mut parser = Parser {
             tokens: &tokens,

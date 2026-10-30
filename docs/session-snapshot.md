@@ -99,12 +99,12 @@ pinned IDs keep the documents byte-stable across runs.
 
 ```json
 {"version":"scxml.session-snapshot/v2","sha256":"<64 hex>","options":{"exclude":[],"trace_context":"strip"},
- "snapshot":{"components":[{"role":"clock","sha256":"…"},…],"clock":{"now_ms":250},"root":{…}}}
+ "snapshot":{"components":[{"role":"clock","sha256":"…"},…],"clock":{"now_ms":250},"sessions":[{…},…]}}
 ```
 
 `sha256` is the SHA-256 of the canonical bytes of `snapshot`. It detects
-corruption. It is not authentication. A document is at most 32 MiB. A larger
-one fails with `too-large` and is never truncated.
+corruption. It is not authentication. A document has no size bound and is
+never truncated.
 
 ### Canonical encoding
 
@@ -122,7 +122,7 @@ one fails with `too-large` and is never truncated.
   are strings holding XML text.
 - Digests are 64 lowercase hex characters.
 
-The decoder checks, in order: size, JSON, `version`, shape (unknown keys are
+The decoder checks, in order: JSON, `version`, shape (unknown keys are
 rejected), re-encode byte equality (`non-canonical`), `sha256`, bounds,
 names, and consistency. `scxml snapshot check` lists every issue it finds
 after the structural checks.
@@ -156,7 +156,13 @@ after the structural checks.
 - `clock.now_ms` is the shared virtual clock. Every session runs on it:
   a session's own clock is moved to it before the session runs, and before
   it is captured, so every captured session reads this time.
-- `root` is the root session object.
+- `sessions` lists every session object, flat, in invocation order: the
+  root session first, then each session it invoked (in its `invocations`
+  order, ascending invoke id), each followed by the sessions it invoked in
+  turn. Every session after the first is an invoked session and carries
+  `invoked_by`, which names its parent's `session_id` and the invoke id. A
+  session's parent is always listed before it, so the list has no depth
+  limit.
 
 ### Session object (keys in this order)
 
@@ -173,11 +179,11 @@ after the structural checks.
 | `bound_states` | late-binding states already bound (SCXML 5.3) |
 | `counters` | `{send, invoke}`: the next generated send-id and invoke-id ordinals. Both start at 0: send ids at `sendid_0`, invoke ids at `<state>.0`. Only a generated id takes an ordinal; a `<send>` or `<invoke>` with a literal `id` leaves its counter unchanged, so a fresh session reports `send: 0, invoke: 0` |
 | `system` | section: `{"sessionid","name","ioprocessors"}` |
-| `data_model` | section: `[{name, value}]`, each declared `<data>` id in document order (ECMAScript: late-bound ids declared afterwards follow) with its current value (≤ 256) |
+| `data_model` | section: `[{name, value}]`, each declared `<data>` id in document order (ECMAScript: late-bound ids declared afterwards follow) with its current value |
 | `queues` | section: `{"internal","external"}` |
-| `pending_sends` | section: delayed sends by deadline, then in schedule order (≤ 1024): `{sendid, event?, basichttp?, target?, type?, delay_ms, deadline_ms}` with exactly one of `event` (an SCXML Event I/O Processor send) and `basichttp` (a `BasicHTTP` send, SCXML C.2: `{event?, params:[{name, value}], content?, trace_context?}`, as evaluated at the `<send>`) |
-| `transitions` | section: `[{source, index, events, targets, type, cond?, has_cond, domain?, exit?, entry?, event_schema?}]`, every transition an event could trigger (≤ 10 000) |
-| `invocations` | section: `[{invoke_id,type,state,index,autoforward,finished,session}]`; every session object has it, at any depth |
+| `pending_sends` | section: delayed sends by deadline, then in schedule order: `{sendid, event?, basichttp?, target?, type?, delay_ms, deadline_ms}` with exactly one of `event` (an SCXML Event I/O Processor send) and `basichttp` (a `BasicHTTP` send, SCXML C.2: `{event?, params:[{name, value}], content?, trace_context?}`, as evaluated at the `<send>`) |
+| `transitions` | section: `[{source, index, events, targets, type, cond?, has_cond, domain?, exit?, entry?, event_schema?}]`, every transition an event could trigger |
+| `invocations` | section: `[{invoke_id,type,state,index,autoforward,finished}]`; every session object has it, and each started invocation's session is listed in `sessions` |
 
 - **Values** have the form `{"type":T,"value":V?}`. `T` is `absent`,
   `undefined`, `null`, `boolean`, `number`, `text`, `json-array`,
@@ -198,31 +204,15 @@ after the structural checks.
   is written inline, and the decoder rejects an `oversized` entry that
   would have fit as `inconsistent`. `show` renders it as
   `<oversized: N bytes>`.
-- **Variable count.** Each data model declares at most 256 `<data>` ids
-  and rejects a 257th when it would be declared, so the `data_model` section
-  never exceeds its bound and the variable count never makes a snapshot
-  fail.
-- **Document bounds.** One bound is enforced before a snapshot: 1024
-  pending sends per session (the clock's timer bound). The others are not,
-  because the native host imposes no limit of its own on invoked sessions
-  or queues, so a valid set of sessions can exceed them: 255 invoked
-  sessions under the root session, 32 nested invoke depth, 10 000 listed
-  transitions and 10 000 states in one configuration list per session,
-  10 000 entries in one queue, and 32 MiB for the whole encoded document
-  (JSON escaping counts, so a control character in a value takes 6 bytes).
-  A snapshot over one of them fails and nothing is truncated: with
-  `bounds-exceeded` and a pointer that names the bounded list (for example
-  `/snapshot/root/transitions`), with `depth-exceeded` for the
-  invoke depth, or with `too-large` for the document size. Only that
-  snapshot fails; the session goes on. Excluding the section (for example
-  `transitions`) avoids its bound.
+- **Document bounds.** The format bounds no count (variables, pending
+  sends, transitions, configuration states, queue entries, invoked
+  sessions), no identifier length, no invoke depth, and no document size.
 - **Data-model image.** `system` and `data_model` are omitted while the
   session is `ready`, because the data model is not initialized yet. They are
   also omitted when no data model is linked, and when a linked data model has
   never been initialized: the host records whether `initialize` ever ran and
   reports no image until it has.
-- **Queues** are the SCXML Appendix D queues, FIFOs of at most 10 000
-  entries each in a document:
+- **Queues** are the SCXML Appendix D queues, FIFOs:
   - `internal` is `[]` at every checkpoint.
   - `external` is the session's external event queue, oldest first: events
     sent to it (by its invoking session, autoforward, or an external
@@ -256,10 +246,11 @@ after the structural checks.
     snapshot entry; they are in the Machine IR that `ir.sha256` names.
     `show` renders `schema sha256:<first 12 hex>` or
     ``schemaexpr `<expression>` ``.
-- **Invocations** are listed in ascending invoke-id order, each with the
-  session it invoked, which lists its own `invocations` in turn: at most
-  255 invoked sessions under the root session, at most 32 nested invoke
-  depth in a document.
+- **Invocations** are listed in ascending invoke-id order. The session a
+  started invocation invoked is the entry of `sessions` whose `invoked_by`
+  names this session and that invoke id; the decoder rejects a document
+  whose `sessions` are not in invocation order, or whose links do not match
+  the `invocations` lists, as `inconsistent`.
 
 ## Snapshots during executable content
 
@@ -278,7 +269,7 @@ Executable content is not a checkpoint: the session is inside a
 macrostep, at the executable-content extension element being executed.
 The document says exactly what holds at that element:
 
-- **One session.** `root` is the executing session, which may itself be
+- **One session.** `sessions` holds only the executing session, which may itself be
   an invoked session (then it carries `invoked_by`). `invocations` and
   `previews` are always in `options.exclude`; the decoder rejects an
   executable-content document without them (`inconsistent` at `/options/point`).
@@ -477,23 +468,20 @@ the long form of each code.
 
 | Code | Meaning |
 | --- | --- |
-| `too-large` | the document is over 32 MiB |
 | `malformed-json` | the input is not JSON |
 | `unsupported-version` | the `version` is not `scxml.session-snapshot/v2` |
 | `schema-violation` | wrong shape, an unknown key, a float, or an unknown enumeration value |
 | `non-canonical` | valid, but not the canonical bytes (formatting, key order, `null`, number or JSON text) |
 | `integrity-mismatch` | `sha256` does not match `snapshot` |
-| `bounds-exceeded` | a list, string, or integer is over its bound |
+| `bounds-exceeded` | a string or integer is over its bound |
 | `invalid-name` | an identifier is not a valid SCXML name |
 | `inconsistent` | a derived field disagrees, an id repeats, a parent link is broken, or section presence does not match `options` |
-| `depth-exceeded` | an invoked session is deeper than 32 nested invoke depth |
 | `clock-invariant` | a session clock differs from the shared clock |
 | `not-stable` | requested outside a checkpoint: during a machine call or drain, re-entrantly, or while a delivered event is still being processed |
 | `status-invalid` | requested for a `failed` or `shut-down` session (every host) |
 | `codec-unavailable` | the browser host has no codec component |
 
-The codec component reports these codes as `invalid-input`, or as
-`payload-too-large` for `too-large`, with the static detail
+The codec component reports these codes as `invalid-input`, with the static detail
 `snapshot-<code>`.
 
 A `schema-violation` points at the value that has the wrong shape: a float,
@@ -505,8 +493,8 @@ root)`.
 
 Pointers name two different trees, depending on when the failure is found.
 Errors raised while assembling or encoding a capture point into the
-*would-be document* (for example `/snapshot/root/datamodel`). Invocation-shape
-errors — a broken parent link, an invoked session deeper than the bound, or an
+*would-be document* (for example `/snapshot/sessions/0/datamodel`). Invocation-shape
+errors — a broken parent link or an
 invocation without its child capture — point into the *capture* (for
 example `/sessions/1/parent`), because the document could not be built. Both
 spellings are accepted; a pointer never names user data.

@@ -200,7 +200,7 @@ itself, only what an extension component writes from it.
   `initialize` and `shutdown`), at most 64 times per `execute` call
   (`capacity-exhausted` after; each call costs host work linear in the
   session's state, so the count is bounded on every build), and a document
-  over a bound of the format (32 MiB, or a list bound) is
+  over a bound of the format (a string or integer bound) is
   `payload-too-large`. The machine's part runs on the executing machine
   call's fuel, the data-model and I/O-processor reads on their own per-call
   fuel, and the guest's copy in its own memory limit.

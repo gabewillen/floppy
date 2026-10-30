@@ -419,33 +419,23 @@ mod guest {
             message: match request.message {
                 WitSendMessage::Empty => scxml_types::SendMessage::Empty,
                 WitSendMessage::Content => scxml_types::SendMessage::Content,
-                WitSendMessage::Params(fields) => {
-                    if fields.len() > scxml_types::MAX_SEND_MESSAGE_PARAMS {
-                        return Err(error(
-                            ErrorCode::PayloadTooLarge,
-                            "send message has too many fields",
-                        ));
-                    }
-                    scxml_types::SendMessage::Params(
-                        fields
-                            .into_iter()
-                            .map(|field| {
-                                if field.name.is_empty()
-                                    || field.name.len() > scxml_types::MAX_NAME_BYTES
-                                {
-                                    return Err(error(
-                                        ErrorCode::InvalidInput,
-                                        "send message field name is invalid",
-                                    ));
-                                }
-                                Ok(scxml_types::NamedValue {
-                                    name: field.name,
-                                    value: to_native_value(field.value)?,
-                                })
+                WitSendMessage::Params(fields) => scxml_types::SendMessage::Params(
+                    fields
+                        .into_iter()
+                        .map(|field| {
+                            if field.name.is_empty() {
+                                return Err(error(
+                                    ErrorCode::InvalidInput,
+                                    "send message field name is invalid",
+                                ));
+                            }
+                            Ok(scxml_types::NamedValue {
+                                name: field.name,
+                                value: to_native_value(field.value)?,
                             })
-                            .collect::<Result<_, _>>()?,
-                    )
-                }
+                        })
+                        .collect::<Result<_, _>>()?,
+                ),
             },
         })
     }
@@ -493,12 +483,6 @@ mod guest {
     fn to_native_processor(
         request: WitProcessorSend,
     ) -> Result<scxml_types::ProcessorSend, ComponentError> {
-        if request.params.len() > scxml_types::MAX_PROCESSOR_SEND_PARAMS {
-            return Err(error(
-                ErrorCode::PayloadTooLarge,
-                "processor send has too many fields",
-            ));
-        }
         Ok(scxml_types::ProcessorSend {
             processor_type: request.processor_type,
             send_id: scxml_types::SendId::new(request.send_id)
@@ -711,22 +695,15 @@ mod guest {
 
     fn clock_error(clock_failure: ClockError) -> ComponentError {
         match clock_failure {
-            ClockError::CapacityExhausted => {
-                error(ErrorCode::CapacityExhausted, "clock capacity is exhausted")
-            }
             ClockError::Overflow | ClockError::InvalidDuration => {
                 error(ErrorCode::InvalidInput, "clock deadline is invalid")
             }
             ClockError::DuplicateId => {
                 error(ErrorCode::DuplicateId, "send id is already scheduled")
             }
-            // The clock reports `invalid-id` only for a malformed id (empty
-            // or over its byte bound); an absent id is not an error.
+            // The clock reports `invalid-id` only for an empty id; an
+            // absent id is not an error.
             ClockError::InvalidId => error(ErrorCode::InvalidInput, "send id is invalid"),
-            ClockError::PayloadTooLarge => error(
-                ErrorCode::PayloadTooLarge,
-                "scheduled payload exceeds the byte bound",
-            ),
             ClockError::InvalidLimit => error(
                 ErrorCode::Protocol,
                 "clock contract returned an invalid result",
@@ -922,7 +899,6 @@ pub struct ScheduledSend {
     /// Clock timer id (the request's send id).
     pub send_id: String,
     /// Canonical encoded request, at most
-    /// [`scxml_types::MAX_DELAYED_SEND_BYTES`] bytes.
     pub payload: Vec<u8>,
     /// Positive delay in logical milliseconds.
     pub delay_ms: u64,
@@ -1121,8 +1097,8 @@ impl ScxmlIoProcessor {
     /// # Errors
     ///
     /// [`ProcessorError::NotDelayed`] for a zero delay,
-    /// [`ProcessorError::PayloadTooLarge`] when the canonical encoding
-    /// exceeds [`scxml_types::MAX_DELAYED_SEND_BYTES`] or a field bound, and
+    /// [`ProcessorError::PayloadTooLarge`] when a field exceeds the canonical
+    /// encoding's width, and
     /// [`ProcessorError::InvalidSend`] for a value the encoding rejects.
     pub fn plan_processor(&self, send: &ProcessorSend) -> Result<ScheduledSend, ProcessorError> {
         if send.delay_ms == 0 {
@@ -1167,8 +1143,7 @@ pub struct DueBatch {
 /// and every undeliverable item is reported with its timer id and a closed
 /// reason instead of being silently dropped or taking valid items with it.
 /// Bounded by the caller's drain limit (at most
-/// `scxml_clock::MAX_DRAIN_ITEMS` items of at most
-/// [`scxml_types::MAX_DELAYED_SEND_BYTES`] each).
+/// `scxml_clock::MAX_DRAIN_ITEMS` items).
 #[must_use]
 pub fn decode_due_batch(items: impl IntoIterator<Item = (String, Vec<u8>)>) -> DueBatch {
     let mut batch = DueBatch::default();
@@ -1322,23 +1297,6 @@ mod tests {
 
     #[test]
     fn documented_wit_bounds_match_enforced_constants() {
-        // The wasm clock's bounds `scxml.wit` documents; natively the clock
-        // is unbounded.
-        const DOCUMENTED_CLOCK_ID_BYTES: usize = 256;
-        const DOCUMENTED_CLOCK_TOTAL_PAYLOAD_BYTES: usize = 4 * 1_024 * 1_024;
-        const DOCUMENTED_CLOCK_SCHEDULES: usize = 1_024;
-        assert_eq!(
-            scxml_clock::MAX_ID_BYTES,
-            scxml_types::wasm_bound(DOCUMENTED_CLOCK_ID_BYTES)
-        );
-        assert_eq!(
-            scxml_clock::MAX_TOTAL_PAYLOAD_BYTES,
-            scxml_types::wasm_bound(DOCUMENTED_CLOCK_TOTAL_PAYLOAD_BYTES)
-        );
-        assert_eq!(
-            scxml_clock::MAX_SCHEDULES,
-            scxml_types::wasm_bound(DOCUMENTED_CLOCK_SCHEDULES)
-        );
         let docs = include_str!("../../../crates/scxml-wit/wit/scxml/scxml.wit")
             .lines()
             .map(str::trim)
@@ -1346,26 +1304,10 @@ mod tests {
             .flat_map(str::split_whitespace)
             .collect::<Vec<_>>()
             .join(" ");
-        for phrase in [
-            format!("1 <= `max-items` <= {}", scxml_clock::MAX_DRAIN_ITEMS),
-            format!("(at most {DOCUMENTED_CLOCK_ID_BYTES} bytes)"),
-            format!("empty or over {DOCUMENTED_CLOCK_ID_BYTES} bytes"),
-            format!(
-                "encoded request is at most {} bytes",
-                scxml_types::MAX_DELAYED_SEND_BYTES
-            ),
-            format!("clock's {DOCUMENTED_CLOCK_TOTAL_PAYLOAD_BYTES}-byte"),
-            format!("holds {DOCUMENTED_CLOCK_SCHEDULES} timers"),
-        ] {
-            assert!(
-                docs.contains(&phrase),
-                "io-processor-api must document the enforced bound: {phrase:?}"
-            );
-        }
-        assert_eq!(
-            scxml_clock::MAX_PAYLOAD_BYTES,
-            scxml_types::wasm_bound(scxml_types::MAX_DELAYED_SEND_BYTES),
-            "every encodable delayed send must fit one clock payload"
+        let phrase = format!("1 <= `max-items` <= {}", scxml_clock::MAX_DRAIN_ITEMS);
+        assert!(
+            docs.contains(&phrase),
+            "io-processor-api must document the enforced bound: {phrase:?}"
         );
     }
 
@@ -1415,16 +1357,17 @@ mod tests {
             ScxmlIoProcessor.plan_processor(&basichttp("now", 0)),
             Err(ProcessorError::NotDelayed)
         );
-        let oversized = ProcessorSend {
-            content: Some(scxml_types::DataValue::String(
-                "x".repeat(scxml_types::MAX_DELAYED_SEND_BYTES),
-            )),
+        // An encoding longer than 64 KiB plans: the codec has no byte
+        // bound of its own.
+        let large = ProcessorSend {
+            content: Some(scxml_types::DataValue::String("x".repeat(65_500))),
+            params: Vec::new(),
             ..basichttp("big", 1)
         };
-        assert_eq!(
-            ScxmlIoProcessor.plan_processor(&oversized),
-            Err(ProcessorError::PayloadTooLarge)
-        );
+        let scheduled = ScxmlIoProcessor
+            .plan_processor(&large)
+            .expect("a large delayed send plans");
+        assert!(scheduled.payload.len() > 65_536);
         let unnamed = ProcessorSend {
             params: vec![scxml_types::NamedValue {
                 name: String::new(),

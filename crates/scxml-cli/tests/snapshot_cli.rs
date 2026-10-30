@@ -266,9 +266,9 @@ fn schema_violations_carry_a_pointer_and_malformed_json_a_position() {
     let cases = [
         (
             edit("unknown.json", &|d| {
-                d["snapshot"]["root"]["bogus\u{1b}"] = 1.into();
+                d["snapshot"]["sessions"][0]["bogus\u{1b}"] = 1.into();
             }),
-            "/snapshot/root",
+            "/snapshot/sessions/0",
         ),
         (
             edit("float.json", &|d| {
@@ -278,9 +278,9 @@ fn schema_violations_carry_a_pointer_and_malformed_json_a_position() {
         ),
         (
             edit("negative.json", &|d| {
-                d["snapshot"]["root"]["counters"]["send"] = (-1).into();
+                d["snapshot"]["sessions"][0]["counters"]["send"] = (-1).into();
             }),
-            "/snapshot/root/counters/send",
+            "/snapshot/sessions/0/counters/send",
         ),
         (
             edit("huge.json", &|d| {
@@ -290,15 +290,15 @@ fn schema_violations_carry_a_pointer_and_malformed_json_a_position() {
         ),
         (
             edit("status.json", &|d| {
-                d["snapshot"]["root"]["status"] = "paused".into();
+                d["snapshot"]["sessions"][0]["status"] = "paused".into();
             }),
-            "/snapshot/root/status",
+            "/snapshot/sessions/0/status",
         ),
         (
             edit("variable.json", &|d| {
-                d["snapshot"]["root"]["data_model"][0]["name"] = 7.into();
+                d["snapshot"]["sessions"][0]["data_model"][0]["name"] = 7.into();
             }),
-            "/snapshot/root/data_model/0/name",
+            "/snapshot/sessions/0/data_model/0/name",
         ),
     ];
     for (path, pointer) in &cases {

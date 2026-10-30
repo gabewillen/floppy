@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573`,
+  `2cfec19fc15c8830f42171b5e1a64a7de300637fc870b2095f6f6c8a96d7fabb`,
   and canonical artifact SHA-256
-  `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d`.
+  `e8082e669b27a14a1fc658cb1595f72c2e45c4f76fbd21d2c30f3509af55d24f`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34`,
+  `73042d32b95c5a0071917c1e19e126a861c049f607770e0b3c1d58f0ed72bb42`,
   and canonical artifact SHA-256
-  `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43`.
+  `4d7d13628beffed420fdaf1f37cb4959d0121a482510cfc00db367b1c6e2a6a0`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -450,10 +450,9 @@ In detail:
   (`DEFAULT_DATA_MODEL_CALL_FUEL`) or otherwise traps ends the session
   (`machine-platform`), not `error.execution`: Wasmtime leaves a trapped
   instance unusable, so the session's data model is gone. The ECMAScript
-  data model bounds loops (`MAX_LOOP_ITERATIONS`) and built-in results, but
-  not the callbacks a native built-in makes (for example `Array.from` with
-  a map function over tens of thousands of items), which can reach the fuel
-  cap first.
+  data model bounds built-in results but not loops, so a loop that never
+  ends, or one long enough, reaches the fuel cap and ends the session
+  rather than raising `error.execution`.
 - By rule, not as a gap, extension components do no I/O: no WASI, no
   `outbound-http`, and no `env` values or references (an `env` attribute on
   an extension element is `ENV002`). Network calls and secrets belong in

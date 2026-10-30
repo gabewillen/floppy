@@ -25,13 +25,13 @@ use std::process::Command;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use scxml_host_wasmtime::scxml_snapshot::{Options, SnapshotErrorCode, decode};
+use scxml_host_wasmtime::scxml_snapshot::{Options, decode};
 use scxml_host_wasmtime::{
     Applied, DocumentKind, EmbeddedDocument, HostError, InvokeLimits, LiveClock, LiveHttp,
     LiveStatus, MachineScripts, ManualClock, ReleaseComponents, RunFailure, ScriptedEvent,
     SessionEmbedder, SessionHost, SessionHostError, SessionOpen, SessionOutcome, SessionOutput,
-    SessionRun, SnapshotFailure, SnapshotPoints, SnapshotRequest, TelemetryProviders, Terminal,
-    TraceObservation, TrustedManifestDigest, WasmtimeHostConfig, WasmtimeStoreConfig,
+    SessionRun, SnapshotPoints, SnapshotRequest, TelemetryProviders, Terminal, TraceObservation,
+    TrustedManifestDigest, WasmtimeHostConfig, WasmtimeStoreConfig,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -420,16 +420,12 @@ fn waiting_chain(depth: usize) -> Vec<(&'static str, String)> {
         .collect()
 }
 
-fn depth_exceeded(failure: &SnapshotFailure) -> bool {
-    matches!(failure, SnapshotFailure::Codec(error) if error.code == SnapshotErrorCode::DepthExceeded)
-}
-
-/// The native host imposes no invoke-depth limit, so a session can nest
-/// deeper than a `scxml.session-snapshot/v2` document represents (32
-/// levels). Each snapshot of it fails with `depth-exceeded` for that
-/// snapshot alone: the batch run and the live session go on.
+/// The native host imposes no invoke-depth limit, and neither does a
+/// `scxml.session-snapshot/v2` document (its sessions are a flat list): a
+/// snapshot of a chain of any depth holds every level, in the batch run
+/// and in a live session.
 #[test]
-fn a_snapshot_beyond_the_document_bounds_fails_alone_and_the_session_goes_on() {
+fn a_snapshot_holds_a_chain_of_any_depth() {
     const DEPTH: usize = 40;
     let root = scxml(
         "r0",
@@ -445,22 +441,15 @@ fn a_snapshot_beyond_the_document_bounds_fails_alone_and_the_session_goes_on() {
         },
     );
     assert_eq!(outcome.terminal, Terminal::Running);
-    let sessions: std::collections::BTreeSet<&str> = outcome
-        .trace
-        .iter()
-        .map(|entry| entry.session.as_str())
-        .collect();
-    assert_eq!(sessions.len(), 1 + DEPTH, "the root and every level ran");
-    assert!(outcome.snapshots.is_empty(), "{:?}", outcome.snapshots);
-    assert!(!outcome.snapshot_failures.is_empty());
     assert!(
-        outcome
-            .snapshot_failures
-            .iter()
-            .all(|failed| depth_exceeded(&failed.failure)),
+        outcome.snapshot_failures.is_empty(),
         "{:?}",
         outcome.snapshot_failures
     );
+    let last = outcome.snapshots.last().expect("a snapshot");
+    let document = decode(&last.bytes).expect("the document decodes");
+    assert_eq!(document.snapshot.sessions.len(), 1 + DEPTH, "every level");
+    assert_eq!(document.snapshot.paths()[DEPTH], vec!["k"; DEPTH]);
 
     let (ir, data_model) = lower(&root);
     let mut live = host()
@@ -476,16 +465,14 @@ fn a_snapshot_beyond_the_document_bounds_fails_alone_and_the_session_goes_on() {
             http: LiveHttp::default(),
         })
         .expect("the session opens");
-    let error = live
+    let bytes = live
         .snapshot(&Options::default())
-        .expect_err("the snapshot is beyond the document bounds");
-    assert!(
-        matches!(&error.failure, RunFailure::Snapshot(failure) if depth_exceeded(failure)),
-        "{error}"
-    );
+        .expect("the live snapshot holds the chain");
+    let document = decode(&bytes).expect("the document decodes");
+    assert_eq!(document.snapshot.sessions.len(), 1 + DEPTH);
     let step = live
         .send(&ScriptedEvent::named("go"))
-        .expect("the session goes on after the failed snapshot");
+        .expect("the session goes on after the snapshot");
     assert_eq!(step.status, LiveStatus::Finished);
     live.close().expect("close");
 }
@@ -519,22 +506,28 @@ fn snapshots_show_every_invoked_session_and_each_external_queue() {
         panic!("one snapshot");
     };
     let document = decode(&snapshot.bytes).expect("the document decodes");
-    let root = &document.snapshot.root;
-    let child = &root.invocations.as_ref().expect("invocations")[0];
-    assert_eq!(child.invoke_id, "child");
-    let grandchild = &child.session.invocations.as_ref().expect("nested")[0];
-    assert_eq!(grandchild.invoke_id, "gc");
+    // Pre-order: the root, its child, then the child's child.
+    let [root, child, grandchild] = document.snapshot.sessions.as_slice() else {
+        panic!("three sessions");
+    };
+    assert_eq!(
+        root.invocations.as_ref().expect("invocations")[0].invoke_id,
+        "child"
+    );
+    assert_eq!(
+        child.invocations.as_ref().expect("nested")[0].invoke_id,
+        "gc"
+    );
     assert_eq!(
         grandchild
-            .session
             .invoked_by
             .as_ref()
-            .map(|by| by.parent_session_id.as_str()),
-        Some(child.session.session_id.as_str())
+            .map(|by| (by.parent_session_id.as_str(), by.invoke_id.as_str())),
+        Some((child.session_id.as_str(), "gc"))
     );
     // Right after the root's start, the grandchild's `hello` waits on the
     // child's external queue, stamped with the grandchild's invoke id.
-    let queued = &child.session.queues.as_ref().expect("queues").external;
+    let queued = &child.queues.as_ref().expect("queues").external;
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].name, "hello");
     assert_eq!(queued[0].invokeid.as_deref(), Some("gc"));
@@ -713,11 +706,10 @@ fn a_recorded_run_with_deliveries_between_sessions_replays_byte_for_byte() {
     replay.close().expect("close");
 }
 
-/// Depth of the deep-chain proofs: the deepest chain of invoke id `k` the
-/// 1024-byte name bound admits. A child's `_sessionid` is
+/// Depth of the deep-chain proofs. A child's `_sessionid` is
 /// `<parent _sessionid>.<invokeid>`, so level `n` under the root `root` is
-/// `root` and `n` times `.k`: 4 + 2n bytes.
-const DEEP: usize = (scxml_types::MAX_NAME_BYTES - "root".len()) / 2;
+/// `root` and `n` times `.k`, with no length bound.
+const DEEP: usize = 510;
 
 /// Every distinct session that recorded anything in the run's trace.
 fn traced_sessions(outcome: &SessionOutcome) -> usize {
@@ -738,14 +730,14 @@ const DEEP_CHAIN_FUEL: u64 = 10_000_000 * DEEP as u64;
 
 /// A chain of [`DEEP`] sessions that each start the next inside their own
 /// start (the invoke ends the start's macrostep, SCXML 6.4) runs from the
-/// host's loop, not nested calls: the chain starts, a snapshot of it fails
-/// at once with the document format's bounds error, the root's cancel
-/// reaches every level (each exits as its invoking session's cancel reaches
-/// it), and the run drops them all, on this debug test thread. The chain
+/// host's loop, not nested calls: the chain starts, a snapshot of it holds
+/// every level, the root's cancel reaches every level (each exits as its
+/// invoking session's cancel reaches it), and the run drops them all, on
+/// this debug test thread. The chain
 /// starts in one host call, so the host is configured with
 /// [`DEEP_CHAIN_FUEL`].
 #[test]
-fn a_nested_start_chain_to_the_name_bound_starts_cancels_and_drops() {
+fn a_nested_start_chain_starts_cancels_and_drops() {
     let root = scxml(
         "r0",
         r#"<state id="r0"><onentry><send event="stop" delay="1ms"/></onentry><invoke id="k" type="scxml" src="level1.scxml"/><transition event="stop" target="rdone"><log label="stopped"/></transition></state><final id="rdone"/>"#,
@@ -753,8 +745,7 @@ fn a_nested_start_chain_to_the_name_bound_starts_cancels_and_drops() {
     let outcome = run_with_budget(
         &host_with_fuel(DEEP_CHAIN_FUEL),
         &root,
-        // One level more than the bound admits: its `<invoke>` fails.
-        waiting_chain(DEEP + 1),
+        waiting_chain(DEEP),
         SnapshotRequest {
             points: SnapshotPoints::At(vec![0]),
             options: Options::default(),
@@ -767,14 +758,11 @@ fn a_nested_start_chain_to_the_name_bound_starts_cancels_and_drops() {
     // Each level's start, then its cancel, ran one command.
     let commands_per_session = outcome.commands / u64::try_from(1 + DEEP).expect("small");
     assert!(commands_per_session >= 2, "{} commands", outcome.commands);
-    let [failed] = outcome.snapshot_failures.as_slice() else {
+    let [snapshot] = outcome.snapshots.as_slice() else {
         panic!("{:?}", outcome.snapshot_failures);
     };
-    assert!(
-        matches!(&failed.failure, SnapshotFailure::Codec(error) if error.code == SnapshotErrorCode::BoundsExceeded),
-        "{:?}",
-        failed.failure
-    );
+    let document = decode(&snapshot.bytes).expect("the document decodes");
+    assert_eq!(document.snapshot.sessions.len(), 1 + DEEP, "every level");
 }
 
 /// The child of the deferred chain: it invokes the next level only on a
@@ -782,15 +770,14 @@ fn a_nested_start_chain_to_the_name_bound_starts_cancels_and_drops() {
 const DEFERRED_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="go" delay="1ms"/></onentry><transition event="go" target="c1"/></state><state id="c1"><invoke type="scxml" src="child.scxml"/></state></scxml>"#;
 
 /// A chain that grows one level per millisecond, one command per level,
-/// until the next level's `_sessionid` would exceed the 1024-byte name
-/// bound (its `<invoke>` raises `error.execution`): `root.r0.0` and then
-/// `.c1.0` per level, 204 levels. Then the root leaves its invoking state:
+/// with no bound on its `_sessionid` (`root.r0.0` and then `.c1.0` per
+/// level), until the root leaves its invoking state after 214 ms:
 /// the cancel reaches every level, deepest last, and the whole chain is
 /// dropped, on this debug test thread. The cancel of the whole chain is one
 /// host call, so the host is configured with [`DEEP_CHAIN_FUEL`].
 #[test]
-fn a_deferred_chain_to_the_name_bound_cancels_and_drops() {
-    let stop_ms = DEEP + 10;
+fn a_deferred_chain_cancels_and_drops() {
+    let stop_ms = 214;
     let root = scxml(
         "r0",
         &format!(
@@ -806,7 +793,11 @@ fn a_deferred_chain_to_the_name_bound_cancels_and_drops() {
     );
     assert_eq!(outcome.terminal, Terminal::Finished);
     assert_eq!(logs(&outcome), ["root:stopped"]);
-    assert_eq!(traced_sessions(&outcome), 1 + 204);
+    assert_eq!(
+        traced_sessions(&outcome),
+        1 + stop_ms,
+        "one level per millisecond"
+    );
 }
 
 /// Fuel of one host call in the fuel-sharing proof.

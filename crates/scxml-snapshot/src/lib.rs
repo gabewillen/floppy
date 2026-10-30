@@ -22,9 +22,7 @@
 //!   most 2^53 − 1; no JSON floats (numbers are [`Value::Number`] strings).
 //! * `sha256` is the SHA-256 of the canonical bytes of `snapshot` as they
 //!   appear in the document. It detects corruption; it is not authentication.
-//! * A document is at most [`MAX_DOCUMENT_BYTES`]; a larger one fails with
-//!   [`SnapshotErrorCode::TooLarge`] and is never truncated.
-//! * The decoder checks, in order: size, JSON, `version`, shape with unknown
+//! * The decoder checks, in order: JSON, `version`, shape with unknown
 //!   fields rejected, re-encode byte equality, `sha256`, bounds, and
 //!   consistency. It is authoritative; [`SESSION_SNAPSHOT_SCHEMA`] and
 //!   [`SESSION_SNAPSHOT_DIFF_SCHEMA`] cannot express key order,
@@ -68,41 +66,18 @@ pub const SESSION_SNAPSHOT_VERSION: &str = "scxml.session-snapshot/v2";
 /// `version` of every session snapshot diff document.
 pub const SESSION_SNAPSHOT_DIFF_VERSION: &str = "scxml.session-snapshot-diff/v2";
 // The bounds below are part of the `scxml.session-snapshot/v2` format
-// contract (its published JSON Schemas pin them), the same on every build:
-// they bound what one document can represent, not what a session may do.
-// A native host imposes no session bound of its own, so a session can
-// outgrow them; a snapshot of such a session fails with a typed error, and
-// the session goes on.
+// contract (its published JSON Schemas pin them), the same on every build.
+// The format bounds no count of sessions, queue entries, pending sends,
+// transitions, states, or variables, no invoke depth, no identifier length,
+// and no document size.
 
-/// Largest encoded document, in bytes (32 MiB).
-pub const MAX_DOCUMENT_BYTES: usize = 33_554_432;
-/// Most invoked sessions under one root session (the root session not
-/// counted) one document represents.
-pub const MAX_INVOKED_SESSIONS: usize = 255;
-/// Deepest nested invoke depth one document represents (a session the root
-/// session invokes is at depth 1).
-pub const MAX_INVOKE_DEPTH: usize = 32;
-/// Most entries in one FIFO queue.
-pub const MAX_QUEUE_ENTRIES: usize = 10_000;
-/// Most pending delayed sends per session (the wasm clock's timer bound).
-pub const MAX_PENDING_SENDS: usize = 1_024;
-/// Most listed transitions per session.
-pub const MAX_TRANSITIONS: usize = 10_000;
-/// Most state ids in one configuration list.
-pub const MAX_CONFIGURATION_STATES: usize = 10_000;
-/// Most user variables per session (the data models' variable bound).
-pub const MAX_VARIABLES: usize = 256;
 /// Longest variable text a snapshot writes inline; a longer one is
 /// [`VariableValue::Oversized`]. Event data and other values have no byte
 /// bound (SCXML sets none).
 pub const MAX_VALUE_BYTES: usize = 65_536;
-/// Largest authored `cond` text, in bytes.
-pub const MAX_COND_BYTES: usize = 16_384;
 /// Largest `event_schema` text (a canonical JSON schema or an authored
 /// `event:schemaexpr`), in bytes: the Machine IR string bound.
 pub const MAX_EVENT_SCHEMA_BYTES: usize = 1_048_576;
-/// Largest `_sessionid`, in bytes.
-pub const MAX_SESSION_ID_BYTES: usize = 1_024;
 /// Largest error pointer, in bytes.
 pub const MAX_POINTER_BYTES: usize = 256;
 
@@ -214,7 +189,7 @@ pub struct Document {
     pub sha256: String,
     /// How the document was produced.
     pub options: Options,
-    /// The root session, with its invoked sessions nested in `invocations`.
+    /// The root session and every session it invoked, at any depth.
     pub snapshot: Snapshot,
 }
 
@@ -254,7 +229,7 @@ pub struct Clock {
     pub now_ms: u64,
 }
 
-/// `snapshot`: provenance, clock, and the root session.
+/// `snapshot`: provenance, clock, and the sessions.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
@@ -262,8 +237,77 @@ pub struct Snapshot {
     pub components: Vec<ComponentIdentity>,
     /// The shared virtual clock.
     pub clock: Clock,
-    /// The root session.
-    pub root: Session,
+    /// Pre-order: the root session first, then each session it invoked
+    /// (in its `invocations` order) followed by the sessions that one
+    /// invoked, at any depth. A session is linked to its invocation by
+    /// `invoked_by`; the list is flat, so no depth nests the document.
+    pub sessions: Vec<Session>,
+}
+
+impl Snapshot {
+    /// The root session (the first of [`Self::sessions`]; a decoded
+    /// document always has one).
+    #[must_use]
+    pub fn root(&self) -> Option<&Session> {
+        self.sessions.first()
+    }
+
+    /// For every session (by index into [`Self::sessions`]), the sessions
+    /// it invoked, in its `invocations` order, each with its invoke id; an
+    /// invocation with no session in the document is left out.
+    #[must_use]
+    pub fn invoked(&self) -> Vec<Vec<(&str, usize)>> {
+        let by_link: std::collections::BTreeMap<(&str, &str), usize> = self
+            .sessions
+            .iter()
+            .enumerate()
+            .filter_map(|(index, session)| {
+                session.invoked_by.as_ref().map(|by| {
+                    (
+                        (by.parent_session_id.as_str(), by.invoke_id.as_str()),
+                        index,
+                    )
+                })
+            })
+            .collect();
+        self.sessions
+            .iter()
+            .map(|parent| {
+                parent
+                    .invocations
+                    .iter()
+                    .flatten()
+                    .filter_map(|invocation| {
+                        by_link
+                            .get(&(parent.session_id.as_str(), invocation.invoke_id.as_str()))
+                            .map(|child| (invocation.invoke_id.as_str(), *child))
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// For every session (by index into [`Self::sessions`]), the invoke ids
+    /// from the root session down to it (empty for the root, and for a
+    /// session no invocation reaches).
+    #[must_use]
+    pub fn paths(&self) -> Vec<Vec<&str>> {
+        let invoked = self.invoked();
+        let mut paths: Vec<Vec<&str>> = vec![Vec::new(); self.sessions.len()];
+        // Pre-order: a session's path is known before its children's.
+        for (index, children) in invoked.iter().enumerate() {
+            for (invoke_id, child) in children {
+                if *child > index {
+                    let mut path = paths.get(index).cloned().unwrap_or_default();
+                    path.push(invoke_id);
+                    if let Some(slot) = paths.get_mut(*child) {
+                        *slot = path;
+                    }
+                }
+            }
+        }
+        paths
+    }
 }
 
 /// Session lifecycle at a checkpoint (no `failed` or `shut-down` session is
@@ -394,9 +438,7 @@ pub enum OversizedTag {
 /// data-value text, or its string form) is longer than
 /// [`MAX_VALUE_BYTES`]. The data-model provider reports only the UTF-8 byte
 /// length, so nothing is truncated and a variable's size never makes a
-/// snapshot fail. The document's structural bounds (such as
-/// [`MAX_TRANSITIONS`] and [`MAX_DOCUMENT_BYTES`]) are preconditions: a
-/// document over one fails with `bounds-exceeded` or `too-large`.
+/// snapshot fail.
 /// `bytes` is always greater than [`MAX_VALUE_BYTES`]; a shorter value is
 /// written inline.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -556,8 +598,7 @@ pub struct Event {
     pub trace_context: Option<TraceContext>,
 }
 
-/// The session's SCXML Appendix D queues; each a FIFO of at most
-/// [`MAX_QUEUE_ENTRIES`].
+/// The session's SCXML Appendix D queues; each a FIFO.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Queues {
@@ -605,8 +646,7 @@ pub struct ProcessorMessage {
     /// `_scxmleventname`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
-    /// `namelist` entries then `<param>` children, in document order (at
-    /// most [`MAX_PROCESSOR_SEND_PARAMS`]).
+    /// `namelist` entries then `<param>` children, in document order.
     pub params: Vec<Param>,
     /// The evaluated `<content>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -620,15 +660,11 @@ pub struct ProcessorMessage {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Param {
-    /// Parameter name (1 to [`scxml_types::MAX_NAME_BYTES`] bytes).
+    /// Parameter name (not empty).
     pub name: String,
     /// Parameter value.
     pub value: Value,
 }
-
-/// Maximum parameters of one pending processor send (the WIT
-/// `processor-send.params` bound).
-pub const MAX_PROCESSOR_SEND_PARAMS: usize = scxml_types::MAX_PROCESSOR_SEND_PARAMS;
 
 /// SCXML 3.5 transition `type`.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -713,8 +749,6 @@ pub struct Invocation {
     pub autoforward: bool,
     /// Whether the child finished.
     pub finished: bool,
-    /// The invoked session, with its own `invocations`.
-    pub session: Box<Session>,
 }
 
 /// One session object; excluded sections are absent.
@@ -759,7 +793,7 @@ pub struct Session {
     /// `transitions` section: every transition an event could trigger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transitions: Option<Vec<Transition>>,
-    /// `invocations` section (root only), ascending invoke-id order.
+    /// `invocations` section, ascending invoke-id order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invocations: Option<Vec<Invocation>>,
 }
@@ -877,8 +911,7 @@ pub struct Capture {
     /// The shared virtual clock.
     pub now_ms: u64,
     /// Pre-order: the root first, each session after the session that
-    /// invoked it. A document holds at most [`MAX_INVOKED_SESSIONS`] invoked
-    /// sessions and [`MAX_INVOKE_DEPTH`] nested invoke depth (format bounds);
+    /// invoked it, at any depth;
     /// a capture past them fails to encode.
     pub sessions: Vec<SessionCapture>,
 }
@@ -893,8 +926,6 @@ pub struct DiffOptions {
 /// Closed failure class of the codec.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SnapshotErrorCode {
-    /// Over [`MAX_DOCUMENT_BYTES`].
-    TooLarge,
     /// Not JSON.
     MalformedJson,
     /// Another `version`.
@@ -911,8 +942,6 @@ pub enum SnapshotErrorCode {
     InvalidName,
     /// A derived field disagrees, an id repeats, or a parent link is bad.
     Inconsistent,
-    /// An invoked session deeper than [`MAX_INVOKE_DEPTH`].
-    DepthExceeded,
     /// A child's clock differs from the shared clock.
     ClockInvariant,
     /// Taken outside a checkpoint.
@@ -928,7 +957,6 @@ impl SnapshotErrorCode {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::TooLarge => "too-large",
             Self::MalformedJson => "malformed-json",
             Self::UnsupportedVersion => "unsupported-version",
             Self::SchemaViolation => "schema-violation",
@@ -937,7 +965,6 @@ impl SnapshotErrorCode {
             Self::BoundsExceeded => "bounds-exceeded",
             Self::InvalidName => "invalid-name",
             Self::Inconsistent => "inconsistent",
-            Self::DepthExceeded => "depth-exceeded",
             Self::ClockInvariant => "clock-invariant",
             Self::NotStable => "not-stable",
             Self::StatusInvalid => "status-invalid",
@@ -1007,12 +1034,8 @@ mod tests {
 
     /// The schema location and value of every decoder bound JSON Schema
     /// can express.
-    #[allow(clippy::too_many_lines, reason = "one flat table of schema locations")]
     fn expressible_bounds() -> Vec<(String, usize)> {
-        let name = scxml_types::MAX_NAME_BYTES;
-        let mut bounds: Vec<(String, usize)> = [
-            ("/$defs/name/maxLength", name),
-            ("/$defs/id/maxLength", name),
+        [
             (
                 "/$defs/variableValue/oneOf/1/properties/text/maxLength",
                 MAX_VALUE_BYTES,
@@ -1022,15 +1045,6 @@ mod tests {
                 MAX_TYPEOF_BYTES,
             ),
             (
-                "/$defs/variable/properties/name/maxLength",
-                MAX_SESSION_ID_BYTES,
-            ),
-            (
-                "/$defs/system/properties/name/maxLength",
-                MAX_SESSION_ID_BYTES,
-            ),
-            ("/$defs/event/properties/name/maxLength", name),
-            (
                 "/$defs/traceContext/properties/tracestate/maxLength",
                 scxml_types::MAX_TRACESTATE_BYTES,
             ),
@@ -1039,85 +1053,13 @@ mod tests {
                 scxml_types::MAX_BAGGAGE_BYTES,
             ),
             (
-                "/$defs/processorMessage/properties/event/maxLength",
-                scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
-            ),
-            (
-                "/$defs/processorMessage/properties/params/maxItems",
-                MAX_PROCESSOR_SEND_PARAMS,
-            ),
-            (
-                "/$defs/processorMessage/properties/params/items/properties/name/maxLength",
-                name,
-            ),
-            (
-                "/$defs/transition/properties/events/maxItems",
-                MAX_TRANSITIONS,
-            ),
-            ("/$defs/transition/properties/events/items/maxLength", name),
-            (
-                "/$defs/transition/properties/targets/maxItems",
-                MAX_CONFIGURATION_STATES,
-            ),
-            (
-                "/$defs/transition/properties/exit/maxItems",
-                MAX_CONFIGURATION_STATES,
-            ),
-            (
-                "/$defs/transition/properties/entry/maxItems",
-                MAX_CONFIGURATION_STATES,
-            ),
-            (
-                "/$defs/transition/properties/cond/maxLength",
-                MAX_COND_BYTES,
-            ),
-            ("/$defs/transitions/maxItems", MAX_TRANSITIONS),
-            (
-                "/$defs/historyValue/properties/value/maxItems",
-                MAX_CONFIGURATION_STATES,
-            ),
-            (
-                "/$defs/session/properties/invocations/maxItems",
-                MAX_INVOKED_SESSIONS,
-            ),
-            (
-                "/$defs/invokedSession/properties/invocations/maxItems",
-                MAX_INVOKED_SESSIONS,
-            ),
-            (
                 "/$defs/variableValue/oneOf/2/properties/bytes/minimum",
                 MAX_VALUE_BYTES + 1,
             ),
         ]
         .into_iter()
         .map(|(pointer, bound)| (pointer.to_owned(), bound))
-        .collect();
-        for queue in ["internal", "external"] {
-            bounds.push((
-                format!("/$defs/queues/properties/{queue}/maxItems"),
-                MAX_QUEUE_ENTRIES,
-            ));
-        }
-        for session in ["session", "invokedSession"] {
-            for (key, bound) in [
-                ("name/maxLength", MAX_SESSION_ID_BYTES),
-                ("history/maxItems", MAX_CONFIGURATION_STATES),
-                ("bound_states/maxItems", MAX_CONFIGURATION_STATES),
-                ("data_model/maxItems", MAX_VARIABLES),
-                ("pending_sends/maxItems", MAX_PENDING_SENDS),
-                (
-                    "configuration/properties/atomic/maxItems",
-                    MAX_CONFIGURATION_STATES,
-                ),
-                (
-                    "configuration/properties/full/maxItems",
-                    MAX_CONFIGURATION_STATES,
-                ),
-            ] {
-                bounds.push((format!("/$defs/{session}/properties/{key}"), bound));
-            }
-        }
-        bounds
+        .collect()
     }
 
     /// Every decoder bound JSON Schema can express is in the schema, at the

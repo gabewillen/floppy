@@ -65,7 +65,7 @@
       <example:raise event="queued.by.extension"/>
       <example:snapshot location="snap" exclude="system pending_sends"/>
       <example:snapshot location="atInit" at="initialize"/>
-      <log label="snapshot" expr="JSON.stringify(JSON.parse(snap).options) + JSON.stringify(JSON.parse(snap).snapshot.root)"/>
+      <log label="snapshot" expr="JSON.stringify(JSON.parse(snap).options) + JSON.stringify(JSON.parse(snap).snapshot.sessions[0])"/>
       <log label="at-initialize" expr="atInit"/>
     </onentry>
     <transition event="queued.before"/>

@@ -95,24 +95,10 @@ pub const XPATH_TEMPLATE_PROCESSOR_NAME: &str = "http://www.w3.org/TR/scxml/#SCX
 /// [`XPATH_TEMPLATE_PROCESSOR_NAME`] mirrors (equal to
 /// `scxml_ioprocessor_scxml::SCXML_EVENT_PROCESSOR_URI`).
 pub const SCXML_EVENT_PROCESSOR_NAME: &str = "http://www.w3.org/TR/scxml/#SCXMLEventProcessor";
-/// Maximum initialization source bytes (every build: the `data-model-api`
-/// `initialize` bound of the WIT contract, "the declarations' placeholder
-/// encoding at most 65536 bytes").
-pub const MAX_SOURCE_BYTES: usize = 65_536;
-/// Maximum expression or location bytes (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
-/// Maximum `<script>` bytes (the `XPath` data model has no script language;
-/// the bound still applies before a non-empty script is rejected)
-/// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_SCRIPT_BYTES: usize = scxml_types::wasm_bound(65_536);
 /// Longest variable markup a data-model snapshot carries; longer markup is
 /// [`VariableMarkup::Oversized`] (the WIT `variable-value` contract). No
 /// value has a byte bound (SCXML sets none).
 pub const MAX_VALUE_BYTES: usize = 65_536;
-/// Maximum variables retained by one instance (every build: the WIT
-/// contract's `The XPath provider bounds declared variables to 256`, quoted
-/// exactly).
-pub const MAX_VARIABLES: usize = 256;
 /// Evaluator work units granted to one expression evaluation in a wasm build.
 pub const WASM_EVALUATION_FUEL: u64 = scxml_xpath::limits::DEFAULT_FUEL;
 /// Evaluator work units granted to one expression evaluation:

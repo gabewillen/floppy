@@ -170,11 +170,6 @@ fn is_release_tag(tag: &str) -> bool {
         && !tag.contains("..")
 }
 
-/// Maximum canonical bytes retained for one delayed send request.
-pub const MAX_DELAYED_SEND_BYTES: usize = 65_536;
-/// Maximum entries in one `<send>` message field list
-/// ([`SendMessage::Params`]); matches the WIT `named-value` list bound.
-pub const MAX_SEND_MESSAGE_PARAMS: usize = 1_024;
 /// Exact byte length of the supported W3C `traceparent` version.
 pub const TRACEPARENT_BYTES: usize = 55;
 /// Maximum W3C `tracestate` bytes accepted at a component boundary.
@@ -185,8 +180,6 @@ pub const MAX_TRACESTATE_MEMBERS: usize = 32;
 pub const MAX_BAGGAGE_BYTES: usize = 8_192;
 /// Maximum baggage list members accepted when propagation is explicitly enabled.
 pub const MAX_BAGGAGE_MEMBERS: usize = 64;
-/// Maximum UTF-8 bytes accepted by SCXML name and identifier value types.
-pub const MAX_NAME_BYTES: usize = 1_024;
 
 /// Version-independent format tag that opens every delayed-send wire record.
 ///
@@ -205,8 +198,8 @@ macro_rules! name_type {
             ///
             /// # Errors
             ///
-            /// Returns [`NameError`] when `value` is empty, contains whitespace,
-            /// or exceeds [`MAX_NAME_BYTES`].
+            /// Returns [`NameError`] when `value` is empty or contains
+            /// whitespace.
             pub fn new(value: impl Into<String>) -> Result<Self, NameError> {
                 validate_name(value.into()).map(Self)
             }
@@ -291,8 +284,6 @@ impl fmt::Display for NamespaceUri {
 fn validate_name(value: String) -> Result<String, NameError> {
     if value.is_empty() {
         Err(NameError::Empty)
-    } else if value.len() > MAX_NAME_BYTES {
-        Err(NameError::TooLong)
     } else if value.contains(is_xml_space) {
         // XML white space (XML 1.0 §2.3 `S`) separates names; other
         // Unicode white space, such as U+1680, may be a name character.
@@ -318,8 +309,6 @@ pub enum ExternalScripts {
 pub enum NameError {
     /// The value was empty.
     Empty,
-    /// The value exceeded [`MAX_NAME_BYTES`] UTF-8 bytes.
-    TooLong,
     /// The value contained whitespace.
     ContainsWhitespace,
 }
@@ -328,7 +317,6 @@ impl fmt::Display for NameError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => formatter.write_str("name must not be empty"),
-            Self::TooLong => formatter.write_str("name exceeds its UTF-8 byte bound"),
             Self::ContainsWhitespace => formatter.write_str("name must not contain whitespace"),
         }
     }
@@ -953,8 +941,7 @@ pub enum SendMessage {
     /// No `<param>`, `namelist`, or `<content>`.
     #[default]
     Empty,
-    /// `<param>` and `namelist` entries in document order, duplicates kept
-    /// (at most [`MAX_SEND_MESSAGE_PARAMS`]).
+    /// `<param>` and `namelist` entries in document order, duplicates kept.
     Params(Vec<NamedValue>),
     /// A `<content>` payload; its value is the event's `data`.
     Content,
@@ -997,18 +984,6 @@ pub const BASICHTTP_EVENT_PROCESSOR_URI: &str =
 /// Short alias of the `BasicHTTP` Event I/O Processor.
 pub const BASICHTTP_PROCESSOR_ALIAS: &str = "basichttp";
 
-/// Maximum UTF-8 bytes of a [`ProcessorSend`] processor type (WIT
-/// `processor-send.processor-type`).
-pub const MAX_PROCESSOR_SEND_TYPE_BYTES: usize = 4_096;
-/// Maximum UTF-8 bytes of a [`ProcessorSend`] event name (WIT
-/// `processor-send.event-name`).
-pub const MAX_PROCESSOR_SEND_EVENT_NAME_BYTES: usize = 1_024;
-/// Maximum UTF-8 bytes of a [`ProcessorSend`] target (WIT
-/// `processor-send.target`).
-pub const MAX_PROCESSOR_SEND_TARGET_BYTES: usize = 16_384;
-/// Maximum [`ProcessorSend`] fields (WIT `processor-send.params`).
-pub const MAX_PROCESSOR_SEND_PARAMS: usize = 256;
-
 /// One evaluated `<send>` addressed to an Event I/O Processor other than
 /// the SCXML one (SCXML 6.2), such as `BasicHTTP` (SCXML C.2) or a processor
 /// a package binds (WIT `processor-send`). The machine evaluates every
@@ -1016,22 +991,18 @@ pub const MAX_PROCESSOR_SEND_PARAMS: usize = 256;
 /// by its type.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProcessorSend {
-    /// Evaluated `type`/`typeexpr`, exactly as written (at most
-    /// [`MAX_PROCESSOR_SEND_TYPE_BYTES`]).
+    /// Evaluated `type`/`typeexpr`, exactly as written.
     pub processor_type: String,
     /// The send's id: the authored `id`, else the one the machine generated
     /// (SCXML 3.14, 6.2.4). It never enters the message; a delayed send
     /// is scheduled and cancelled under it (SCXML 6.2, 6.3), and an
     /// `error.communication` for it carries it (SCXML 5.10.1).
     pub send_id: SendId,
-    /// Evaluated `event`/`eventexpr` (at most
-    /// [`MAX_PROCESSOR_SEND_EVENT_NAME_BYTES`]).
+    /// Evaluated `event`/`eventexpr`.
     pub event_name: Option<String>,
-    /// Evaluated `target`/`targetexpr` (at most
-    /// [`MAX_PROCESSOR_SEND_TARGET_BYTES`]).
+    /// Evaluated `target`/`targetexpr`.
     pub target: Option<String>,
-    /// `namelist` entries then `<param>` children, in document order (at
-    /// most [`MAX_PROCESSOR_SEND_PARAMS`]).
+    /// `namelist` entries then `<param>` children, in document order.
     pub params: Vec<NamedValue>,
     /// Evaluated `<content>`; mutually exclusive with `params`.
     pub content: Option<DataValue>,
@@ -1136,7 +1107,7 @@ pub fn is_service_type_uri(value: &str) -> bool {
 /// Failure to encode or decode a canonical delayed-send request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SendCodecError {
-    /// The payload exceeded [`MAX_DELAYED_SEND_BYTES`].
+    /// A field length or count cannot be represented in the wire format.
     TooLarge,
     /// The payload was malformed, non-canonical, or contained an invalid value.
     Invalid,
@@ -1147,7 +1118,7 @@ pub enum SendCodecError {
 impl fmt::Display for SendCodecError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::TooLarge => "delayed-send payload exceeds its byte bound",
+            Self::TooLarge => "delayed-send field exceeds the wire format's width",
             Self::Invalid => "delayed-send payload is invalid",
             Self::UnsupportedVersion => "delayed-send payload version is unsupported",
         })
@@ -1180,8 +1151,8 @@ const DELAYED_SEND_KIND_PROCESSOR: u8 = 1;
 ///
 /// # Errors
 ///
-/// Returns [`SendCodecError::TooLarge`] when the canonical payload exceeds the
-/// byte bound or a field length or count cannot be represented. Returns
+/// Returns [`SendCodecError::TooLarge`] when a field length or count cannot
+/// be represented. Returns
 /// [`SendCodecError::Invalid`] when an SCXML request's and its event's send
 /// IDs do not agree ([`send_ids_agree`]) or a value is not canonical.
 pub fn encode_delayed_send(send: &DelayedSend) -> Result<Vec<u8>, SendCodecError> {
@@ -1197,9 +1168,6 @@ pub fn encode_delayed_send(send: &DelayedSend) -> Result<Vec<u8>, SendCodecError
             bytes.push(DELAYED_SEND_KIND_PROCESSOR);
             write_processor_send(&mut bytes, send)?;
         }
-    }
-    if bytes.len() > MAX_DELAYED_SEND_BYTES {
-        return Err(SendCodecError::TooLarge);
     }
     Ok(bytes)
 }
@@ -1259,29 +1227,10 @@ fn write_processor_send(bytes: &mut Vec<u8>, send: &ProcessorSend) -> Result<(),
     write_trace_context(bytes, send.trace_context.as_ref())
 }
 
-/// The bounds of the WIT `processor-send` record: processor type (non-empty),
-/// event name, target, field count, and field names (non-empty, at most
-/// [`MAX_NAME_BYTES`]).
+/// The bounds of the WIT `processor-send` record: processor type (non-empty)
+/// and field names (non-empty).
 fn check_processor_send(send: &ProcessorSend) -> Result<(), SendCodecError> {
-    if send.processor_type.len() > MAX_PROCESSOR_SEND_TYPE_BYTES
-        || send
-            .event_name
-            .as_ref()
-            .is_some_and(|name| name.len() > MAX_PROCESSOR_SEND_EVENT_NAME_BYTES)
-        || send
-            .target
-            .as_ref()
-            .is_some_and(|target| target.len() > MAX_PROCESSOR_SEND_TARGET_BYTES)
-        || send.params.len() > MAX_PROCESSOR_SEND_PARAMS
-    {
-        return Err(SendCodecError::TooLarge);
-    }
-    if send.processor_type.is_empty()
-        || send
-            .params
-            .iter()
-            .any(|field| field.name.is_empty() || field.name.len() > MAX_NAME_BYTES)
-    {
+    if send.processor_type.is_empty() || send.params.iter().any(|field| field.name.is_empty()) {
         return Err(SendCodecError::Invalid);
     }
     Ok(())
@@ -1314,16 +1263,13 @@ fn write_trace_context(
 /// ([`encode_delayed_send`]).
 ///
 /// Input bytes are borrowed and never retained. Unknown versions and kinds,
-/// malformed option tags, invalid names, invalid UTF-8, trailing bytes, and
-/// over-bound payloads fail closed.
+/// malformed option tags, invalid names, invalid UTF-8, and trailing bytes
+/// fail closed.
 ///
 /// # Errors
 ///
 /// Returns a typed codec failure without producing a partially decoded value.
 pub fn decode_delayed_send(bytes: &[u8]) -> Result<DelayedSend, SendCodecError> {
-    if bytes.len() > MAX_DELAYED_SEND_BYTES {
-        return Err(SendCodecError::TooLarge);
-    }
     let mut reader = WireReader { bytes, cursor: 0 };
     if reader.read::<8>()? != *DELAYED_SEND_MAGIC {
         return Err(SendCodecError::Invalid);
@@ -1411,10 +1357,8 @@ impl WireReader<'_> {
         let target = self.read_optional_string()?;
         let count = u32::from_le_bytes(self.read()?);
         let count = usize::try_from(count).map_err(|_| SendCodecError::Invalid)?;
-        if count > MAX_PROCESSOR_SEND_PARAMS {
-            return Err(SendCodecError::Invalid);
-        }
-        let mut params = Vec::with_capacity(count);
+        // The count is untrusted: the vector grows as fields are read.
+        let mut params = Vec::new();
         for _ in 0..count {
             let name = self.read_string()?;
             let value = self.read_data_value()?;
@@ -1473,9 +1417,6 @@ fn write_string(bytes: &mut Vec<u8>, value: &str) -> Result<(), SendCodecError> 
     let length = u32::try_from(value.len()).map_err(|_| SendCodecError::TooLarge)?;
     bytes.extend_from_slice(&length.to_le_bytes());
     bytes.extend_from_slice(value.as_bytes());
-    if bytes.len() > MAX_DELAYED_SEND_BYTES {
-        return Err(SendCodecError::TooLarge);
-    }
     Ok(())
 }
 
@@ -1498,14 +1439,11 @@ fn write_send_message(bytes: &mut Vec<u8>, message: &SendMessage) -> Result<(), 
     match message {
         SendMessage::Empty => bytes.push(0),
         SendMessage::Params(fields) => {
-            if fields.len() > MAX_SEND_MESSAGE_PARAMS {
-                return Err(SendCodecError::TooLarge);
-            }
             bytes.push(1);
             let count = u32::try_from(fields.len()).map_err(|_| SendCodecError::TooLarge)?;
             bytes.extend_from_slice(&count.to_le_bytes());
             for field in fields {
-                if field.name.is_empty() || field.name.len() > MAX_NAME_BYTES {
+                if field.name.is_empty() {
                     return Err(SendCodecError::Invalid);
                 }
                 write_string(bytes, &field.name)?;
@@ -1530,13 +1468,11 @@ impl WireReader<'_> {
             1 => {
                 let count = u32::from_le_bytes(self.read()?);
                 let count = usize::try_from(count).map_err(|_| SendCodecError::Invalid)?;
-                if count > MAX_SEND_MESSAGE_PARAMS {
-                    return Err(SendCodecError::Invalid);
-                }
-                let mut fields = Vec::with_capacity(count);
+                // The count is untrusted: the vector grows as fields are read.
+                let mut fields = Vec::new();
                 for _ in 0..count {
                     let name = self.read_string()?;
-                    if name.is_empty() || name.len() > MAX_NAME_BYTES {
+                    if name.is_empty() {
                         return Err(SendCodecError::Invalid);
                     }
                     let value = self.read_data_value()?;
@@ -2168,36 +2104,21 @@ mod tests {
             encode_delayed_send(&DelayedSend::Processor(unnamed)),
             Err(SendCodecError::Invalid)
         );
-        let too_many = ProcessorSend {
+        // Field counts, targets, and types have no bound of the codec's own.
+        let large = DelayedSend::Processor(ProcessorSend {
+            processor_type: "x".repeat(8_192),
+            target: Some("x".repeat(32_768)),
             params: vec![
                 NamedValue {
                     name: "a".into(),
-                    value: DataValue::Null,
+                    value: DataValue::String("v".repeat(65_536)),
                 };
-                MAX_PROCESSOR_SEND_PARAMS + 1
+                2_048
             ],
             ..fields.clone()
-        };
-        assert_eq!(
-            encode_delayed_send(&DelayedSend::Processor(too_many)),
-            Err(SendCodecError::TooLarge)
-        );
-        let long_target = ProcessorSend {
-            target: Some("x".repeat(MAX_PROCESSOR_SEND_TARGET_BYTES + 1)),
-            ..fields.clone()
-        };
-        assert_eq!(
-            encode_delayed_send(&DelayedSend::Processor(long_target)),
-            Err(SendCodecError::TooLarge)
-        );
-        let long_type = ProcessorSend {
-            processor_type: "x".repeat(MAX_PROCESSOR_SEND_TYPE_BYTES + 1),
-            ..fields.clone()
-        };
-        assert_eq!(
-            encode_delayed_send(&DelayedSend::Processor(long_type)),
-            Err(SendCodecError::TooLarge)
-        );
+        });
+        let encoded = encode_delayed_send(&large).expect("a large send encodes");
+        assert_eq!(decode_delayed_send(&encoded), Ok(large));
         let untyped = ProcessorSend {
             processor_type: String::new(),
             ..fields
@@ -2358,10 +2279,7 @@ mod tests {
             EventName::new("two words"),
             Err(NameError::ContainsWhitespace)
         );
-        assert_eq!(
-            SessionId::new("x".repeat(MAX_NAME_BYTES + 1)),
-            Err(NameError::TooLong)
-        );
+        assert!(SessionId::new("x".repeat(65_536)).is_ok());
     }
 
     #[test]
@@ -2660,20 +2578,19 @@ mod tests {
             ..base.clone()
         };
         assert_eq!(encode_send_request(&unnamed), Err(SendCodecError::Invalid));
-        let too_many = SendRequest {
+        // A message's field count has no bound of the codec's own.
+        let many = SendRequest {
             message: SendMessage::Params(vec![
                 NamedValue {
                     name: "a".into(),
                     value: DataValue::Null,
                 };
-                MAX_SEND_MESSAGE_PARAMS + 1
+                2_048
             ]),
             ..base
         };
-        assert_eq!(
-            encode_send_request(&too_many),
-            Err(SendCodecError::TooLarge)
-        );
+        let encoded = encode_send_request(&many).expect("many fields encode");
+        assert_eq!(decode_send_request(&encoded), Ok(many));
 
         // An unknown message tag fails closed.
         let mut unknown = encodings[0].clone();

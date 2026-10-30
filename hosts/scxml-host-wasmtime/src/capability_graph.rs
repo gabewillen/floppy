@@ -716,9 +716,7 @@ fn clock_error_to_io(
     match error {
         From::InvalidId => To::InvalidId,
         From::InvalidDuration => To::InvalidDuration,
-        From::PayloadTooLarge => To::PayloadTooLarge,
         From::DuplicateId => To::DuplicateId,
-        From::CapacityExhausted => To::CapacityExhausted,
         From::Overflow => To::Overflow,
         From::InvalidLimit => To::InvalidLimit,
         From::InvalidContext => To::InvalidContext,

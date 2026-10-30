@@ -10,9 +10,8 @@
 //!   one trailing `;`), so a fragment this check accepts cannot fail to parse
 //!   at runtime and vice versa. Locations must additionally be a variable name
 //!   or a property access. Scripts are parsed as ECMAScript scripts.
-//! * Bounds: expressions and locations at most [`crate::MAX_EXPRESSION_BYTES`],
-//!   scripts at most [`crate::MAX_SCRIPT_BYTES`], and the exact text handed to
-//!   Boa at most [`crate::MAX_PARSE_NESTING`] structural nesting units as
+//! * Bounds: the exact text handed to Boa at most
+//!   [`crate::MAX_PARSE_NESTING`] structural nesting units as
 //!   [`crate::check_nesting`] counts them (the same guard, on the same text
 //!   shape, as runtime evaluation). Boa's parser recurses natively, so deeper
 //!   input is declined instead of risking the stack, and native builds parse
@@ -31,10 +30,7 @@ use boa_engine::interner::Interner;
 use boa_engine::parser::{Error as ParseError, Parser, Source};
 use scxml_telemetry::{Module, Operation, SignalEvent, observe};
 
-use crate::{
-    DataModelError, MAX_EXPRESSION_BYTES, MAX_PARSE_NESTING, MAX_SCRIPT_BYTES, check_nesting,
-    nesting, on_parse_stack,
-};
+use crate::{DataModelError, MAX_PARSE_NESTING, check_nesting, nesting, on_parse_stack};
 /// Maximum UTF-8 bytes of one issue message.
 pub const MAX_SYNTAX_MESSAGE_BYTES: usize = 512;
 
@@ -68,24 +64,18 @@ pub struct SyntaxIssue {
 ///
 /// # Errors
 ///
-/// [`DataModelError::InvalidInput`] when `source` exceeds its byte bound,
-/// contains NUL, or its parsed text exceeds [`MAX_PARSE_NESTING`] units.
+/// [`DataModelError::InvalidInput`] when `source` contains NUL, or its parsed text exceeds [`MAX_PARSE_NESTING`] units.
 pub fn check_syntax(kind: SyntaxKind, source: &str) -> Result<Vec<SyntaxIssue>, DataModelError> {
     let span = observe(
         Module::DataModelEcmascriptComponent,
         Operation::DataModelCheckSyntax,
     );
-    let limit = if kind == SyntaxKind::Script {
-        MAX_SCRIPT_BYTES
-    } else {
-        MAX_EXPRESSION_BYTES
-    };
     let reject = || {
         span.event(SignalEvent::InputRejected);
         span.fail(scxml_telemetry::ErrorCategory::Validation);
         Err(DataModelError::InvalidInput)
     };
-    if source.len() > limit || source.as_bytes().contains(&0) {
+    if source.as_bytes().contains(&0) {
         return reject();
     }
     let parsed = match kind {
@@ -308,10 +298,9 @@ const RESERVED_WORDS: &[&str] = &[
 /// names"): Boa parses `(name)` as a script whose only statement is one
 /// identifier reference spelled exactly `name` (no escapes, comments, or
 /// white space), so reserved words and every other expression are not.
-/// Pure; no telemetry (a check inside the calling operation). Input beyond
-/// [`scxml_types::MAX_NAME_BYTES`] is not a name.
+/// Pure; no telemetry (a check inside the calling operation).
 pub(crate) fn is_variable_name(name: &str) -> bool {
-    if name.is_empty() || name.len() > scxml_types::MAX_NAME_BYTES || name.contains('\\') {
+    if name.is_empty() || name.contains('\\') {
         return false;
     }
     if name.is_ascii() {

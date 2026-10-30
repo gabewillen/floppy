@@ -369,11 +369,6 @@ export class InvokedSessions {
     return this.#nodes.get(parent)?.children.get(invokeId);
   }
 
-  /** The nested invoke depth of `key` (0 for the root), if present. */
-  depth(key) {
-    return this.#nodes.get(key)?.depth;
-  }
-
   /** The invoke ids from the root to `key` (`[]` for the root): work proportional to its depth. */
   path(key) {
     const path = [];

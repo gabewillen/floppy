@@ -324,22 +324,21 @@ test('a delayed BasicHTTP send is posted only when its delay elapses, as evaluat
   session.dispose();
 });
 
-test('a delayed BasicHTTP send beyond the clock capacity raises error.execution, as under Wasmtime', async () => {
-  // SCXML 3.12.2: "it MUST signal any errors that occur by raising SCXML
-  // events whose names begin with 'error.'". The clock holds 1024 pending
-  // sends; the 1025th raises error.execution and the session goes on.
+test('the clock holds any number of delayed BasicHTTP sends, as under Wasmtime', async () => {
+  // SCXML sets no bound on pending delayed sends: 1,025 are all held until
+  // they fall due.
   const { requests, send } = recorder();
   const { session, logs } = await open(
     scxml(`<datamodel><data id="items" expr="Array.from({ length: 1025 }, function (_, i) { return i; })"/><data id="sent" expr="0"/></datamodel>
      <state id="a">
-       <onentry><foreach array="items" item="i"><send type="${BASICHTTP}" event="later" target="https://example.test/x" delay="3600s"/><assign location="sent" expr="sent + 1"/></foreach><log label="unreached"/></onentry>
-       <transition event="error.execution" target="done"><log label="clock-full" expr="sent"/></transition>
+       <onentry><foreach array="items" item="i"><send type="${BASICHTTP}" event="later" target="https://example.test/x" delay="3600s"/><assign location="sent" expr="sent + 1"/></foreach><log label="held" expr="sent"/></onentry>
+       <transition event="error.execution" target="done"/>
      </state>
      <final id="done"/>`),
     { http: { allow: () => true, send } },
   );
-  assert.deepEqual(session.start().activeConfiguration, ['done']);
-  assert.deepEqual(logs, ['clock-full: 1024']);
+  assert.deepEqual(session.start().activeConfiguration, ['a']);
+  assert.deepEqual(logs, ['held: 1025']);
   assert.deepEqual(requests, []);
   session.dispose();
 });

@@ -47,6 +47,7 @@ const COUNT_IMPLIED: &str = "a Machine IR count of items that lowering already b
 const PINS_ONLY: &str = "only compile-time script packages pin a script, and the compiler pins every reference to one URI with the same package";
 const OVERFLOW: &str =
     "a u32 overflow; an 8 MiB source has far fewer elements, states, or transitions";
+const NAME_IMPLIED: &str = "a name the schema types as `xsd:ID` or `xsd:NMTOKEN` (a `done.` event appends one), so the XSD check already rejects it when empty or holding white space, and names have no length bound";
 const GRAPH_IMPLIED: &str = "the validator's semantic graph bound (65,536 nodes or transitions, `LIMIT002`) is below the compiler's 100,000 (asserted below)";
 
 /// One lowering rejection key with its source sites and coverage.
@@ -937,109 +938,17 @@ fn table() -> Vec<Entry> {
                     machine(r#"<state id="s"><transition event="go" target="f"/><final id=""/></state>"#),
                     "SCXML003",
                 ),
-                (
-                    machine(&format!(r#"<state id="s"/><state id="{}"/>"#, "x".repeat(1_025))),
-                    "LIMIT006",
-                ),
-                (
-                    machine(&format!(r#"<state id="s"/><state id=" {} "/>"#, "x".repeat(1_025))),
-                    "LIMIT006",
-                ),
             ],
         ),
         // ---------------------------------------------------------------
-        // Names the engine converts (every build; LIMIT006, LIMIT007)
+        // Names the engine converts (no length bound)
         // ---------------------------------------------------------------
-        covered(
-            "state done event",
-            1,
-            vec![
-                (
-                    machine(&format!(
-                        r#"<state id="s"/><state id="{}"><final id="g"/></state>"#,
-                        "x".repeat(1_014)
-                    )),
-                    "LIMIT006",
-                ),
-                (
-                    machine(&format!(
-                        r#"<state id="s"/><state id="&#9;{}&#10;"><final id="g"/></state>"#,
-                        "x".repeat(1_014)
-                    )),
-                    "LIMIT006",
-                ),
-            ],
-        ),
-        covered(
-            "raise event",
-            1,
-            vec![
-                (
-                    action(&format!(r#"<raise event="{}"/>"#, "e".repeat(1_025))),
-                    "LIMIT007",
-                ),
-                (
-                    action(&format!(r#"<raise event=" {}  "/>"#, "e".repeat(1_025))),
-                    "LIMIT007",
-                ),
-            ],
-        ),
-        covered(
-            "send event",
-            1,
-            vec![
-                (
-                    action(&format!(r#"<send event="{}"/>"#, "e".repeat(1_025))),
-                    "LIMIT007",
-                ),
-                (
-                    action(&format!(r#"<send event=" {}  "/>"#, "e".repeat(1_025))),
-                    "LIMIT007",
-                ),
-            ],
-        ),
-        covered(
-            "send id",
-            1,
-            vec![
-                (
-                    action(&format!(r#"<send event="e" id="{}"/>"#, "i".repeat(1_025))),
-                    "LIMIT007",
-                ),
-                (
-                    action(&format!(r#"<send event="e" id=" {}  "/>"#, "i".repeat(1_025))),
-                    "LIMIT007",
-                ),
-            ],
-        ),
-        covered(
-            "invoke id",
-            1,
-            vec![
-                (
-                    state(&format!(r#"<invoke id="{}" src="c.scxml"/>"#, "i".repeat(1_025))),
-                    "LIMIT007",
-                ),
-                (
-                    state(&format!(r#"<invoke id=" {}  " src="c.scxml"/>"#, "i".repeat(1_025))),
-                    "LIMIT007",
-                ),
-            ],
-        ),
-        covered(
-            "invoke done event",
-            1,
-            vec![
-                (
-                    state(&format!(r#"<invoke id="{}" src="c.scxml"/>"#, "i".repeat(1_013))),
-                    "LIMIT007",
-                ),
-                (
-                    state(&format!(r#"<invoke id=" {}  " src="c.scxml"/>"#, "i".repeat(1_013))),
-                    "LIMIT007",
-                ),
-            ],
-        ),
+        never("state done event", 1, NAME_IMPLIED),
+        never("raise event", 1, NAME_IMPLIED),
+        never("send event", 1, NAME_IMPLIED),
+        never("send id", 1, NAME_IMPLIED),
+        never("invoke id", 1, NAME_IMPLIED),
+        never("invoke done event", 1, NAME_IMPLIED),
         // ---------------------------------------------------------------
         // Machine IR bounds (LIMIT005)
         // ---------------------------------------------------------------
@@ -2262,86 +2171,4 @@ fn padded_strings(value: &serde_json::Value, found: &mut Vec<String>) {
         }
         _ => {}
     }
-}
-
-/// Whether a `<parallel>` can ever raise its `done.state.<ID>` event.
-enum Completion {
-    /// It can complete, so its over-long `done.state.<ID>` is rejected.
-    RaisesDoneState,
-    /// It never completes, so its `done.state.<ID>` is never raised.
-    Never,
-}
-
-/// SCXML 1.0 Appendix D raises `done.state.<ID>` in two places only, on
-/// entering a `<final>`: for its parent ("internalQueue.enqueue(new
-/// Event("done.state." + parent.id, s.donedata))"), and for its
-/// grandparent when that is a `<parallel>` whose child states are all in
-/// final states ("if isParallelState(grandparent): if
-/// getChildStates(grandparent).every(isInFinalState)"). A `<parallel>` whose
-/// regions are all `<parallel>` is no `<final>`'s grandparent, so it never
-/// raises one, however its regions finish. The validator (`LIMIT006`) and
-/// Machine IR validation bound the `done.state.<ID>` event of exactly the
-/// states that can raise it: each document's `<parallel id>` is 1,014
-/// bytes, so its event would be 1,025.
-#[test]
-fn done_state_bounds_cover_exactly_the_states_the_engine_completes() {
-    let id = "p".repeat(1_014);
-    let compound = |name: &str| format!(r#"<state id="{name}"><final id="{name}f"/></state>"#);
-    let cases = [
-        (
-            "every region a <parallel>",
-            format!(
-                r#"<parallel id="{id}"><parallel id="q">{}</parallel><parallel id="r">{}</parallel></parallel>"#,
-                compound("a"),
-                compound("b")
-            ),
-            Completion::Never,
-        ),
-        (
-            "a compound region with a <final> and a <parallel> region that can finish",
-            format!(
-                r#"<parallel id="{id}">{}<parallel id="q">{}</parallel></parallel>"#,
-                compound("a"),
-                compound("b")
-            ),
-            Completion::RaisesDoneState,
-        ),
-        (
-            "a compound region with a <final> and an atomic region",
-            format!(
-                r#"<parallel id="{id}">{}<state id="z"/></parallel>"#,
-                compound("a")
-            ),
-            Completion::Never,
-        ),
-    ];
-    let mut failures = Vec::new();
-    for (label, body, completion) in &cases {
-        let source = machine(&format!(r#"<state id="s">{body}</state>"#));
-        let report = common::validate(&source);
-        let errors: Vec<&str> = report
-            .diagnostics()
-            .iter()
-            .filter(|diagnostic| diagnostic.severity == Severity::Error)
-            .map(|diagnostic| diagnostic.code.as_str())
-            .collect();
-        let expected: &[&str] = match completion {
-            Completion::RaisesDoneState => &["LIMIT006"],
-            Completion::Never => &[],
-        };
-        if errors != expected {
-            failures.push(format!("{label}: validate reports {errors:?}"));
-        }
-        let document = parse_xml(SourceText::new(SOURCE, "case.scxml", source.as_str()))
-            .expect("the case is well-formed");
-        match (lower(&document), completion) {
-            (Ok(_), Completion::Never)
-            | (
-                Err(scxml_compiler_core::LowerError::InvalidName("state done event")),
-                Completion::RaisesDoneState,
-            ) => {}
-            (outcome, _) => failures.push(format!("{label}: lowering gave {:?}", outcome.err())),
-        }
-    }
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

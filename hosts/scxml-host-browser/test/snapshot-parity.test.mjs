@@ -142,17 +142,9 @@ async function embedder(compiler) {
 /** The BasicHTTP Event I/O Processor keys of `_ioprocessors`, which the browser host advertises only with `http`. */
 const BASICHTTP_KEYS = ['basichttp', 'http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor'];
 
-/** Every session of a snapshot (root first, then invoked children, depth first) with its JSON path. */
+/** Every session of a snapshot (root first, then invoked children in invocation order) with its JSON path. */
 function sessions(snapshot) {
-  const found = [];
-  const visit = (session, path) => {
-    found.push({ session, path });
-    for (const [index, invocation] of (session.invocations ?? []).entries()) {
-      if (invocation.session !== undefined) visit(invocation.session, `${path}/invocations/${index}/session`);
-    }
-  };
-  if (snapshot.root !== undefined) visit(snapshot.root, '/snapshot/root');
-  return found;
+  return (snapshot.sessions ?? []).map((session, index) => ({ session, path: `/snapshot/sessions/${index}` }));
 }
 
 /** The JSON paths at which two parsed values differ. */
@@ -207,7 +199,7 @@ function releaseDigests() {
 
 /** Where an event trace carrier may sit: an event in a queue or a pending send, in any session. */
 const CARRIER_PATH =
-  /^\/snapshot\/root(\/invocations\/\d+\/session)?\/(queues\/[a-z_]+\/\d+(\/event)?|pending_sends\/\d+\/event)\/trace_context$/;
+  /^\/snapshot\/sessions\/\d+\/(queues\/[a-z_]+\/\d+(\/event)?|pending_sends\/\d+\/event)\/trace_context$/;
 
 /** Removes every `trace_context` key under `value` (the `snapshot` object), returning the removed paths. */
 function removeCarriers(value, path, removed = []) {

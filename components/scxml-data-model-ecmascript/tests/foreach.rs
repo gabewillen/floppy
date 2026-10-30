@@ -158,13 +158,19 @@ fn nested_loops_bind_their_own_items() {
     check(&model, "log.join() === 'a1,a2,b1,b2'");
 }
 
+/// An array's item count has no bound of the data model's own.
+#[test]
+fn large_arrays_are_collections() {
+    let mut model = model("arr = [1];");
+    assert_eq!(items(&mut model, "new Array(10001)").len(), 10_001);
+}
+
 #[test]
 fn only_arrays_are_collections() {
     let mut model = model("arr = [1];");
     for (expression, expected) in [
         ("({ length: 1, 0: 'x' })", ForeachItems::Illegal),
         ("'text'", ForeachItems::Illegal),
-        ("new Array(10001)", ForeachItems::TooLarge),
     ] {
         assert_eq!(
             model.foreach_items(expression, None, &mut NoStates),
@@ -202,9 +208,7 @@ fn inline_content_text_is_space_normalized_over_xml_white_space() {
 
 /// Loops nest as deep as the document nests them: with 40 loops in
 /// progress the outermost still binds each element itself. The data model
-/// tracks loops without a bound of its own on native builds (wasm builds
-/// track at most `MAX_FOREACH_FRAMES`).
-#[cfg(not(target_arch = "wasm32"))]
+/// tracks loops without a bound of its own.
 #[test]
 fn deeply_nested_loops_keep_binding_the_elements_themselves() {
     let mut model = model("arr = [{ n: 'a' }, { n: 'b' }];");
@@ -224,8 +228,7 @@ fn deeply_nested_loops_keep_binding_the_elements_themselves() {
 /// A loop an error ended early never binds its last item, so it stays in
 /// progress until the machine call that ran it returns and the machine
 /// releases every loop in progress (WIT `data-model-api.release-foreach`):
-/// natively, where no count bounds them, 1,000 such loops leave none
-/// behind, and the next loop binds the elements themselves.
+/// no count bounds them, and 1,000 such loops leave none behind, and the next loop binds the elements themselves.
 #[test]
 fn loops_an_error_ended_are_released_when_the_machine_call_returns() {
     let mut model = model("arr = [{ k: 1 }, { k: 2 }];");
@@ -236,9 +239,7 @@ fn loops_an_error_ended_are_released_when_the_machine_call_returns() {
             .expect("two items");
         bind(&mut model, "item", &first);
     }
-    if !cfg!(target_arch = "wasm32") {
-        assert_eq!(model.foreach_in_progress(), Ok(1_000));
-    }
+    assert_eq!(model.foreach_in_progress(), Ok(1_000));
     model.release_foreach().expect("the loops are released");
     assert_eq!(model.foreach_in_progress(), Ok(0));
     for (position, item) in items(&mut model, "arr").iter().enumerate() {

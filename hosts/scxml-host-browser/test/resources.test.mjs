@@ -504,9 +504,8 @@ test('a <script src> the page does not provide rejects the document with the Was
   // The host bounds no script text; the session's ECMAScript data model
   // decides, exactly as under the Wasmtime session host
   // (hosts/scxml-host-wasmtime/tests/session_host.rs,
-  // script_src_text_is_bounded_only_by_the_data_model): text within its
-  // 64 KiB script bound runs, and 65 KiB loads and raises error.execution
-  // when it runs.
+  // script_src_text_is_bounded_only_by_the_data_model), which bounds no
+  // script length either: 65 KiB of text loads and runs.
   const outcome = async (padding) => {
     const text = `loaded = 2;${' '.repeat(padding)}`;
     const { session } = await open(
@@ -523,8 +522,7 @@ test('a <script src> the page does not provide rejects the document with the Was
       session.dispose();
     }
   };
-  assert.deepEqual(await outcome(64 * 1024 - 11), ['pass']);
-  assert.deepEqual(await outcome(65 * 1024), ['refused']);
+  assert.deepEqual(await outcome(65 * 1024), ['pass']);
 });
 
 // --- invoke src and dynamic URLs -------------------------------------------------------

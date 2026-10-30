@@ -43,7 +43,6 @@ export { DEFAULT_COMPILE_FUEL, DEFAULT_FUEL, FUEL_EXPORT, MAX_FUEL } from './fue
 export { COMPONENTS, cachedCoreModules, fetchCoreModules } from './loader.js';
 export {
   DEFAULT_SNAPSHOT_FUEL,
-  MAX_SNAPSHOT_BYTES,
   SNAPSHOT_MODES,
   SNAPSHOT_SECTIONS,
   TRACE_CONTEXT_POLICIES,
