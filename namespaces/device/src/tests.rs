@@ -83,7 +83,7 @@ fn snapshot_of(id: &str, atomic: &[&str], data: &[Json], transitions: &[Json]) -
         "version": "scxml.session-snapshot/v2",
         "sha256": "0".repeat(64),
         "options": {"exclude": ["invocations", "pending_sends", "previews", "queues", "system"], "trace_context": "strip"},
-        "snapshot": {"components": [], "clock": {"now_ms": 0}, "root": {
+        "snapshot": {"components": [], "clock": {"now_ms": 0}, "sessions": [{
             "session_id": id,
             "name": "lamp",
             "datamodel_name": "ecmascript",
@@ -92,7 +92,7 @@ fn snapshot_of(id: &str, atomic: &[&str], data: &[Json], transitions: &[Json]) -
             "configuration": {"atomic": atomic, "full": atomic},
             "data_model": data,
             "transitions": transitions,
-        }},
+        }]},
     })
     .to_string()
 }
@@ -288,7 +288,7 @@ fn a_target_that_is_not_a_string_is_an_execution_error() {
 
 #[test]
 fn a_malformed_snapshot_is_an_execution_error() {
-    let mut host = host_with(r#"{"snapshot":{"root":{}}}"#.to_owned());
+    let mut host = host_with(r#"{"snapshot":{"sessions":[{}]}}"#.to_owned());
     assert_eq!(
         execution(read_element(&mut host)),
         "the session snapshot is malformed"

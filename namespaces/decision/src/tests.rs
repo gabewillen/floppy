@@ -89,10 +89,10 @@ fn snapshot(transitions: &[Json]) -> String {
 fn snapshot_in(atomic: &[&str], transitions: &[Json]) -> String {
     json!({
         "version": "scxml.session-snapshot/v2",
-        "snapshot": {"root": {
+        "snapshot": {"sessions": [{
             "configuration": {"atomic": atomic, "full": atomic},
             "transitions": transitions,
-        }},
+        }]},
     })
     .to_string()
 }
@@ -213,7 +213,7 @@ fn choices_writes_the_canonical_choices_of_the_enabled_schema_transitions() {
 fn choices_leaves_out_a_transition_whose_guard_is_false() {
     let mut snapshot: Json =
         serde_json::from_str(&order_snapshot()).expect("the order snapshot is JSON");
-    for transition in snapshot["snapshot"]["root"]["transitions"]
+    for transition in snapshot["snapshot"]["sessions"][0]["transitions"]
         .as_array_mut()
         .expect("transitions")
     {
@@ -340,16 +340,27 @@ fn the_snapshot_choices_follows_selection_order_and_skips_what_cannot_be_offered
 
     let mut tampered: Json =
         serde_json::from_str(&snapshot(&[with_schema(&["x"], &schema)])).expect("JSON");
-    tampered["snapshot"]["root"]["transitions"][0]["event_schema"]["sha256"] = json!("00");
+    tampered["snapshot"]["sessions"][0]["transitions"][0]["event_schema"]["sha256"] = json!("00");
+    assert_eq!(
+        snapshot_choices(&tampered.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
+            .map(|choices| choices.len()),
+        Err(Failure::Execution("the session snapshot is malformed"))
+    );
+    // A schema checked before is checked again when its text changes under
+    // the same digest.
+    let mut tampered: Json =
+        serde_json::from_str(&snapshot(&[with_schema(&["x"], &schema)])).expect("JSON");
+    tampered["snapshot"]["sessions"][0]["transitions"][0]["event_schema"]["schema"] =
+        json!(r#"{"type":"array"}"#);
     assert_eq!(
         snapshot_choices(&tampered.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
             .map(|choices| choices.len()),
         Err(Failure::Execution("the session snapshot is malformed"))
     );
     assert_eq!(
-        snapshot_choices(r#"{"snapshot":{"root":{}}}"#, &mut |_| Ok::<_, ()>(Some(
-            true
-        )))
+        snapshot_choices(r#"{"snapshot":{"sessions":[{}]}}"#, &mut |_| Ok::<_, ()>(
+            Some(true)
+        ))
         .map(|choices| choices.len()),
         Ok(0)
     );
@@ -458,7 +469,7 @@ fn the_snapshot_choices_preempts_only_within_one_atomic_states_chain() {
         Err(Failure::Execution("the session snapshot is malformed"))
     );
     let unconfigured =
-        json!({"snapshot": {"root": {"transitions": [with_schema(&["x"], &schema)]}}});
+        json!({"snapshot": {"sessions": [{"transitions": [with_schema(&["x"], &schema)]}]}});
     assert_eq!(
         snapshot_choices(&unconfigured.to_string(), &mut |_| Ok::<_, ()>(Some(true)))
             .map(|choices| choices.len()),
@@ -722,7 +733,7 @@ fn an_effort_attribute_is_refused() {
 fn child_snapshot(offerable: Option<&Json>, transitions: &[Json]) -> String {
     let mut document: Json = serde_json::from_str(&snapshot(transitions)).expect("JSON");
     if let Some(offerable) = offerable {
-        document["snapshot"]["root"]["data_model"] = json!([
+        document["snapshot"]["sessions"][0]["data_model"] = json!([
             {"name": "unrelated", "value": {"type": "number", "value": 1}},
             {"name": "offerable", "value": {"type": "json-object", "value": offerable.to_string()}},
         ]);
@@ -966,7 +977,7 @@ fn a_malformed_offerable_raises_error_execution() {
         );
     }
     let mut document: Json = serde_json::from_str(&offers_snapshot(None)).expect("JSON");
-    document["snapshot"]["root"]["data_model"] =
+    document["snapshot"]["sessions"][0]["data_model"] =
         json!([{"name": "offerable", "value": {"type": "json-array", "value": "[]"}}]);
     assert_eq!(
         executed_offers(

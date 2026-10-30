@@ -589,7 +589,7 @@ pub fn session_offers<E>(
     let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
     // A document without its session object offers nothing, as
     // `snapshot_choices` reads one.
-    let Some(root) = document.pointer("/snapshot/root") else {
+    let Some(root) = document.pointer("/snapshot/sessions/0") else {
         return Ok(Vec::new());
     };
     let declared = offerable(root)?;
@@ -769,7 +769,7 @@ pub fn snapshot_choices<E>(
     let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
     // A document without its session object offers nothing, as one
     // without the transitions section does.
-    let Some(root) = document.pointer("/snapshot/root") else {
+    let Some(root) = document.pointer("/snapshot/sessions/0") else {
         return Ok(Vec::new());
     };
     selection_walk(root, &mut |cond| {
@@ -781,13 +781,22 @@ pub fn snapshot_choices<E>(
     })
 }
 
+thread_local! {
+    /// The transition schemas [`selection_walk`] checked (their digest
+    /// matched and they compiled), by digest. An extension instance lives
+    /// as long as its session, which offers the same transitions turn after
+    /// turn.
+    static CHECKED: std::cell::RefCell<std::collections::BTreeMap<String, String>> =
+        const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+}
+
 /// A malformed snapshot's failure.
 const fn malformed<E>() -> Failure<E> {
     Failure::Execution("the session snapshot is malformed")
 }
 
 /// The choices of one session object of a `scxml.session-snapshot/v2`
-/// document (its `root`), by SCXML 3.13's selection walk: see the crate
+/// document (its root session, `sessions[0]`), by SCXML 3.13's selection walk: see the crate
 /// documentation ("The choices"). `guard` judges one transition's `cond`
 /// text; a transition without one is [`Guard::Enabled`]. A snapshot without
 /// its transitions section offers nothing.
@@ -855,16 +864,27 @@ pub fn selection_walk<E>(
                 .get("schema")
                 .and_then(Json::as_str)
                 .ok_or_else(malformed)?;
-            if event_schema.get("sha256").and_then(Json::as_str)
-                != Some(sha256_hex(text.as_bytes()).as_str())
+            let sha256 = event_schema
+                .get("sha256")
+                .and_then(Json::as_str)
+                .ok_or_else(malformed)?;
+            // A schema this instance already checked (the same text under
+            // the same digest) is not hashed and compiled again.
+            if !CHECKED
+                .with_borrow(|checked| checked.get(sha256).is_some_and(|known| known == text))
             {
-                return Err(malformed());
+                if sha256 != sha256_hex(text.as_bytes()) {
+                    return Err(malformed());
+                }
+                // Fail closed on a schema the decision service could not
+                // compile, before it is offered.
+                CompiledSchema::new(text).map_err(|_| {
+                    Failure::Execution("a transition's event schema does not compile")
+                })?;
+                CHECKED
+                    .with_borrow_mut(|checked| checked.insert(sha256.to_owned(), text.to_owned()));
             }
             let schema: Json = serde_json::from_str(text).map_err(|_| malformed())?;
-            // Fail closed on a schema the decision service could not
-            // compile, before it is offered.
-            CompiledSchema::new(text)
-                .map_err(|_| Failure::Execution("a transition's event schema does not compile"))?;
             for descriptor in &descriptors {
                 if *descriptor == "*" {
                     continue;

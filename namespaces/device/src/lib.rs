@@ -272,7 +272,7 @@ fn snapshot<H: DeviceHost>(
 #[must_use]
 pub fn session_read(document: &str) -> Option<Json> {
     let document: Json = serde_json::from_str(document).ok()?;
-    let root = document.pointer("/snapshot/root")?;
+    let root = document.pointer("/snapshot/sessions/0")?;
     let id = root.get("session_id")?.as_str()?;
     let state = root
         .pointer("/configuration/atomic")?
