@@ -26,8 +26,6 @@ pub enum ForeachItems {
     /// The value is not a legal collection (`error.execution`): anything
     /// but an `instanceof(Array)` value, an XML (DOM) value included.
     Illegal,
-    /// The array has more than [`crate::MAX_FOREACH_ITEMS`] items.
-    TooLarge,
 }
 
 /// Inline `<content>` or `<data>` children (SCXML 5.6, 6.2.6).
@@ -63,11 +61,6 @@ impl EcmaScriptDataModel {
     fn declare_undefined(&mut self, id: &str) -> Result<(), DataModelError> {
         self.system_context()?;
         crate::validate_data_id(id)?;
-        if !self.declared.iter().any(|declared| declared == id)
-            && self.declared.len() >= crate::MAX_VARIABLES
-        {
-            return Err(DataModelError::InvalidInput);
-        }
         if crate::syntax::is_variable_name(id) {
             self.declare_value(id, &DataValue::Undefined, &mut crate::NoHost)?;
         } else {
@@ -189,9 +182,7 @@ impl EcmaScriptDataModel {
     /// The returned items are each element's portable value, or its log
     /// text when it has none; the loop's item variable is then bound to
     /// the element itself ([`Self::declare_assign`], B.2.11: "equivalent to
-    /// `item = array_name[index]`"). An array of more than
-    /// [`crate::MAX_FOREACH_ITEMS`] items is [`ForeachItems::TooLarge`], and
-    /// any other value, an XML (DOM) value included, is
+    /// `item = array_name[index]`"). Any other value, an XML (DOM) value included, is
     /// [`ForeachItems::Illegal`] (4.6: not "a legal iterable collection").
     ///
     /// # Errors
@@ -210,13 +201,9 @@ impl EcmaScriptDataModel {
         );
         let result = (|| {
             self.system_context()?;
-            crate::validate_program(expression, crate::MAX_EXPRESSION_BYTES)?;
+            crate::validate_program(expression)?;
             if let Some(event) = event {
-                crate::validate_event(event)?;
-                crate::bounded_total(
-                    [expression.len(), crate::event_bytes(event)?],
-                    crate::MAX_AGGREGATE_BYTES,
-                )?;
+                self.validate_event(event)?;
             }
             let source = crate::checked_source(crate::value_expression_source(expression))?;
             self.engine.run(host, event, move |session| {
@@ -225,7 +212,6 @@ impl EcmaScriptDataModel {
                     .map_err(|error| crate::classify_js_error(&error))?;
                 Ok(match session.start_foreach(&value)? {
                     Copied::Items(items) => ForeachItems::Items(items),
-                    Copied::Large => ForeachItems::TooLarge,
                     Copied::Illegal => ForeachItems::Illegal,
                 })
             })

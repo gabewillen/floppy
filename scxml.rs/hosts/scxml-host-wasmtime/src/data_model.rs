@@ -123,7 +123,7 @@ pub const DEFAULT_DATA_MODEL_CALL_FUEL: u64 = 1_000_000_000;
 /// SCXML system variables bound at `initialize` (SCXML 1.0 section 5.10).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DataModelSystemValues {
-    /// `_sessionid`; a valid SCXML name of at most 1024 bytes.
+    /// `_sessionid`; a valid SCXML name.
     pub session_id: String,
     /// `_name`: the document's `name` attribute; `None` when it has none
     /// (SCXML 5.10).
@@ -736,7 +736,7 @@ impl DataModelComponents {
     /// [`HostError::Artifact`]: a component that is not
     /// [`ArtifactKind::DataModelComponent`]
     /// ([`ArtifactError::ArtifactKindMismatch`]); or a name that is empty,
-    /// longer than [`scxml_types::MAX_NAME_BYTES`], a built-in data model,
+    /// a built-in data model,
     /// or bound twice, or past [`MAX_DATA_MODEL_COMPONENTS`] bindings
     /// ([`ArtifactError::NamespaceBinding`]).
     pub fn bind(
@@ -748,7 +748,6 @@ impl DataModelComponents {
             return Err(ArtifactError::ArtifactKindMismatch.into());
         }
         if name.is_empty()
-            || name.len() > scxml_types::MAX_NAME_BYTES
             || matches!(name, "ecmascript" | "null" | "xpath")
             || self.bindings.len() >= MAX_DATA_MODEL_COMPONENTS
             || self.bindings.iter().any(|(bound, _)| bound == name)

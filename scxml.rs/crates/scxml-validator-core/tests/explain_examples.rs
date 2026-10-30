@@ -166,14 +166,6 @@ const NOT_SELF_CHECKING: &[(&str, &str)] = &[
         "needs an extension namespace without a registered schema",
     ),
     (
-        "LIMIT006",
-        "the example needs an ID of more than 1,013 bytes; tests/ui covers it",
-    ),
-    (
-        "LIMIT007",
-        "the example needs a name of more than 1,012 bytes; tests/ui covers it",
-    ),
-    (
         "ENV001",
         "the example needs an extension package's declared slots; the validator's env attribute tests cover it",
     ),

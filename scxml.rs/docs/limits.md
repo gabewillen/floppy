@@ -53,8 +53,7 @@ with the known open defects under its "Known limitations (pending)".
   same invoke id has the same address. Ids are unique within one run, the
   only scope `#_scxml_` addresses, since invoke ids are unique among one
   session's live invocations. An id grows with the nesting depth by each
-  level's invoke id and a `.`: an `<invoke>` whose child's id would exceed
-  the 1024-byte name bound raises `error.execution` and starts nothing. A
+  level's invoke id and a `.`, with no length bound. A
   generated invoke id is `<state id>.<n>` (SCXML 6.4.1
   `stateid.platformid`), `n` unique within the invoking session (so the
   same generated id names children of different sessions, whose
@@ -185,10 +184,8 @@ binary, member, call, and sequence chains, at 128 units on every parse path
 (validator syntax check, compile, every runtime evaluate/execute/assign, and
 runtime-compiled strings); portable JSON values and `JSON.parse` input are
 capped at 32 nesting levels. Native builds also run every Boa parse on a
-dedicated 64 MiB-stack thread. Inputs, recursion, and the value stack are
-capped, and loop iterations are capped at 100 000
-*per call frame* (Boa restarts the count in every frame, so nested calls
-multiply it); a guard script
+dedicated 64 MiB-stack thread. Recursion is capped; loop iterations and
+the value stack are not (fuel and memory bound them); a guard script
 (`components/scxml-data-model-ecmascript/src/builtin_guard.js`) replaces the
 single-call amplifying built-ins (`String.prototype.repeat`, `padStart`,
 `padEnd`, `concat`, `replace`, `replaceAll`, `RegExp.prototype[@@replace]`,
@@ -206,7 +203,7 @@ the realm (using one raises `error.execution`; program text that merely
 spells those names evaluates normally); `eval` and the `Function`
 constructors compile runtime strings only within the same bounds (the host
 hook ECMA-262 consults before compiling a string, `HostEnsureCanCompileStrings`,
-applies the nesting scan and the script byte bound), so no source reaches
+applies the nesting scan), so no source reaches
 Boa without the nesting scan. CPU time is bounded
 only by fuel: under Wasmtime by the store's per-call fuel (with its memory
 limit), in the browser by build-time metering (see [Fuel](#fuel)); native (non-Wasm)
@@ -234,17 +231,13 @@ one of them is treated as follows:
 
 - **Raised as `error.execution`** (SCXML 1.0 §3.12.2: "it MUST signal any
   errors that occur by raising SCXML events whose names begin with
-  'error.'"): a delayed send the session clock has no room for (1024
-  pending sends, 4 MiB of retained payload); an expression or location over
-  16 KiB, or a script over 64 KiB, which every bundled data model answers
-  `invalid-input` (a condition is then false, SCXML 1.0 §5.9); an inline
+  'error.'"): an inline
   `<invoke><content>` whose document serializes past the 1 MiB string
   bound, which fails that invocation; and, on every build, an `<invoke>`
   beyond `InvokeLimits` the embedder chose (none by default).
 - **Ending the session** (no error event can be raised for them): an
   internal event queue at its bound (10,000 events; the error event itself
-  would have to join that queue), one engine command producing more than 10,000
-  effects, an exhausted fuel budget (Wasmtime and browser metering; a
+  would have to join that queue), an exhausted fuel budget (Wasmtime and browser metering; a
   macrostep that never ends, Appendix D: "A macrostep that does not
   terminate ... This is currently allowed"), and a command budget only when
   the caller sets one (`--max-commands`; none by default). One host call (a
@@ -262,11 +255,8 @@ one of them is treated as follows:
   `scx` validates and compiles a document of any size and reports
   these codes for no size bound; it reports `LIMIT002` only when graph
   analysis work grows faster than the machine (below).
-- **ECMAScript bounds inside the language**: loop iterations (100,000 per
-  call frame), the value stack (16,384), and the distinct state IDs one
-  operation asks `In()` about (128) are bounded on wasm builds only, and
-  the guarded built-ins throw a catchable `RangeError` before passing the
-  nesting bound; `eval` and `Function` refuse source beyond the parse bounds with a
+- **ECMAScript bounds inside the language**: the guarded built-ins throw a
+  catchable `RangeError` before passing the nesting bound; `eval` and `Function` refuse source beyond the parse bounds with a
   `TypeError`. ECMA-262 3rd edition, the edition SCXML 1.0 B.2 requires,
   grants no such latitude (its §16 lists the only permitted departures), so
   a program that reaches one of these bounds behaves differently from
@@ -338,7 +328,10 @@ These apply on every build, because they are not resource bounds:
   cannot hold ends the call as fuel exhaustion does (errata L.4). Each
   64 KiB step of a memory growing from empty copies the whole memory, so
   the default allowance holds 302 steps, about 19 MiB, and a data model's
-  own billion 174 steps, about 11 MiB (arithmetic, not a measurement). Measured by
+  own billion 174 steps, about 11 MiB (arithmetic, not a measurement). The
+  pre-initialized ECMAScript data model starts each instance with 4 MiB of
+  free heap in its initial memory (zero pages, which its image carries no
+  data for), so its heap's first 4 MiB of growth copies nothing. Measured by
   `memory_growth_copies_are_bounded_by_the_calls_copy_allowance`
   (hosts/scxml-host-wasmtime/tests/data_model_component.rs, release
   profile, Apple M3 Max, which prints them): a billion copied bytes take
@@ -346,8 +339,9 @@ These apply on every build, because they are not resource bounds:
   121 ms; an expression that grows its memory 60 KB at a time toward the
   64 MiB store bound stops after 0.99 GB (about 0.07 s) on a billion
   fuel; and one that
-  allocates 40,000 small objects copies 628 MB and completes on 577
-  million fuel of Wasm, the same on any fuel. A 4,000-state inline
+  allocates 40,000 small objects copies 348 MB (628 MB before the
+  4 MiB of free heap) and completes on 575 million fuel of Wasm, the same
+  on any fuel. A 4,000-state inline
   `<invoke>` child of an ECMAScript root, whose compile and start copy
   their growing memories from the allowance, starts on the default fuel
   (`a_large_inline_child_starts_on_the_default_fuel` in
@@ -380,19 +374,11 @@ These apply on every build, because they are not resource bounds:
   byte bound on any build, nor does an ECMAScript built-in's result, an
   `ArrayBuffer`, the JSON text of an object, or `log` text; only memory
   (and, in a wasm build, fuel) limits them.
-- **Format and interchange contracts**: the WIT name bounds of events
-  (1024-byte names: a literal event name, send id,
-  or invoke id over it, or a state or invoke id over 1,013 / 1,012 bytes,
-  whose `done.state.` or `done.invoke.` event would be over it, is a
-  compile error,
-  `LIMIT006`/`LIMIT007`, and a run-time `eventexpr` name or a generated
-  invoke id over it raises `error.execution`), the `data-model-api` bounds of
-  `initialize` (at most 256 declared `<data>` ids, whose placeholder
-  encoding is at most 64 KiB, so every data model snapshot fits one
-  `data-model-api.snapshot` image), the `scxml.session-snapshot/v2` bounds (255 invoked
-  sessions, 32 nested invoke levels, 10,000 queue entries, 32 MiB per
-  document; a snapshot of a session past one fails and the session goes
-  on), the validator and compiler requests' `event-schemas` (64 schema
+- **No name bound**: SCXML sets no length on a state ID, an event name,
+  a send ID, or an invoke ID, and none applies on any build.
+- **Format and interchange contracts**: the `scxml.session-snapshot/v2`
+  format bounds no count, identifier length, invoke depth, or document
+  size; the validator and compiler requests' `event-schemas` (64 schema
   files, 4 MiB each, 16 MiB together; a request past one is answered with
   the WIT `invalid-request` code, without diagnostics, so an embedder
   that sends schema files checks these bounds first; the Wasmtime and

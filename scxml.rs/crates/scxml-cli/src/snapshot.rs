@@ -19,8 +19,7 @@ use std::path::{Path, PathBuf};
 
 use scxml_reporting::{TerminalText, explain};
 use scxml_snapshot::{
-    Color, DiffOptions, MAX_DOCUMENT_BYTES, Options, Section, SnapshotError, SnapshotErrorCode,
-    TraceContextPolicy,
+    Color, DiffOptions, Options, Section, SnapshotError, SnapshotErrorCode, TraceContextPolicy,
 };
 use scxml_telemetry::{ErrorCategory, Module, Operation, observe};
 
@@ -555,17 +554,14 @@ fn stdout_color(explicit: Option<Color>) -> Color {
     })
 }
 
-/// Reads a document, bounded one byte past the maximum so an oversized file
-/// is reported as `too-large` rather than read whole.
+/// Reads a document.
 fn read_document(path: &Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let shown = path.display();
-    let (file, _) = crate::open_regular_file(path)
+    let (mut file, _) = crate::open_regular_file(path)
         .map_err(|error| format!("cannot read `{shown}`: {error}"))?
         .ok_or_else(|| format!("cannot read `{shown}`: not a regular file"))?;
-    let limit = u64::try_from(MAX_DOCUMENT_BYTES).unwrap_or(u64::MAX) + 1;
     let mut bytes = Vec::new();
-    file.take(limit)
-        .read_to_end(&mut bytes)
+    file.read_to_end(&mut bytes)
         .map_err(|error| format!("cannot read `{shown}`: {error}"))?;
     Ok(bytes)
 }
@@ -840,7 +836,6 @@ pub fn write_documents(
 fn every_code_is_explained() -> bool {
     use scxml_snapshot::SnapshotErrorCode;
     [
-        SnapshotErrorCode::TooLarge,
         SnapshotErrorCode::MalformedJson,
         SnapshotErrorCode::UnsupportedVersion,
         SnapshotErrorCode::SchemaViolation,
@@ -849,7 +844,6 @@ fn every_code_is_explained() -> bool {
         SnapshotErrorCode::BoundsExceeded,
         SnapshotErrorCode::InvalidName,
         SnapshotErrorCode::Inconsistent,
-        SnapshotErrorCode::DepthExceeded,
         SnapshotErrorCode::ClockInvariant,
         SnapshotErrorCode::NotStable,
         SnapshotErrorCode::StatusInvalid,

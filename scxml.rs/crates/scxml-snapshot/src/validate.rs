@@ -6,13 +6,10 @@ use scxml_types::{EventName, InvokeId, SendId, SessionId, StateId};
 
 use crate::encode::{MACHINE_IR_VERSION, sha256_hex};
 use crate::{
-    Children, ComponentRole, Document, Event, EventSchema, MAX_COND_BYTES,
-    MAX_CONFIGURATION_STATES, MAX_DOCUMENT_BYTES, MAX_EVENT_SCHEMA_BYTES, MAX_INVOKE_DEPTH,
-    MAX_INVOKED_SESSIONS, MAX_PENDING_SENDS, MAX_POINTER_BYTES, MAX_PROCESSOR_SEND_PARAMS,
-    MAX_QUEUE_ENTRIES, MAX_SESSION_ID_BYTES, MAX_TRANSITIONS, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES,
-    MAX_VARIABLES, ProcessorMessage, SESSION_SNAPSHOT_VERSION, Section, Session, SnapshotError,
-    SnapshotErrorCode, SnapshotPoint, Status, TraceContext, TraceContextPolicy, Value,
-    VariableValue,
+    Children, ComponentRole, Document, Event, EventSchema, MAX_EVENT_SCHEMA_BYTES,
+    MAX_POINTER_BYTES, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES, ProcessorMessage,
+    SESSION_SNAPSHOT_VERSION, Section, Session, SnapshotError, SnapshotErrorCode, SnapshotPoint,
+    Status, TraceContext, TraceContextPolicy, Value, VariableValue,
 };
 
 /// Largest JSON integer the document may hold (2^53 − 1).
@@ -73,7 +70,7 @@ impl Pointer {
 
 /// Decodes and fully validates document bytes.
 ///
-/// Checks run in this order and the first failure is returned: size, JSON,
+/// Checks run in this order and the first failure is returned: JSON,
 /// `version`, shape (unknown fields rejected), re-encode byte equality,
 /// `sha256`, bounds, then names, canonical values, and consistency.
 ///
@@ -94,27 +91,16 @@ pub fn decode(bytes: &[u8]) -> Result<Document, SnapshotError> {
 ///
 /// # Errors
 ///
-/// [`SnapshotErrorCode::TooLarge`] or [`SnapshotErrorCode::MalformedJson`]
-/// when no issue list can be built.
+/// [`SnapshotErrorCode::MalformedJson`] when no issue list can be built.
 pub fn check(bytes: &[u8]) -> Result<Vec<SnapshotError>, SnapshotError> {
     match decode_with_issues(bytes) {
         Ok((_, issues)) => Ok(issues),
-        Err(error)
-            if matches!(
-                error.code,
-                SnapshotErrorCode::TooLarge | SnapshotErrorCode::MalformedJson
-            ) =>
-        {
-            Err(error)
-        }
+        Err(error) if error.code == SnapshotErrorCode::MalformedJson => Err(error),
         Err(error) => Ok(vec![error]),
     }
 }
 
 fn decode_with_issues(bytes: &[u8]) -> Result<(Document, Vec<SnapshotError>), SnapshotError> {
-    if bytes.len() > MAX_DOCUMENT_BYTES {
-        return Err(SnapshotError::new(SnapshotErrorCode::TooLarge, None));
-    }
     let value: serde_json::Value = serde_json::from_slice(bytes)
         .map_err(|_| SnapshotError::new(SnapshotErrorCode::MalformedJson, None))?;
     if !value.is_object() {
@@ -268,12 +254,6 @@ impl Passes {
         }
     }
 
-    fn count(&mut self, len: usize, max: usize, pointer: &Pointer) {
-        if len > max {
-            self.bound(pointer);
-        }
-    }
-
     fn text(&mut self, text: &str, max: usize, pointer: &Pointer) {
         if text.len() > max {
             self.bound(pointer);
@@ -287,7 +267,6 @@ impl Passes {
     }
 
     fn states(&mut self, ids: &[String], pointer: &Pointer) {
-        self.count(ids.len(), MAX_CONFIGURATION_STATES, pointer);
         for (index, id) in ids.iter().enumerate() {
             self.state(id, &pointer.with_index(index));
         }
@@ -358,39 +337,86 @@ impl Passes {
             roles: &roles,
             executable_content,
         };
-        let root = &document.snapshot.root;
-        let root_pointer = snapshot.with_key("root");
-        self.session(root, &root_pointer, &context);
+        let sessions = &document.snapshot.sessions;
+        let sessions_pointer = snapshot.with_key("sessions");
+        let Some(root) = sessions.first() else {
+            self.fail(SnapshotErrorCode::Inconsistent, &sessions_pointer);
+            return;
+        };
         // A document of a whole run starts at its root session, which no
         // session invoked; one session of the run alone (`invocations`
         // excluded) may be an invoked one.
         if root.invoked_by.is_some() && !exclude.contains(&Section::Invocations) {
             self.fail(
                 SnapshotErrorCode::Inconsistent,
-                &root_pointer.with_key("invoked_by"),
+                &sessions_pointer.with_index(0).with_key("invoked_by"),
             );
         }
         let children = Children::under(exclude);
-        let mut invoked = InvokedSeen {
-            session_ids: BTreeSet::from([root.session_id.clone()]),
-            invoked_sessions: 0,
-        };
-        self.invocations(root, &root_pointer, &context, children, 0, &mut invoked);
+        if children == Children::Excluded && sessions.len() > 1 {
+            self.fail(
+                SnapshotErrorCode::Inconsistent,
+                &sessions_pointer.with_index(1),
+            );
+        }
+        let mut session_ids = BTreeSet::new();
+        for (index, session) in sessions.iter().enumerate() {
+            let pointer = sessions_pointer.with_index(index);
+            self.session(session, &pointer, &context);
+            self.invocations(session, &pointer, children);
+            if !session_ids.insert(session.session_id.as_str()) {
+                self.fail(
+                    SnapshotErrorCode::Inconsistent,
+                    &pointer.with_key("session_id"),
+                );
+            }
+        }
+        if children == Children::Included {
+            self.links(document, &sessions_pointer);
+        }
     }
 
-    /// Checks the `invocations` of `parent` (at `depth`) and, recursively,
-    /// every session they hold: presence per the `invocations` exclusion,
-    /// ascending unique invoke ids, `invoked_by` links, unique session ids,
-    /// and the invoke bounds [`MAX_INVOKE_DEPTH`] and [`MAX_INVOKED_SESSIONS`].
-    fn invocations(
-        &mut self,
-        parent: &Session,
-        parent_pointer: &Pointer,
-        context: &Context<'_>,
-        children: Children,
-        depth: usize,
-        invoked: &mut InvokedSeen,
-    ) {
+    /// Checks that every invocation names exactly one session by its
+    /// `invoked_by` and that the sessions are in pre-order: the root, then
+    /// each session it invoked (in its `invocations` order) followed by the
+    /// sessions that one invoked. Walked with an explicit stack, so no depth
+    /// takes native stack.
+    fn links(&mut self, document: &Document, sessions_pointer: &Pointer) {
+        let sessions = &document.snapshot.sessions;
+        let invoked = document.snapshot.invoked();
+        for (index, (session, children)) in sessions.iter().zip(&invoked).enumerate() {
+            if session.invocations.as_ref().map_or(0, Vec::len) != children.len() {
+                self.fail(
+                    SnapshotErrorCode::Inconsistent,
+                    &sessions_pointer.with_index(index).with_key("invocations"),
+                );
+            }
+        }
+        let mut visited = vec![false; sessions.len()];
+        let mut order = Vec::with_capacity(sessions.len());
+        let mut pending = vec![0_usize];
+        while let Some(index) = pending.pop() {
+            match visited.get_mut(index) {
+                Some(seen) if !*seen => *seen = true,
+                _ => continue,
+            }
+            order.push(index);
+            if let Some(children) = invoked.get(index) {
+                pending.extend(children.iter().rev().map(|(_, child)| *child));
+            }
+        }
+        if let Some(first) = (0..sessions.len()).find(|index| order.get(*index) != Some(index)) {
+            self.fail(
+                SnapshotErrorCode::Inconsistent,
+                &sessions_pointer.with_index(first).with_key("invoked_by"),
+            );
+        }
+    }
+
+    /// Checks the `invocations` of one session: presence per the
+    /// `invocations` exclusion, ascending unique invoke ids, names, and
+    /// types.
+    fn invocations(&mut self, parent: &Session, parent_pointer: &Pointer, children: Children) {
         let invocations_pointer = parent_pointer.with_key("invocations");
         let invocations = match (&parent.invocations, children) {
             (Some(_), Children::Excluded) | (None, Children::Included) => {
@@ -400,15 +426,6 @@ impl Passes {
             (None, Children::Excluded) => return,
             (Some(invocations), Children::Included) => invocations,
         };
-        if !invocations.is_empty() && depth >= MAX_INVOKE_DEPTH {
-            self.fail(SnapshotErrorCode::DepthExceeded, &invocations_pointer);
-            return;
-        }
-        invoked.invoked_sessions = invoked.invoked_sessions.saturating_add(invocations.len());
-        if invoked.invoked_sessions > MAX_INVOKED_SESSIONS {
-            self.fail(SnapshotErrorCode::BoundsExceeded, &invocations_pointer);
-            return;
-        }
         if !invocations
             .windows(2)
             .all(|pair| pair[0].invoke_id < pair[1].invoke_id)
@@ -427,25 +444,6 @@ impl Passes {
                     &pointer.with_key("type"),
                 );
             }
-            let child = &invocation.session;
-            let child_pointer = pointer.with_key("session");
-            self.session(child, &child_pointer, context);
-            match &child.invoked_by {
-                Some(by)
-                    if by.invoke_id == invocation.invoke_id
-                        && by.parent_session_id == parent.session_id => {}
-                _ => self.fail(
-                    SnapshotErrorCode::Inconsistent,
-                    &child_pointer.with_key("invoked_by"),
-                ),
-            }
-            if !invoked.session_ids.insert(child.session_id.clone()) {
-                self.fail(
-                    SnapshotErrorCode::Inconsistent,
-                    &child_pointer.with_key("session_id"),
-                );
-            }
-            self.invocations(child, &child_pointer, context, children, depth + 1, invoked);
         }
     }
 
@@ -456,15 +454,11 @@ impl Passes {
     fn session(&mut self, session: &Session, pointer: &Pointer, context: &Context<'_>) {
         let excluded = |section| context.exclude.contains(&section);
         let session_id = pointer.with_key("session_id");
-        self.text(&session.session_id, MAX_SESSION_ID_BYTES, &session_id);
         if SessionId::new(session.session_id.as_str()).is_err() {
             self.name(&session_id);
         }
-        if let Some(name) = &session.name {
-            if name.is_empty() {
-                self.name(&pointer.with_key("name"));
-            }
-            self.text(name, MAX_SESSION_ID_BYTES, &pointer.with_key("name"));
+        if session.name.as_ref().is_some_and(String::is_empty) {
+            self.name(&pointer.with_key("name"));
         }
         if let Some(name) = &session.datamodel_name {
             let role = match name.as_str() {
@@ -523,7 +517,6 @@ impl Passes {
         }
         // History and bindings.
         let history = pointer.with_key("history");
-        self.count(session.history.len(), MAX_CONFIGURATION_STATES, &history);
         let mut history_states = BTreeSet::new();
         for (index, value) in session.history.iter().enumerate() {
             let entry = history.with_index(index);
@@ -566,15 +559,9 @@ impl Passes {
                 self.fail(SnapshotErrorCode::Inconsistent, &data_model_pointer);
             }
             (Some(variables), false) => {
-                self.count(variables.len(), MAX_VARIABLES, &data_model_pointer);
                 let mut names = BTreeSet::new();
                 for (index, variable) in variables.iter().enumerate() {
                     let entry = data_model_pointer.with_index(index);
-                    self.text(
-                        &variable.name,
-                        MAX_SESSION_ID_BYTES,
-                        &entry.with_key("name"),
-                    );
                     if variable.name.is_empty() || variable.name.starts_with('_') {
                         self.name(&entry.with_key("name"));
                     }
@@ -646,7 +633,6 @@ impl Passes {
             }
             (None, true) => {}
             (Some(pending), false) => {
-                self.count(pending.len(), MAX_PENDING_SENDS, &pending_pointer);
                 let mut ids = BTreeSet::new();
                 for (index, send) in pending.iter().enumerate() {
                     let entry = pending_pointer.with_index(index);
@@ -684,7 +670,6 @@ impl Passes {
             }
             (None, true) => {}
             (Some(listed), false) => {
-                self.count(listed.len(), MAX_TRANSITIONS, &transitions);
                 let previews = !excluded(Section::Previews);
                 let mut keys = BTreeSet::new();
                 for (index, transition) in listed.iter().enumerate() {
@@ -694,7 +679,6 @@ impl Passes {
                         self.fail(SnapshotErrorCode::Inconsistent, &entry.with_key("index"));
                     }
                     let events = entry.with_key("events");
-                    self.count(transition.events.len(), MAX_TRANSITIONS, &events);
                     if transition.events.is_empty() {
                         self.fail(SnapshotErrorCode::Inconsistent, &events);
                     }
@@ -704,9 +688,6 @@ impl Passes {
                         }
                     }
                     self.states(&transition.targets, &entry.with_key("targets"));
-                    if let Some(cond) = &transition.cond {
-                        self.text(cond, MAX_COND_BYTES, &entry.with_key("cond"));
-                    }
                     if transition.has_cond != transition.cond.is_some() {
                         self.fail(SnapshotErrorCode::Inconsistent, &entry.with_key("has_cond"));
                     }
@@ -756,7 +737,6 @@ impl Passes {
     }
 
     fn events(&mut self, events: &[Event], pointer: &Pointer, context: &Context<'_>) {
-        self.count(events.len(), MAX_QUEUE_ENTRIES, pointer);
         for (index, event) in events.iter().enumerate() {
             self.event(event, &pointer.with_index(index), context);
         }
@@ -764,7 +744,6 @@ impl Passes {
 
     fn event(&mut self, event: &Event, pointer: &Pointer, context: &Context<'_>) {
         let name = pointer.with_key("name");
-        self.text(&event.name, scxml_types::MAX_NAME_BYTES, &name);
         if EventName::new(event.name.as_str()).is_err() {
             self.name(&name);
         }
@@ -800,21 +779,12 @@ impl Passes {
         }
     }
 
-    /// One pending processor message: the WIT `processor-send` bounds.
+    /// One pending processor message: its parameter names and values.
     fn message(&mut self, message: &ProcessorMessage, pointer: &Pointer, context: &Context<'_>) {
-        if let Some(name) = &message.event {
-            self.text(
-                name,
-                scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
-                &pointer.with_key("event"),
-            );
-        }
         let params = pointer.with_key("params");
-        self.count(message.params.len(), MAX_PROCESSOR_SEND_PARAMS, &params);
         for (index, param) in message.params.iter().enumerate() {
             let entry = params.with_index(index);
             let name = entry.with_key("name");
-            self.text(&param.name, scxml_types::MAX_NAME_BYTES, &name);
             if param.name.is_empty() {
                 self.fail(SnapshotErrorCode::SchemaViolation, &name);
             }
@@ -867,13 +837,6 @@ struct Context<'a> {
     /// An executable-content document (`options.point`): its internal queue may
     /// hold events and its one session may be an invoked one.
     executable_content: bool,
-}
-
-/// What the recursive invocation check has seen so far: every session id
-/// and the number of invoked sessions under the root session.
-struct InvokedSeen {
-    session_ids: BTreeSet<String>,
-    invoked_sessions: usize,
 }
 
 #[cfg(test)]

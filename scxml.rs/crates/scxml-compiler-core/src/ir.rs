@@ -1296,8 +1296,7 @@ fn bounded_required(field: &'static str, value: &str) -> Result<(), LowerError> 
 }
 
 /// A field the engine turns into an event name, send ID, or invoke ID: a
-/// name on every build (non-empty, no white space, at most
-/// [`scxml_types::MAX_NAME_BYTES`] bytes), so the machine never meets one
+/// name on every build (non-empty, no white space), so the machine never meets one
 /// it cannot represent while it runs.
 fn checked_name(field: &'static str, value: &str) -> Result<(), LowerError> {
     scxml_types::EventName::new(value)

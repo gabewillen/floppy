@@ -81,19 +81,6 @@ use scxml_types::{
     TraceContext,
 };
 
-/// Maximum effects returned by one engine command (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_EFFECTS_PER_COMMAND: usize = scxml_types::wasm_bound(10_000);
-
-/// Fails with [`EngineError::EffectLimit`] when a command result that already holds
-/// `effects` effects has no room for one more ([`MAX_EFFECTS_PER_COMMAND`]).
-fn ensure_effect_room(effects: usize) -> Result<(), EngineError> {
-    if scxml_types::exceeds_wasm_bound(effects.saturating_add(1), MAX_EFFECTS_PER_COMMAND) {
-        Err(EngineError::EffectLimit)
-    } else {
-        Ok(())
-    }
-}
-
 /// Maximum ancestor-chain depth walked by hierarchy queries.
 ///
 /// `MachineIr::validate` guarantees every parent index is smaller than the
@@ -540,7 +527,7 @@ pub struct Engine {
     /// 5.3 first-entry binding). Bounded by the state table.
     bound_states: std::collections::BTreeSet<usize>,
     /// Executable-content block ordinals issued to the capability side in
-    /// the current applying phase; bounded by [`MAX_EFFECTS_PER_COMMAND`].
+    /// the current applying phase.
     issued_blocks: std::collections::BTreeSet<u64>,
     /// The effect transaction a [`Engine::run`] call suspended at a
     /// deferred effect; [`Command::Continue`] resumes it.
@@ -593,7 +580,6 @@ enum EffectPhase {
         /// ordinals, so a failed block can drop exactly its own raises while
         /// later blocks keep theirs (SCXML 3.4/5.7).
         pending_raises: VecDeque<(String, u64)>,
-        planned_effects: usize,
         pending_plan: Option<PendingPlan>,
         /// Blocks aborted by a recoverable error in this phase; their
         /// remaining effects are skipped. Bounded by the issued blocks.
@@ -962,12 +948,12 @@ impl Engine {
                 &self.machine.scripts,
                 &initialization_context,
                 &mut self.next_effect_block,
-            )?;
+            );
             flatten_actions(
                 &mut items,
                 &self.machine.initial.actions,
                 &transition_context,
-            )?;
+            );
             let entered = self.flatten_entry_effects(&mut items, &entry, &[])?;
             let plan = plan_step(items)?;
             self.armed_plan = if plan.plan.frames.is_empty() {
@@ -1082,7 +1068,7 @@ impl Engine {
                         block: block_counter,
                     },
                     &mut block_counter,
-                )?;
+                );
                 let cancel_block = block_counter;
                 block_counter = block_counter.saturating_add(1);
                 self.push_cancellations(
@@ -1094,7 +1080,7 @@ impl Engine {
                         configuration: self.journal.mark(),
                         block: cancel_block,
                     },
-                )?;
+                );
                 self.journal.exit(exited)?;
             }
             let plan = plan_step(items)?;
@@ -1587,7 +1573,6 @@ impl Engine {
         self.deferral.current = false;
         self.effect_phase = EffectPhase::Applying {
             pending_raises,
-            planned_effects: step.planned_effects.len(),
             pending_plan: self.armed_plan.take(),
             failed_blocks: std::collections::BTreeSet::new(),
         };
@@ -1660,18 +1645,14 @@ impl Engine {
     ///
     /// # Errors
     ///
-    /// Rejects calls outside an applying effect phase, a non-empty snapshot,
-    /// and expansions above the per-command effect bound without committing.
-    /// The expansion counts, per element, the item and optional index
-    /// assignments plus every body action that plans one effect directly
-    /// (every action except `<if>`).
+    /// Rejects calls outside an applying effect phase and a non-empty
+    /// snapshot without committing.
     pub fn begin_iteration(
         &mut self,
         elements: &[DataValue],
         first_index: u32,
     ) -> Result<(), EngineError> {
         let EffectPhase::Applying {
-            planned_effects,
             pending_plan: Some(plan),
             ..
         } = &mut self.effect_phase
@@ -1687,23 +1668,9 @@ impl Engine {
         if !iteration.elements.is_empty() {
             return Err(EngineError::EffectProtocol);
         }
-        // Pre-flight accounting: every element plans its item (and
-        // optional index) assignment plus one effect per body action
-        // that is not an `<if>` (whose branch effects are counted when
-        // the branch is planned). Rejecting here keeps an over-budget
-        // loop from committing early iterations before a later batch
-        // would hit the bound.
-        let per_element = 1_usize
-            .saturating_add(usize::from(iteration.index_location.is_some()))
-            .saturating_add(direct_effect_count(&iteration.body));
-        let planned = planned_effects.saturating_add(elements.len().saturating_mul(per_element));
-        if scxml_types::exceeds_wasm_bound(planned.saturating_add(1), MAX_EFFECTS_PER_COMMAND) {
-            return Err(EngineError::EffectLimit);
-        }
         let Some(PlanItem::Iterate(iteration)) = frame.pop_front() else {
             return Err(EngineError::BrokenInvariant);
         };
-        *planned_effects = planned;
         // Expand newest-first: push_front is LIFO, so push the body
         // frame first, then index, then item, yielding the execution
         // order item → index → body per iteration.
@@ -1791,7 +1758,6 @@ impl Engine {
     ) -> Result<Option<CommandResult>, EngineError> {
         let EffectPhase::Applying {
             pending_raises,
-            planned_effects,
             pending_plan,
             ..
         } = &mut self.effect_phase
@@ -1855,12 +1821,7 @@ impl Engine {
                 if taken {
                     plan.frames.last_mut().and_then(VecDeque::pop_front);
                     let mut branch = VecDeque::new();
-                    if let Err(error) =
-                        flatten_actions(&mut branch, &deferred.branch, &deferred.context)
-                    {
-                        failure = Some(error);
-                        break;
-                    }
+                    flatten_actions(&mut branch, &deferred.branch, &deferred.context);
                     plan.frames.push(branch);
                 } else {
                     plan.frames.last_mut().and_then(VecDeque::pop_front);
@@ -1881,12 +1842,7 @@ impl Engine {
                     }
                     if let Some(actions) = deferred.else_actions {
                         let mut else_frame = VecDeque::new();
-                        if let Err(error) =
-                            flatten_actions(&mut else_frame, &actions, &deferred.context)
-                        {
-                            failure = Some(error);
-                            break;
-                        }
+                        flatten_actions(&mut else_frame, &actions, &deferred.context);
                         plan.frames.push(else_frame);
                     }
                 }
@@ -1909,15 +1865,6 @@ impl Engine {
                     plan.frames.push(sub_frame);
                 }
                 Some(PlanItem::Emit { effect, context }) => {
-                    if scxml_types::exceeds_wasm_bound(
-                        planned_effects
-                            .saturating_add(batch.len())
-                            .saturating_add(1),
-                        MAX_EFFECTS_PER_COMMAND,
-                    ) {
-                        failure = Some(EngineError::EffectLimit);
-                        break;
-                    }
                     batch.push(PlannedEffect { effect, context });
                 }
                 Some(PlanItem::Effect { action, context }) => {
@@ -1938,15 +1885,6 @@ impl Engine {
                                 else_actions,
                                 context,
                             })));
-                        break;
-                    }
-                    if scxml_types::exceeds_wasm_bound(
-                        planned_effects
-                            .saturating_add(batch.len())
-                            .saturating_add(1),
-                        MAX_EFFECTS_PER_COMMAND,
-                    ) {
-                        failure = Some(EngineError::EffectLimit);
                         break;
                     }
                     // A `<foreach>` nested in a loop body or a branch
@@ -2001,13 +1939,6 @@ impl Engine {
             return Err(error);
         }
         for planned in &batch {
-            if scxml_types::exceeds_wasm_bound(
-                self.issued_blocks.len().saturating_add(1),
-                MAX_EFFECTS_PER_COMMAND,
-            ) {
-                *pending_plan = Some(plan);
-                return Err(EngineError::EffectLimit);
-            }
             self.issued_blocks.insert(planned.context.block);
             if let Effect::Raise(name, ..) = &planned.effect {
                 if scxml_types::exceeds_wasm_bound(
@@ -2020,7 +1951,6 @@ impl Engine {
                 pending_raises.push_back((name.clone(), planned.context.block));
             }
         }
-        *planned_effects = planned_effects.saturating_add(batch.len());
         *pending_plan = if plan.frames.is_empty() {
             None
         } else {
@@ -2501,7 +2431,7 @@ impl Engine {
                         configuration,
                         block: self.alloc_effect_block(),
                     };
-                    flatten_actions(&mut items, &actions, &context)?;
+                    flatten_actions(&mut items, &actions, &context);
                 }
                 // SCXML 6.5.2: "If no executable content is specified, the
                 // SCXML Processor MUST update the data model each time an
@@ -2539,7 +2469,6 @@ impl Engine {
                             block: self.alloc_effect_block(),
                         };
                         for effect in updates {
-                            ensure_effect_room(items.len())?;
                             items.push_back(PlanItem::Emit {
                                 effect,
                                 context: context.clone(),
@@ -2550,7 +2479,6 @@ impl Engine {
                 None => {}
             }
             if auto_forward {
-                ensure_effect_room(items.len())?;
                 let context = EffectContext {
                     phase: EffectExecutionPhase::Finalize,
                     configuration,
@@ -2618,7 +2546,6 @@ impl Engine {
             let mut invokes = state.invokes.clone();
             invokes.sort_by_key(|invoke| invoke.document_order);
             for invoke in invokes {
-                ensure_effect_room(effects.len())?;
                 awaiting.push((state_index, invoke.document_order));
                 effects.push(PlannedEffect {
                     effect: Effect::Invoke {
@@ -2914,7 +2841,7 @@ impl Engine {
                             configuration: self.journal.mark(),
                             block,
                         },
-                    )?;
+                    );
                 }
             }
             let plan = plan_step(items)?;
@@ -2968,7 +2895,7 @@ impl Engine {
                         block: exit_block,
                     },
                     &mut block_counter,
-                )?;
+                );
             }
             // SCXML 6.4 `exitStates`: cancel every started invocation of
             // the exited state after its onexit content, while the state
@@ -2989,7 +2916,7 @@ impl Engine {
                         configuration: self.journal.mark(),
                         block: cancel_block,
                     },
-                )?;
+                );
             }
             self.journal.exit(exited)?;
         }
@@ -3006,7 +2933,7 @@ impl Engine {
                         configuration: self.journal.mark(),
                         block,
                     },
-                )?;
+                );
             }
         }
         let mut entry = EntryPlan::default();
@@ -3058,7 +2985,7 @@ impl Engine {
                 configuration: self.journal.mark(),
                 block: self.alloc_effect_block(),
             };
-            self.push_cancellations(&mut items, |_| true, &mut cancelled, &cancel_context)?;
+            self.push_cancellations(&mut items, |_| true, &mut cancelled, &cancel_context);
         }
         let plan = plan_step(items)?;
         self.armed_plan = if plan.plan.frames.is_empty() {
@@ -3218,7 +3145,6 @@ impl Engine {
                 // SCXML 5.3 late binding: a state's data binds on its first
                 // entry, before its onentry content runs.
                 if late_binding && !state.data.is_empty() && !self.bound_states.contains(&index) {
-                    ensure_effect_room(items.len())?;
                     items.push_back(PlanItem::Emit {
                         effect: Effect::BindStateData {
                             state: entered_id.clone(),
@@ -3253,20 +3179,20 @@ impl Engine {
                 {
                     let number = next_block();
                     if !actions.is_empty() {
-                        flatten_actions(items, actions, &entry_context(number))?;
+                        flatten_actions(items, actions, &entry_context(number));
                     }
                 }
                 for block in &state.onentry {
                     let number = next_block();
                     if !block.actions.is_empty() {
-                        flatten_actions(items, &block.actions, &entry_context(number))?;
+                        flatten_actions(items, &block.actions, &entry_context(number));
                     }
                 }
                 if entry.states_for_default_entry.contains(&index) {
                     let initial = state.initial.as_ref().ok_or(EngineError::BrokenInvariant)?;
                     let number = next_block();
                     if !initial.actions.is_empty() {
-                        flatten_actions(items, &initial.actions, &entry_context(number))?;
+                        flatten_actions(items, &initial.actions, &entry_context(number));
                     }
                 }
                 // Default history content (SCXML 3.10.2: "The Process MUST
@@ -3282,7 +3208,7 @@ impl Engine {
                 {
                     let number = next_block();
                     if !actions.is_empty() {
-                        flatten_actions(items, actions, &entry_context(number))?;
+                        flatten_actions(items, actions, &entry_context(number));
                     }
                 }
                 if state.kind == StateKind::Final {
@@ -3304,7 +3230,6 @@ impl Engine {
                             },
                             None => Effect::Raise(done_event, false, None),
                         };
-                        ensure_effect_room(items.len())?;
                         items.push_back(PlanItem::Emit {
                             effect,
                             context: entry_context(next_block()),
@@ -3328,7 +3253,6 @@ impl Engine {
                                 )?
                             {
                                 let grandparent_id = self.state_id_by_index(grandparent_index)?;
-                                ensure_effect_room(items.len())?;
                                 items.push_back(PlanItem::Emit {
                                     effect: Effect::Raise(
                                         format!("done.state.{}", grandparent_id.as_str()),
@@ -3355,7 +3279,7 @@ impl Engine {
                                 configuration: entered_mark,
                                 block: next_block(),
                             },
-                        )?;
+                        );
                     }
                     // W3C exitInterpreter: once the final state has left the
                     // configuration, returnDoneEvent(s.donedata) hands its
@@ -3363,7 +3287,6 @@ impl Engine {
                     // state, the last one entered, is re-entered afterwards
                     // so the journal keeps the entered order.
                     if let Some(done_data) = state.donedata.clone() {
-                        ensure_effect_room(items.len())?;
                         journal.exit(index)?;
                         items.push_back(PlanItem::Emit {
                             effect: Effect::ReturnDoneEvent(Box::new(done_data)),
@@ -3427,16 +3350,10 @@ impl Engine {
         owned_by: impl Fn(usize) -> bool,
         cancelled: &mut Vec<usize>,
         context: &EffectContext,
-    ) -> Result<(), EngineError> {
+    ) {
         for (position, active) in self.active_invocations.iter().enumerate() {
             if !owned_by(active.state) || cancelled.contains(&position) {
                 continue;
-            }
-            if scxml_types::exceeds_wasm_bound(
-                items.len().saturating_add(1),
-                MAX_EFFECTS_PER_COMMAND,
-            ) {
-                return Err(EngineError::EffectLimit);
             }
             items.push_back(PlanItem::Emit {
                 effect: Effect::CancelInvoke {
@@ -3446,7 +3363,6 @@ impl Engine {
             });
             cancelled.push(position);
         }
-        Ok(())
     }
 
     /// Whether one state is a `<history>` pseudostate. W3C `getChildStates`
@@ -4197,17 +4113,6 @@ fn state_id(state: &StateIr) -> Result<StateId, EngineError> {
         .and_then(|id| StateId::new(id).map_err(|_| EngineError::BrokenInvariant))
 }
 
-/// Number of actions in one executable-content list that each plan exactly
-/// one effect when reached: every action except `<if>`, whose selected
-/// branch is planned (and bounded) separately. A pure count inside the
-/// enclosing engine command; it emits no telemetry of its own.
-fn direct_effect_count(actions: &[ExecutableContentIr]) -> usize {
-    actions
-        .iter()
-        .filter(|action| !matches!(action, ExecutableContentIr::If { .. }))
-        .count()
-}
-
 /// Removes every plan item owned by `block` from one plan frame,
 /// recursively through nested sub-frames, so a failed block's remaining
 /// deferred work (branch bodies, foreach iterations) never executes while
@@ -4229,11 +4134,13 @@ fn flatten_actions(
     items: &mut VecDeque<PlanItem>,
     actions: &[ExecutableContentIr],
     context: &EffectContext,
-) -> Result<(), EngineError> {
+) {
     for action in actions {
-        push_effect_item(items, action.clone(), context)?;
+        items.push_back(PlanItem::Effect {
+            action: action.clone(),
+            context: context.clone(),
+        });
     }
-    Ok(())
 }
 
 /// Pushes ordered action blocks into plan items with one shared context.
@@ -4242,29 +4149,15 @@ fn flatten_blocks(
     blocks: &[scxml_compiler_core::ActionBlockIr],
     context: &EffectContext,
     block_counter: &mut u64,
-) -> Result<(), EngineError> {
-    blocks.iter().try_for_each(|block_actions| {
+) {
+    for block_actions in blocks {
         let block_context = EffectContext {
             block: *block_counter,
             ..context.clone()
         };
         *block_counter = block_counter.saturating_add(1);
-        flatten_actions(items, &block_actions.actions, &block_context)
-    })
-}
-
-/// Pushes one effect plan item while enforcing the per-command effect bound.
-fn push_effect_item(
-    items: &mut VecDeque<PlanItem>,
-    action: ExecutableContentIr,
-    context: &EffectContext,
-) -> Result<(), EngineError> {
-    ensure_effect_room(items.len())?;
-    items.push_back(PlanItem::Effect {
-        action,
-        context: context.clone(),
-    });
-    Ok(())
+        flatten_actions(items, &block_actions.actions, &block_context);
+    }
 }
 
 /// Plans one macrostep's flattened work.
@@ -4309,7 +4202,6 @@ fn plan_step(items: VecDeque<PlanItem>) -> Result<MacrostepPlan, EngineError> {
                 plan.frames.push(frame);
             }
             Some(PlanItem::Emit { effect, context }) => {
-                ensure_effect_room(effects.len())?;
                 effects.push(PlannedEffect { effect, context });
             }
             Some(PlanItem::Effect { action, context }) => {
@@ -4339,7 +4231,6 @@ fn plan_step(items: VecDeque<PlanItem>) -> Result<MacrostepPlan, EngineError> {
                     actions,
                 } = action
                 {
-                    ensure_effect_room(effects.len())?;
                     effects.push(PlannedEffect {
                         effect: Effect::Iterate {
                             array_expression: array,
@@ -4361,7 +4252,6 @@ fn plan_step(items: VecDeque<PlanItem>) -> Result<MacrostepPlan, EngineError> {
                         })));
                     break;
                 }
-                ensure_effect_room(effects.len())?;
                 let effect = action_effect(action)?;
                 if let Some(effect) = effect {
                     effects.push(PlannedEffect { effect, context });
@@ -4559,7 +4449,8 @@ pub enum EngineError {
     Evaluation(EvaluationError),
     /// Internal queue capacity was exhausted.
     QueueLimit,
-    /// One engine command exceeded the effect bound.
+    /// One engine command raised more events than the internal queue holds,
+    /// or committed more effects than its count represents.
     EffectLimit,
     /// The capability-side effect phase was stale, nested, incomplete, or out of order.
     EffectProtocol,
@@ -4582,7 +4473,9 @@ impl fmt::Display for EngineError {
             Self::BrokenInvariant => formatter.write_str("compiled machine invariant is broken"),
             Self::Evaluation(error) => write!(formatter, "{error}"),
             Self::QueueLimit => formatter.write_str("internal event queue capacity was exhausted"),
-            Self::EffectLimit => formatter.write_str("engine step exceeded its effect bound"),
+            Self::EffectLimit => {
+                formatter.write_str("engine step exceeded its internal queue or effect count")
+            }
             Self::EffectProtocol => formatter.write_str("engine effect protocol was violated"),
             Self::UnknownBlock => {
                 formatter.write_str("executable-content block was not issued in this phase")
@@ -7548,11 +7441,10 @@ mod tests {
         fn end_batch(&mut self, _end: BatchEnd) {}
     }
 
-    /// Natively one command has no effect bound: a loop planning more than the
-    /// wasm bound (10,000 effects) runs to completion.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// One command has no effect bound: a loop planning more than 10,000
+    /// effects runs to completion.
     #[test]
-    fn native_steps_have_no_effect_bound() {
+    fn steps_have_no_effect_bound() {
         let elements = 10_000 / 3 + 1;
         let mut engine = Engine::new(entry_machine(vec![foreach(
             &elements.to_string(),
@@ -7578,42 +7470,8 @@ mod tests {
         );
     }
 
-    #[cfg(target_arch = "wasm32")]
     #[test]
-    fn wasm_only_foreach_preflight_counts_body_effects_per_element() {
-        // Every element plans one item assignment plus the body's two log
-        // effects (SCXML 4.6). The body's `<if>` splits the loop into
-        // separately applied batches, so a bound that counts only the
-        // item/index assignments would let early iterations commit before a
-        // later batch hits the per-command bound. The pre-flight bound must count
-        // the body and reject the loop before any iteration commits.
-        let body = vec![
-            log("a"),
-            log("b"),
-            if_action("false", Vec::new(), Vec::new(), None),
-        ];
-        let per_element = 3;
-        let elements = MAX_EFFECTS_PER_COMMAND / per_element + 1;
-        let mut engine = Engine::new(entry_machine(vec![foreach(
-            &elements.to_string(),
-            None,
-            body,
-        )]))
-        .expect("foreach machine must construct");
-        let mut executor = ForeachExecutor::default();
-        let failure = engine
-            .run(Command::Start, &mut executor)
-            .expect_err("a loop whose body expansion exceeds the step bound must fail");
-        assert_eq!(failure.error, EngineError::EffectLimit);
-        assert_eq!(
-            executor.applied,
-            [format!("iterate:{elements}")],
-            "no iteration may commit before the bound rejects the loop"
-        );
-    }
-
-    #[test]
-    fn foreach_preflight_accepts_a_body_expansion_within_the_bound() {
+    fn foreach_expands_the_body_per_element() {
         let mut engine = Engine::new(entry_machine(vec![foreach(
             "2",
             Some("index"),
@@ -7623,7 +7481,7 @@ mod tests {
         let mut executor = ForeachExecutor::default();
         engine
             .run(Command::Start, &mut executor)
-            .expect("an in-bound loop runs");
+            .expect("the loop runs");
         assert_eq!(
             executor.applied,
             [

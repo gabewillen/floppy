@@ -78,8 +78,6 @@ The semantic inventory covers (the generated table in
 - `SCXML074`, `LINT019`, `LINT020`, and `SCXML077`: an ECMAScript `<log expr>` that certainly has a side effect (SCXML 1.0 §4.7.3), found by the data model's parse-only analysis across the document's static scripts; one whose side effects the analysis cannot decide (warning); a condition that certainly has one (warning: §5.9.1's SHOULD NOT, since official IRP test 444 contradicts Appendix B's MUST, docs/spec-errata.md §5); and (warning) an assignment, update, or `delete` of a system variable itself, which fails at run time with `error.execution` (SCXML 1.0 §5.10);
 - `LINT021` (warning): a `<parallel>` with no child state, which SCXML 1.0 §3.4.2 allows but through which no transition is ever enabled and which raises no `done.state`;
 - `SCXML080` (warning): a multi-target set that names a `<history>` and a state below that history's parent, which yields a legal configuration (SCXML 1.0 §3.11) only when the history's configuration contains the other target;
-- `LIMIT006`: a state ID longer than 1,024 bytes, which no configuration, snapshot, or `In()` can name on any build, or, for a state that can complete, longer than 1,013 bytes, so its `done.state.<ID>` event exceeds the 1,024-byte event-name bound (docs/spec-errata.md L.6);
-- `LIMIT007`: a literal `<raise event>`, `<send event>`, `<send id>`, or `<invoke id>` longer than 1,024 bytes, or an `<invoke id>` longer than 1,012 bytes, whose `done.invoke.<ID>` event exceeds the event-name bound (docs/spec-errata.md L.6);
 - `XSD-*`: schema setup and spec-aligned instance constraints;
 - `XML001`-`XML006`: one code per XML failure kind (malformed, resource limit,
   undefined entity, invalid character reference, invalid caller limits, and an

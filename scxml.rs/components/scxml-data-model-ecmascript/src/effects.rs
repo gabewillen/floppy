@@ -80,9 +80,7 @@ use boa_engine::parser::{Parser, Source};
 use scxml_telemetry::{Module, Operation, SignalEvent, observe};
 use scxml_types::ExternalScripts;
 
-use crate::{
-    DataModelError, MAX_EXPRESSION_BYTES, MAX_SCRIPT_BYTES, check_nesting, nesting, on_parse_stack,
-};
+use crate::{DataModelError, check_nesting, nesting, on_parse_stack};
 
 /// Most fragments one request may carry (the validator's bound)
 /// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
@@ -355,13 +353,8 @@ impl Parsed {
 
 fn parse(fragment: &EffectFragment<'_>, interner: &mut Interner) -> Option<Parsed> {
     let script = fragment.role == EffectRole::Script;
-    let limit = if script {
-        MAX_SCRIPT_BYTES
-    } else {
-        MAX_EXPRESSION_BYTES
-    };
     let source = fragment.source;
-    if source.len() > limit || source.as_bytes().contains(&0) || nesting::is_blank(source) {
+    if source.as_bytes().contains(&0) || nesting::is_blank(source) {
         return None;
     }
     let location = fragment.role == EffectRole::Location;

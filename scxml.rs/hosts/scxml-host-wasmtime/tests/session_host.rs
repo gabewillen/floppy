@@ -223,79 +223,52 @@ fn delivered_events_carry_only_the_authored_send_id() {
     );
 }
 
-/// SCXML 3.12.2: "Once the SCXML processor has begun executing a
-/// well-formed SCXML document, it MUST signal any errors that occur by
-/// raising SCXML events whose names begin with 'error.'". A delayed send
-/// the session clock has no room for (it holds `MAX_SCHEDULES`, 1024) raises
-/// `error.execution` on that `<send>`; the session goes on.
+/// The session clock has no capacity bound of its own: 1025 pending
+/// delayed sends all schedule.
 #[test]
-fn a_delayed_send_beyond_the_clock_capacity_raises_error_execution() {
-    let outcome = run(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><datamodel><data id="items" expr="Array.from({ length: 1025 }, function (_, i) { return i; })"/><data id="sent" expr="0"/></datamodel><state id="s0"><onentry><foreach array="items" item="i"><send event="later" delay="3600s"/><assign location="sent" expr="sent + 1"/></foreach><log label="unreached"/></onentry><transition event="error.execution" target="done"><log label="clock-full" expr="sent"/></transition></state><final id="done"/></scxml>"#,
-    );
-    assert_eq!(outcome.terminal, Terminal::Finished);
-    assert_eq!(outcome.configuration, ["done"]);
-    assert_eq!(labels(&outcome), ["clock-full"]);
-    assert_eq!(
-        outcome.root_logs[0].text, "1024",
-        "the clock took 1024 sends before it was full"
-    );
+fn many_delayed_sends_schedule() {
+    let outcome = run_with(
+        &host(),
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><datamodel><data id="items" expr="Array.from({ length: 1025 }, function (_, i) { return i; })"/><data id="sent" expr="0"/></datamodel><state id="s0"><onentry><foreach array="items" item="i"><send event="later" delay="3600s"/><assign location="sent" expr="sent + 1"/></foreach><log label="scheduled" expr="sent"/></onentry><transition event="error.execution" target="done"/></state><final id="done"/></scxml>"#,
+        &[],
+        Vec::new(),
+        MAX_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["s0"]);
+    assert_eq!(labels(&outcome), ["scheduled"]);
+    assert_eq!(outcome.root_logs[0].text, "1025");
 }
 
-/// The session clock bounds a timer's identifier (`MAX_ID_BYTES`, 256) and
-/// payload (`MAX_PAYLOAD_BYTES`, 64 KiB). A delayed send over either raises
-/// `error.execution` on that `<send>` (SCXML 3.12.2), and the session goes on.
+/// The session clock has no timer identifier bound of its own: a delayed
+/// send whose id is longer than 256 bytes schedules.
 #[test]
-fn a_delayed_send_over_the_clock_id_or_payload_bound_raises_error_execution() {
-    let long_id = "i".repeat(257);
+fn a_delayed_send_with_a_long_id_schedules() {
     let outcome = run(&scxml(&format!(
-        r#"<state id="s0"><onentry><send event="later" delay="3600s" id="{long_id}"/><log label="unreached"/></onentry><transition event="error.execution" target="done"><log label="id-too-long"/></transition></state><final id="done"/>"#
+        r#"<state id="s0"><onentry><send event="later" delay="3600s" id="{}"/><log label="scheduled"/></onentry><transition event="error.execution" target="done"/></state><final id="done"/>"#,
+        "i".repeat(512)
     )));
-    assert_eq!(outcome.configuration, ["done"]);
-    assert_eq!(labels(&outcome), ["id-too-long"]);
-
-    let fits = run(&scxml(&format!(
-        r#"<state id="s0"><onentry><send event="later" delay="3600s" id="{}"/><log label="scheduled"/></onentry></state>"#,
-        "i".repeat(256)
-    )));
-    assert_eq!(labels(&fits), ["scheduled"], "an id at the bound schedules");
-
-    let outcome = run(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><datamodel><data id="big" expr="'x'.repeat(65537)"/></datamodel><state id="s0"><onentry><send event="later" delay="3600s"><param name="big" expr="big"/></send><log label="unreached"/></onentry><transition event="error.execution" target="done"><log label="payload-too-large"/></transition></state><final id="done"/></scxml>"#,
-    );
-    assert_eq!(outcome.configuration, ["done"]);
-    assert_eq!(labels(&outcome), ["payload-too-large"]);
+    assert_eq!(outcome.configuration, ["s0"]);
+    assert_eq!(labels(&outcome), ["scheduled"]);
 }
 
-/// The ECMAScript data model evaluates an expression of at most
-/// `MAX_EXPRESSION_BYTES` (16 KiB) in a wasm build. A longer one fails
-/// closed: its `<log>` raises `error.execution` (SCXML 5.9.2: "the processor
-/// MUST place error.execution in the internal event queue").
+/// The ECMAScript data model has no expression byte bound of its own: an
+/// expression longer than 16 KiB evaluates.
 #[test]
-fn an_expression_over_the_ecmascript_byte_bound_raises_error_execution() {
-    let source = |padding: usize| {
-        format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><state id="s0"><onentry><log label="value" expr="1{}"/></onentry><transition event="error.execution" target="done"><log label="declined"/></transition></state><final id="done"/></scxml>"#,
-            " ".repeat(padding)
-        )
-    };
-    let declined = run(&source(16_384));
-    assert_eq!(declined.configuration, ["done"]);
-    assert_eq!(labels(&declined), ["declined"]);
-    let at_bound = run(&source(16_383));
-    assert_eq!(
-        labels(&at_bound),
-        ["value"],
-        "an expression at the bound runs"
-    );
+fn a_long_ecmascript_expression_evaluates() {
+    let outcome = run(&format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><state id="s0"><onentry><log label="value" expr="1{}"/></onentry><transition event="error.execution" target="done"><log label="declined"/></transition></state><final id="done"/></scxml>"#,
+        " ".repeat(65_536)
+    ));
+    assert_eq!(labels(&outcome), ["value"]);
 }
 
-/// The ECMAScript data model bounds a script's loop iterations
-/// (`MAX_LOOP_ITERATIONS`, 100,000) and its value stack (`MAX_STACK_SIZE`,
-/// 16,384) in a wasm build. A script past either fails, and its `<script>`
-/// raises `error.execution` (SCXML 5.8, 3.12.2).
+/// The ECMAScript data model bounds neither a script's loop iterations nor
+/// its value stack: the host's fuel and memory bound them. A script that
+/// loops 200,000 times, or calls a function with 20,000 arguments,
+/// completes.
 #[test]
-fn a_script_over_the_ecmascript_loop_or_stack_limit_raises_error_execution() {
+fn a_long_running_ecmascript_script_completes() {
     let source = |script: &str| {
         format!(
             r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><state id="s0"><onentry><script>{script}</script><log label="completed"/></onentry><transition event="error.execution" target="done"><log label="declined"/></transition></state><final id="done"/></scxml>"#
@@ -303,43 +276,23 @@ fn a_script_over_the_ecmascript_loop_or_stack_limit_raises_error_execution() {
     };
     // An error ends the `<script>`'s block (SCXML 4.9), so `completed` is
     // logged only when the script finishes.
-    let looping = |iterations: u32| {
-        labels(&run(&source(&format!(
-            "var i = 0; while (i &lt; {iterations}) {{ i++; }}"
-        ))))
-    };
-    assert_eq!(looping(100_001), ["declined"]);
-    assert_eq!(
-        looping(100_000),
-        ["completed"],
-        "a loop at the limit completes"
-    );
+    let looping = labels(&run(&source("var i = 0; while (i &lt; 100001) { i++; }")));
+    assert_eq!(looping, ["completed"]);
     let wide = run(&source(&format!(
         "(function () {{ return arguments.length; }})({});",
         vec!["0"; 20_000].join(",")
     )));
-    assert_eq!(labels(&wide), ["declined"]);
+    assert_eq!(labels(&wide), ["completed"]);
 }
 
-/// The ECMAScript data model answers `In()` about at most `MAX_IN_QUERIES`
-/// (128) distinct state ids per operation in a wasm build. A condition that
-/// asks about more fails, so it is false and `error.execution` is queued
-/// (SCXML 5.9: the processor "MUST treat the expression as if it evaluated
-/// to 'false' and MUST place the error 'error.execution' in the internal
-/// event queue"); one at the bound is evaluated.
+/// The ECMAScript data model answers `In()` about any number of distinct
+/// state ids in one operation.
 #[test]
-fn a_condition_asking_in_about_more_distinct_ids_than_the_bound_raises_error_execution() {
-    let source = |ids: usize| {
-        format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><state id="s0"><transition cond="(function () {{ for (var i = 0; i &lt; {ids}; i++) In('q' + i); return true; }})()" target="taken"/><transition event="error.execution" target="declined"/></state><final id="taken"/><final id="declined"/></scxml>"#
-        )
-    };
-    assert_eq!(run(&source(129)).configuration, ["declined"]);
-    assert_eq!(
-        run(&source(128)).configuration,
-        ["taken"],
-        "a condition at the bound is evaluated"
+fn a_condition_asking_in_about_many_distinct_ids_is_evaluated() {
+    let outcome = run(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0"><state id="s0"><transition cond="(function () { for (var i = 0; i &lt; 1000; i++) In('q' + i); return true; })()" target="taken"/><transition event="error.execution" target="declined"/></state><final id="taken"/><final id="declined"/></scxml>"#,
     );
+    assert_eq!(outcome.configuration, ["taken"]);
 }
 
 /// Inline `<invoke><content>` is serialized into the child document the
@@ -382,67 +335,43 @@ fn inline_invoke_content_keeps_escaped_text_and_attribute_values() {
     assert_eq!(child_labels, ["a\tb\nc\rd > e"]);
 }
 
-/// The null data model evaluates a condition of at most
-/// `MAX_EXPRESSION_BYTES` (16 KiB) in a wasm build. The component answers a
-/// longer one `invalid-input`, so the condition is false and
-/// `error.execution` is queued (SCXML 5.9: the processor "MUST treat the
-/// expression as if it evaluated to 'false' and MUST place the error
-/// 'error.execution' in the internal event queue"); the session goes on.
+/// The null data model has no condition byte bound of its own: an
+/// `In()` condition padded past 16 KiB is evaluated.
 #[test]
-fn a_condition_over_the_null_byte_bound_is_false_and_raises_error_execution() {
-    let source = |padding: usize| {
-        scxml(&format!(
-            r#"<state id="s0"><transition cond="In('s0'){}" target="taken"/><transition event="error.execution" target="declined"/></state><final id="taken"/><final id="declined"/>"#,
-            " ".repeat(padding)
-        ))
-    };
-    let over = run(&source(16_384 - 8 + 1));
-    assert_eq!(over.terminal, Terminal::Finished);
-    assert_eq!(over.configuration, ["declined"]);
-    assert_eq!(run(&source(16_384 - 8)).configuration, ["taken"]);
+fn a_long_null_condition_is_evaluated() {
+    let outcome = run(&scxml(&format!(
+        r#"<state id="s0"><transition cond="In('s0'){}" target="taken"/><transition event="error.execution" target="declined"/></state><final id="taken"/><final id="declined"/>"#,
+        " ".repeat(65_536)
+    )));
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["taken"]);
 }
 
-/// Every other null data-model evaluation over its byte bound in a wasm build
-/// (`MAX_EXPRESSION_BYTES`, 16 KiB, for an expression or location;
-/// `MAX_SOURCE_BYTES`, 64 KiB, for a script) is answered `invalid-input`, as
-/// one at its bound is answered `execution` (SCXML B.1: no value, location,
-/// or script language): either way its block ends with `error.execution`
-/// (SCXML 5.9.2, 5.9.3, 4.6, 5.4, 5.8) and the session goes on.
+/// Every other null data-model evaluation is answered `execution`, whatever
+/// its length (SCXML B.1: no value, location, or script language): its
+/// block ends with `error.execution` (SCXML 5.9.2, 5.9.3, 4.6, 5.4, 5.8) and
+/// the session goes on.
 #[test]
-fn a_null_evaluation_over_its_byte_bound_raises_error_execution() {
-    // Each template's `TEXT` is replaced by the over- or at-bound input.
+fn a_null_evaluation_of_any_length_raises_error_execution() {
+    // Each template's `TEXT` is replaced by the input.
     let fragments = [
-        ("log expr", r#"<log label="value" expr="TEXT"/>"#, 16_384),
-        ("send eventexpr", r#"<send eventexpr="TEXT"/>"#, 16_384),
+        ("log expr", r#"<log label="value" expr="TEXT"/>"#),
+        ("send eventexpr", r#"<send eventexpr="TEXT"/>"#),
         (
             "param expr",
             r#"<send event="e"><param name="p" expr="TEXT"/></send>"#,
-            16_384,
         ),
         (
             "param location",
             r#"<send event="e"><param name="p" location="TEXT"/></send>"#,
-            16_384,
         ),
-        (
-            "foreach array",
-            r#"<foreach array="TEXT" item="i"/>"#,
-            16_384,
-        ),
-        (
-            "assign location",
-            r#"<assign location="TEXT" expr="1"/>"#,
-            16_384,
-        ),
-        (
-            "assign expr",
-            r#"<assign location="v" expr="TEXT"/>"#,
-            16_384,
-        ),
-        ("script", "<script>TEXT</script>", 65_536),
+        ("foreach array", r#"<foreach array="TEXT" item="i"/>"#),
+        ("assign location", r#"<assign location="TEXT" expr="1"/>"#),
+        ("assign expr", r#"<assign location="v" expr="TEXT"/>"#),
+        ("script", "<script>TEXT</script>"),
     ];
-    for (name, template, bound) in fragments {
-        for length in [bound, bound + 1] {
+    for (name, template) in fragments {
+        for length in [1, 65_537] {
             let outcome = run(&scxml(&format!(
                 r#"<state id="s0"><onentry>{}<log label="unreached"/></onentry><transition event="error.execution" target="done"><log label="declined"/></transition></state><final id="done"/>"#,
                 template.replace("TEXT", &"x".repeat(length))
@@ -1602,43 +1531,37 @@ fn a_child_invoked_again_under_its_invoke_id_keeps_its_address() {
 }
 
 #[test]
-fn an_invocation_whose_child_session_id_exceeds_the_name_bound_raises_error_execution() {
+fn an_invocation_whose_child_session_id_is_long_starts() {
     // A child's `_sessionid` is `<parent _sessionid>.<invokeid>`, so the id
-    // grows with the nesting depth, and a session id is a name of at most
-    // 1024 bytes. The child `root.<1,000 bytes>` (1,005 bytes) invoking a
-    // 19-byte id would name a 1,025-byte grandchild: that `<invoke>` fails
-    // (SCXML 3.12.2: `error.execution`) and starts nothing; an 18-byte id
-    // names a 1,024-byte grandchild, which starts.
+    // grows with the nesting depth, with no length bound: the child
+    // `root.<1,000 bytes>` (1,005 bytes) invoking a 1,000-byte id names a
+    // 2,006-byte grandchild, which starts.
     let kid = "k".repeat(1_000);
-    for (length, expected) in [(19, "bounded"), (18, "started")] {
-        let grand = "g".repeat(length);
-        let child = format!(
-            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="check" delay="1ms"/></onentry><invoke id="{grand}" type="scxml" src="waiting.scxml"/><transition event="error.execution"><send event="bounded" target="#_parent"/></transition><transition event="check"><send event="started" target="#_parent"/></transition></state></scxml>"##
-        );
-        let outcome = run_with(
-            &host(),
-            &scxml(&format!(
-                r#"<state id="s0"><invoke id="{kid}" type="scxml" src="child.scxml"/><transition event="bounded" target="bounded"/><transition event="started" target="started"/></state><final id="bounded"/><final id="started"/>"#
-            )),
-            &[],
-            vec![
-                ("child.scxml", child),
-                ("waiting.scxml", WAITING_CHILD.to_owned()),
-            ],
-            RUN_COMMANDS,
-        )
-        .expect("the run completes");
-        assert_eq!(outcome.configuration, [expected], "{length}");
-        let grandchild = format!("root.{kid}.{grand}");
-        assert_eq!(
-            outcome
-                .trace
-                .iter()
-                .any(|entry| entry.session == grandchild),
-            expected == "started",
-            "{length}"
-        );
-    }
+    let grand = "g".repeat(1_000);
+    let child = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><onentry><send event="check" delay="1ms"/></onentry><invoke id="{grand}" type="scxml" src="waiting.scxml"/><transition event="error.execution"><send event="refused" target="#_parent"/></transition><transition event="check"><send event="started" target="#_parent"/></transition></state></scxml>"##
+    );
+    let outcome = run_with(
+        &host(),
+        &scxml(&format!(
+            r#"<state id="s0"><invoke id="{kid}" type="scxml" src="child.scxml"/><transition event="refused" target="refused"/><transition event="started" target="started"/></state><final id="refused"/><final id="started"/>"#
+        )),
+        &[],
+        vec![
+            ("child.scxml", child),
+            ("waiting.scxml", WAITING_CHILD.to_owned()),
+        ],
+        RUN_COMMANDS,
+    )
+    .expect("the run completes");
+    assert_eq!(outcome.configuration, ["started"]);
+    let grandchild = format!("root.{kid}.{grand}");
+    assert!(
+        outcome
+            .trace
+            .iter()
+            .any(|entry| entry.session == grandchild)
+    );
 }
 
 /// An ECMAScript child document with `body` inside its `<scxml>`.
@@ -2024,22 +1947,23 @@ fn an_invalid_delayed_basichttp_send_raises_error_execution_at_the_send() {
     assert_eq!(outcome.configuration, ["done"], "{outcome:?}");
 }
 
-const SELF_INVOKING_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="null" initial="c0"><state id="c0"><invoke type="scxml" src="child.scxml"/><transition event="error.execution" target="bottom"/><transition event="done.invoke" target="up"/></state><final id="bottom"/><final id="up"/></scxml>"#;
+const SELF_INVOKING_CHILD: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0"><state id="c0"><transition cond="_sessionid.length &gt; 1019" target="bottom"/><invoke type="scxml" src="child.scxml"/><transition event="done.invoke" target="up"/></state><final id="bottom"/><final id="up"/></scxml>"#;
 
-/// A document that invokes itself without end, with no invoke limits: SCXML
-/// 6.4 sets no depth, and the host refuses no `<invoke>` of its own. Each
+/// A document that invokes itself until its own `_sessionid` is 1,020 bytes
+/// or longer, with no invoke limits: SCXML 6.4 sets no depth, and the host
+/// refuses no `<invoke>` of its own. Each
 /// child starts from the host's loop once its invoking session suspended,
 /// not inside that session's call, so the chain takes no native stack per
 /// level. A child's `_sessionid` is `<parent _sessionid>.<invokeid>`, so
 /// each level adds its generated invoke id (`.c0.0`) to the id: the chain
-/// nests until the next child's id would exceed the 1024-byte name bound,
-/// where that `<invoke>` raises `error.execution`, and every level's
-/// `done.invoke` climbs back to the root, never a stack overflow. The whole
+/// nests until the deepest level's id is 1,024 bytes, which leaves `c0`
+/// before its `<invoke>` runs, and every level's `done.invoke` climbs back
+/// to the root, never a stack overflow. The whole
 /// chain starts inside the root's start, one host call of the fuel budget
 /// (the document itself is compiled once, apart from it), so every level's
 /// start must fit that budget.
 #[test]
-fn unbounded_self_invocation_nests_until_the_session_id_name_bound() {
+fn self_invocation_nests_without_a_depth_limit() {
     const BUDGET: u64 = 4_000;
     let root = scxml(
         r#"<state id="s0"><invoke type="scxml" src="child.scxml"/><transition event="done.invoke" target="done"/><transition event="error.execution" target="done"><log label="refused"/></transition></state><final id="done"/>"#,
@@ -2054,11 +1978,11 @@ fn unbounded_self_invocation_nests_until_the_session_id_name_bound() {
         ..WasmtimeHostConfig::default()
     });
     let outcome = run_with(&fueled, &root, &[], documents(), BUDGET)
-        .expect("the chain ends at the name bound");
+        .expect("the chain ends at its own condition");
     assert_eq!(outcome.configuration, ["done"]);
     assert!(labels(&outcome).is_empty(), "the root's own invoke started");
-    // `root.s0.0` (9 bytes), then `.c0.0` (5 bytes) per level: 203 more
-    // levels fit 1,024 bytes.
+    // `root.s0.0` (9 bytes), then `.c0.0` (5 bytes) per level: the 203rd
+    // level is 1,024 bytes.
     let deepest = format!("root.s0.0{}", ".c0.0".repeat(203));
     assert_eq!(deepest.len(), 1_024);
     let sessions: std::collections::BTreeSet<&str> = outcome
@@ -2105,9 +2029,8 @@ impl SessionEmbedder for Scripted {
 
 /// The host bounds no `<script src>` text: the session's ECMAScript data
 /// model decides, as in the browser host
-/// (hosts/scxml-host-browser/test/resources.test.mjs). Text within its 64
-/// KiB script bound runs; 65 KiB loads, and running it raises
-/// `error.execution`.
+/// (hosts/scxml-host-browser/test/resources.test.mjs), which bounds no
+/// script length either: 65 KiB of text loads and runs.
 #[test]
 fn script_src_text_is_bounded_only_by_the_data_model() {
     let source = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a"><datamodel><data id="loaded" expr="0"/></datamodel><script src="https://example.test/lib.js"/><state id="a"><transition event="error.execution" target="refused"/><transition cond="loaded === 2" target="pass"/></state><final id="pass"/><final id="refused"/></scxml>"#;
@@ -2128,6 +2051,5 @@ fn script_src_text_is_bounded_only_by_the_data_model() {
             .expect("the run completes")
             .configuration
     };
-    assert_eq!(configuration(64 * 1024 - 11), ["pass"]);
-    assert_eq!(configuration(65 * 1024), ["refused"]);
+    assert_eq!(configuration(65 * 1024), ["pass"]);
 }

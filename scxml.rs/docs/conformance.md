@@ -825,8 +825,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573` | `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34` | `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `2cfec19fc15c8830f42171b5e1a64a7de300637fc870b2095f6f6c8a96d7fabb` | `e8082e669b27a14a1fc658cb1595f72c2e45c4f76fbd21d2c30f3509af55d24f` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `73042d32b95c5a0071917c1e19e126a861c049f607770e0b3c1d58f0ed72bb42` | `4d7d13628beffed420fdaf1f37cb4959d0121a482510cfc00db367b1c6e2a6a0` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -880,7 +880,7 @@ That build's `manifest.tsv` has SHA-256
 component SHA-256
 `6dc1512cf5960e71dd06663a183e3b80f62716eb2a48920e0dc36ef88db40362`), and
 its example extension component SHA-256
-`115c43e6f23c3323cd009fbbecb2045dc9b66ed7a0eef238d6747f6355cf2612`. Another
+`46d582f93e8ecf458eca296c4eb20203487898eb2af85a28c5d2c11ab1d00545`. Another
 selection, such as the default (every component), writes a different
 manifest.
 
@@ -1033,7 +1033,7 @@ models run, since `env` evaluates its expression attributes in the
 document's data model and `event` must leave execution unchanged
 under each. The current baselines (same runner, engine, and release as the
 W3C baselines above; example extension component SHA-256
-`115c43e6f23c3323cd009fbbecb2045dc9b66ed7a0eef238d6747f6355cf2612`):
+`46d582f93e8ecf458eca296c4eb20203487898eb2af85a28c5d2c11ab1d00545`):
 
 | Suite | Assertions | Tests (rejections) | ECMAScript | XPath |
 | --- | ---: | ---: | ---: | ---: |

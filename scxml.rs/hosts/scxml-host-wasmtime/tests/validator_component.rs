@@ -456,21 +456,21 @@ fn the_wasm_validator_keeps_the_bounds_the_native_cli_lifts() {
         "LIMIT004"
     ));
 
+    // Neither data model bounds an expression's length.
     let long = format!(
         r#"{HEAD}<state id="a"><onentry><log expr="1{}"/></onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#,
         " ".repeat(16_384)
     );
-    assert!(reports(
+    assert!(!reports(
         &validate(&ecmascript, "long.scxml", &long),
         "LIMIT003"
     ));
-    // The XPath data model declines an expression over the same byte bound.
     let xpath = linked(Some(&artifacts.xpath));
     let long_xpath = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="xpath"><state id="a"><onentry><log expr="1{}"/></onentry><transition event="go" target="b"/></state><final id="b"/></scxml>"#,
         " ".repeat(16_384)
     );
-    assert!(reports(
+    assert!(!reports(
         &validate(&xpath, "long-xpath.scxml", &long_xpath),
         "LIMIT003"
     ));

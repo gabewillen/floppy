@@ -18,17 +18,6 @@ use std::fmt;
 
 use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent, observe};
 
-/// Maximum number of live timers owned by one clock component
-/// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_SCHEDULES: usize = scxml_types::wasm_bound(1_024);
-/// Maximum UTF-8 byte length of a caller-owned timer identifier
-/// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_ID_BYTES: usize = scxml_types::wasm_bound(256);
-/// Maximum opaque payload bytes retained for one timer (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_PAYLOAD_BYTES: usize = scxml_types::wasm_bound(65_536);
-/// Maximum aggregate payload bytes retained by one component instance
-/// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-pub const MAX_TOTAL_PAYLOAD_BYTES: usize = scxml_types::wasm_bound(4 * 1_024 * 1_024);
 /// Maximum timers returned by one due-drain operation.
 pub const MAX_DRAIN_ITEMS: u32 = 1_024;
 
@@ -65,16 +54,12 @@ struct Entry {
 /// Deterministic clock-domain failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClockError {
-    /// A timer identifier was empty or exceeded [`MAX_ID_BYTES`].
+    /// A timer identifier was empty.
     InvalidId,
     /// A zero duration was supplied where forward progress is required.
     InvalidDuration,
-    /// One payload or the aggregate retained payload bytes exceeded its bound.
-    PayloadTooLarge,
     /// A live timer already uses the caller-owned identifier.
     DuplicateId,
-    /// The bounded timer queue is full.
-    CapacityExhausted,
     /// Logical time, deadline, or insertion sequence overflowed.
     Overflow,
     /// A due-drain batch limit was zero or exceeded [`MAX_DRAIN_ITEMS`].
@@ -84,11 +69,9 @@ pub enum ClockError {
 impl fmt::Display for ClockError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::InvalidId => "timer id must be non-empty and within the byte bound",
+            Self::InvalidId => "timer id must be non-empty",
             Self::InvalidDuration => "duration must be greater than zero",
-            Self::PayloadTooLarge => "timer payload exceeds its byte bound",
             Self::DuplicateId => "timer id is already scheduled",
-            Self::CapacityExhausted => "timer queue capacity is exhausted",
             Self::Overflow => "logical clock arithmetic overflowed",
             Self::InvalidLimit => "due-drain limit is outside the supported bound",
         })
@@ -174,22 +157,6 @@ impl ManualClock {
             validate_id(&id)?;
             if delay_ms == 0 {
                 return Err(ClockError::InvalidDuration);
-            }
-            if scxml_types::exceeds_wasm_bound(self.entries.len().saturating_add(1), MAX_SCHEDULES)
-            {
-                return Err(ClockError::CapacityExhausted);
-            }
-            if scxml_types::exceeds_wasm_bound(payload.len(), MAX_PAYLOAD_BYTES) {
-                return Err(ClockError::PayloadTooLarge);
-            }
-            let retained_bytes = self.entries.iter().try_fold(0_usize, |total, entry| {
-                total.checked_add(entry.payload.len())
-            });
-            if retained_bytes
-                .and_then(|total| total.checked_add(payload.len()))
-                .is_none_or(|total| scxml_types::exceeds_wasm_bound(total, MAX_TOTAL_PAYLOAD_BYTES))
-            {
-                return Err(ClockError::PayloadTooLarge);
             }
             if self.entries.iter().any(|entry| entry.id == id) {
                 return Err(ClockError::DuplicateId);
@@ -321,7 +288,7 @@ impl ManualClock {
 }
 
 fn validate_id(id: &str) -> Result<(), ClockError> {
-    if id.is_empty() || scxml_types::exceeds_wasm_bound(id.len(), MAX_ID_BYTES) {
+    if id.is_empty() {
         Err(ClockError::InvalidId)
     } else {
         Ok(())
@@ -364,9 +331,7 @@ mod guest {
         match error {
             ClockError::InvalidId => WitClockError::InvalidId,
             ClockError::InvalidDuration => WitClockError::InvalidDuration,
-            ClockError::PayloadTooLarge => WitClockError::PayloadTooLarge,
             ClockError::DuplicateId => WitClockError::DuplicateId,
-            ClockError::CapacityExhausted => WitClockError::CapacityExhausted,
             ClockError::Overflow => WitClockError::Overflow,
             ClockError::InvalidLimit => WitClockError::InvalidLimit,
         }
@@ -622,33 +587,10 @@ mod tests {
             .join(" ")
     }
 
-    /// The bounds `clock.wit` documents for the wasm component; natively
-    /// each is unbounded ([`scxml_types::wasm_bound`]).
-    const DOCUMENTED_ID_BYTES: usize = 256;
-    const DOCUMENTED_PAYLOAD_BYTES: usize = 65_536;
-    const DOCUMENTED_TOTAL_PAYLOAD_BYTES: usize = 4 * 1_024 * 1_024;
-    const DOCUMENTED_SCHEDULES: usize = 1_024;
-
     #[test]
     fn documented_wit_bounds_match_enforced_constants() {
-        use scxml_types::wasm_bound;
-        assert_eq!(MAX_ID_BYTES, wasm_bound(DOCUMENTED_ID_BYTES));
-        assert_eq!(MAX_PAYLOAD_BYTES, wasm_bound(DOCUMENTED_PAYLOAD_BYTES));
-        assert_eq!(
-            MAX_TOTAL_PAYLOAD_BYTES,
-            wasm_bound(DOCUMENTED_TOTAL_PAYLOAD_BYTES)
-        );
-        assert_eq!(MAX_SCHEDULES, wasm_bound(DOCUMENTED_SCHEDULES));
         let docs = clock_wit_docs();
         for phrase in [
-            format!("longer than {DOCUMENTED_ID_BYTES} bytes"),
-            format!("`id` is 1..={DOCUMENTED_ID_BYTES} bytes"),
-            format!("One payload exceeded {DOCUMENTED_PAYLOAD_BYTES} bytes"),
-            format!("`payload` is at most {DOCUMENTED_PAYLOAD_BYTES} bytes"),
-            format!("would exceed {DOCUMENTED_TOTAL_PAYLOAD_BYTES} bytes in aggregate"),
-            format!("stay within {DOCUMENTED_TOTAL_PAYLOAD_BYTES} bytes"),
-            format!("already holds {DOCUMENTED_SCHEDULES} live timers"),
-            format!("fewer than {DOCUMENTED_SCHEDULES} timers are live"),
             format!("greater than {MAX_DRAIN_ITEMS}"),
             format!("1 <= `max-items` <= {MAX_DRAIN_ITEMS}"),
         ] {
@@ -657,6 +599,26 @@ mod tests {
                 "clock.wit must document the enforced bound: {phrase:?}"
             );
         }
+    }
+
+    /// Timers have no count, id, or payload bound of the clock's own.
+    #[test]
+    fn many_large_timers_with_long_ids_schedule() {
+        let mut clock = ManualClock::new(0);
+        for index in 0..2_048 {
+            clock
+                .schedule(format!("{index}-{}", "i".repeat(512)), vec![0; 8_192], 1)
+                .expect("the timer schedules");
+        }
+        assert_eq!(
+            clock.drain_due(MAX_DRAIN_ITEMS).map(|items| items.len()),
+            Ok(0)
+        );
+        assert_eq!(clock.advance(1), Ok(1));
+        assert_eq!(
+            clock.drain_due(MAX_DRAIN_ITEMS).map(|items| items.len()),
+            Ok(1_024)
+        );
     }
 
     #[test]
@@ -725,42 +687,10 @@ mod tests {
             clock.drain_due(MAX_DRAIN_ITEMS + 1),
             Err(ClockError::InvalidLimit)
         );
-        // The identifier and payload bounds apply to wasm builds only; the
-        // host's component tests check them through the shipped clock
-        // (`a_delayed_send_over_the_clock_id_or_payload_bound_raises_error_execution`).
-    }
-
-    /// Natively the clock has no capacity, identifier, or payload bound:
-    /// one past each wasm bound schedules, so a native clock never raises
-    /// `error.execution` for capacity.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn native_clocks_have_no_capacity_or_size_bound() {
-        let mut clock = ManualClock::new(0);
-        for index in 0..=DOCUMENTED_SCHEDULES {
-            clock
-                .schedule(format!("timer-{index}"), Vec::new(), 1)
-                .expect("a native clock has no capacity bound");
-        }
-        clock
-            .schedule("x".repeat(DOCUMENTED_ID_BYTES + 1), Vec::new(), 1)
-            .expect("a native clock has no identifier bound");
-        for index in 0..=DOCUMENTED_TOTAL_PAYLOAD_BYTES / DOCUMENTED_PAYLOAD_BYTES {
-            clock
-                .schedule(
-                    format!("payload-{index}"),
-                    vec![0; DOCUMENTED_PAYLOAD_BYTES + 1],
-                    1,
-                )
-                .expect("a native clock has no payload bound");
-        }
     }
 
     #[test]
-    fn capacity_duplicates_and_sequence_overflow_fail_without_mutation() {
-        // The capacity bound applies to wasm builds only; the host's
-        // component tests check it through the shipped clock
-        // (`a_delayed_send_beyond_the_clock_capacity_raises_error_execution`).
+    fn duplicates_and_sequence_overflow_fail_without_mutation() {
         let mut duplicate = ManualClock::new(0);
         duplicate
             .schedule("same".into(), Vec::new(), 1)

@@ -1,25 +1,23 @@
 //! Every bound the decoder enforces holds exactly: a document at the bound
 //! has no `bounds-exceeded` issue, and one past it has one at the bound's
-//! pointer. Documents are edited through the typed model and re-hashed, so
-//! each case reaches the bounds pass (shape, canonical form, and digest
-//! hold).
+//! pointer; a quantity the format does not bound (a count, an identifier
+//! length) has none at any size. Documents are edited through the typed
+//! model and re-hashed, so each case reaches the bounds pass (shape,
+//! canonical form, and digest hold).
 
 use std::fmt::Write as _;
 
 use scxml_snapshot::{
     BaggagePolicy, Capture, ComponentIdentity, ComponentRole, DataModelCapture, Document, Event,
-    EventType, HistoryValue, Invocation, InvokedBy, MAX_COND_BYTES, MAX_CONFIGURATION_STATES,
-    MAX_DOCUMENT_BYTES, MAX_INVOKED_SESSIONS, MAX_PENDING_SENDS, MAX_PROCESSOR_SEND_PARAMS,
-    MAX_QUEUE_ENTRIES, MAX_SESSION_ID_BYTES, MAX_TRANSITIONS, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES,
-    MAX_VARIABLES, MachineCapture, Options, OversizedValue, Param, PendingSend, ProcessorMessage,
-    SessionCapture, SnapshotError, SnapshotErrorCode, Status, System, TextValue, TraceContext,
-    TransitionCapture, TransitionType, Value, Variable, VariableValue, check, decode, encode,
+    EventType, HistoryValue, Invocation, InvokedBy, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES,
+    MachineCapture, Options, OversizedValue, Param, PendingSend, ProcessorMessage, SessionCapture,
+    SnapshotError, SnapshotErrorCode, Status, System, TextValue, TraceContext, TransitionCapture,
+    TransitionType, Value, Variable, VariableValue, check, decode, encode,
 };
 use sha2::Digest as _;
 
 /// Largest JSON integer a document may hold (2^53 − 1).
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
-const NAME: usize = scxml_types::MAX_NAME_BYTES;
 
 fn digest(fill: char) -> String {
     std::iter::repeat_n(fill, 64).collect()
@@ -142,12 +140,21 @@ fn assert_bound(name: &str, max: usize, pointer: &str, edit: &dyn Fn(&mut Docume
     );
 }
 
+/// `edit(document, n)` sets an unbounded quantity to `n`: no bound fails.
+fn assert_unbounded(name: &str, size: usize, edit: &dyn Fn(&mut Document, usize)) {
+    assert_eq!(
+        bound_pointers(edit, size),
+        Vec::<String>::new(),
+        "{name} at {size}"
+    );
+}
+
 fn ids(prefix: &str, count: usize) -> Vec<String> {
     (0..count).map(|index| format!("{prefix}{index}")).collect()
 }
 
 fn root(document: &mut Document) -> &mut scxml_snapshot::Session {
-    &mut document.snapshot.root
+    &mut document.snapshot.sessions[0]
 }
 
 fn first_variable(document: &mut Document) -> &mut Variable {
@@ -202,64 +209,37 @@ fn send(id: &str) -> PendingSend {
 }
 
 #[test]
-fn session_and_configuration_bounds() {
-    assert_bound(
-        "session_id",
-        MAX_SESSION_ID_BYTES,
-        "/snapshot/root/session_id",
-        &|d, n| root(d).session_id = "s".repeat(n),
-    );
-    assert_bound(
-        "name",
-        MAX_SESSION_ID_BYTES,
-        "/snapshot/root/name",
-        &|d, n| {
-            root(d).name = Some("n".repeat(n));
-        },
-    );
-    assert_bound(
-        "configuration.atomic",
-        MAX_CONFIGURATION_STATES,
-        "/snapshot/root/configuration/atomic",
-        &|d, n| root(d).configuration.atomic = ids("s", n),
-    );
-    assert_bound(
-        "configuration.full",
-        MAX_CONFIGURATION_STATES,
-        "/snapshot/root/configuration/full",
-        &|d, n| root(d).configuration.full = ids("s", n),
-    );
-    assert_bound(
-        "history",
-        MAX_CONFIGURATION_STATES,
-        "/snapshot/root/history",
-        &|d, n| {
-            root(d).history = ids("h", n)
-                .into_iter()
-                .map(|state| HistoryValue {
-                    state,
-                    value: vec![],
-                })
-                .collect();
-        },
-    );
-    assert_bound(
-        "history value",
-        MAX_CONFIGURATION_STATES,
-        "/snapshot/root/history/0/value",
-        &|d, n| {
-            root(d).history = vec![HistoryValue {
-                state: "h".into(),
-                value: ids("s", n),
-            }];
-        },
-    );
-    assert_bound(
-        "bound_states",
-        MAX_CONFIGURATION_STATES,
-        "/snapshot/root/bound_states",
-        &|d, n| root(d).bound_states = ids("s", n),
-    );
+fn session_ids_names_and_configurations_have_no_bound() {
+    assert_unbounded("session_id", 4_096, &|d, n| {
+        root(d).session_id = "s".repeat(n);
+    });
+    assert_unbounded("name", 4_096, &|d, n| {
+        root(d).name = Some("n".repeat(n));
+    });
+    assert_unbounded("configuration.atomic", 10_001, &|d, n| {
+        root(d).configuration.atomic = ids("s", n);
+    });
+    assert_unbounded("configuration.full", 10_001, &|d, n| {
+        root(d).configuration.full = ids("s", n);
+    });
+    assert_unbounded("history", 10_001, &|d, n| {
+        root(d).history = ids("h", n)
+            .into_iter()
+            .map(|state| HistoryValue {
+                state,
+                value: vec![],
+            })
+            .collect();
+    });
+    assert_unbounded("history value", 10_001, &|d, n| {
+        root(d).history = vec![HistoryValue {
+            state: "h".into(),
+            value: ids("s", n),
+        }];
+    });
+    assert_unbounded("bound_states", 10_001, &|d, n| {
+        root(d).bound_states = ids("s", n);
+    });
 }
 
 #[test]
@@ -282,19 +262,23 @@ fn integer_bounds() {
     integer("now_ms", "/snapshot/clock/now_ms", &|d, v| {
         d.snapshot.clock.now_ms = v;
     });
-    integer("counters.send", "/snapshot/root/counters/send", &|d, v| {
-        root(d).counters.send = v;
-    });
+    integer(
+        "counters.send",
+        "/snapshot/sessions/0/counters/send",
+        &|d, v| {
+            root(d).counters.send = v;
+        },
+    );
     integer(
         "counters.invoke",
-        "/snapshot/root/counters/invoke",
+        "/snapshot/sessions/0/counters/invoke",
         &|d, v| {
             root(d).counters.invoke = v;
         },
     );
     integer(
         "delay_ms",
-        "/snapshot/root/pending_sends/0/delay_ms",
+        "/snapshot/sessions/0/pending_sends/0/delay_ms",
         &|d, v| {
             let mut entry = send("sendid_0");
             entry.delay_ms = v;
@@ -303,7 +287,7 @@ fn integer_bounds() {
     );
     integer(
         "deadline_ms",
-        "/snapshot/root/pending_sends/0/deadline_ms",
+        "/snapshot/sessions/0/pending_sends/0/deadline_ms",
         &|d, v| {
             let mut entry = send("sendid_0");
             entry.deadline_ms = v;
@@ -312,37 +296,29 @@ fn integer_bounds() {
     );
     integer(
         "oversized bytes",
-        "/snapshot/root/data_model/0/value/bytes",
+        "/snapshot/sessions/0/data_model/0/value/bytes",
         &|d, v| first_variable(d).value = VariableValue::Oversized(OversizedValue::new(v)),
     );
 }
 
 #[test]
 fn data_model_bounds() {
-    assert_bound(
-        "variables",
-        MAX_VARIABLES,
-        "/snapshot/root/data_model",
-        &|d, n| {
-            *root(d).data_model.as_mut().expect("data_model") = ids("v", n)
-                .into_iter()
-                .map(|name| Variable {
-                    name,
-                    value: VariableValue::Value(Value::Null),
-                })
-                .collect();
-        },
-    );
-    assert_bound(
-        "variable name",
-        MAX_SESSION_ID_BYTES,
-        "/snapshot/root/data_model/0/name",
-        &|d, n| first_variable(d).name = "v".repeat(n),
-    );
+    assert_unbounded("variables", 257, &|d, n| {
+        *root(d).data_model.as_mut().expect("data_model") = ids("v", n)
+            .into_iter()
+            .map(|name| Variable {
+                name,
+                value: VariableValue::Value(Value::Null),
+            })
+            .collect();
+    });
+    assert_unbounded("variable name", 4_096, &|d, n| {
+        first_variable(d).name = "v".repeat(n);
+    });
     assert_bound(
         "variable text",
         MAX_VALUE_BYTES,
-        "/snapshot/root/data_model/0/value/text",
+        "/snapshot/sessions/0/data_model/0/value/text",
         &|d, n| {
             first_variable(d).value =
                 VariableValue::Text(TextValue::new("function", "f".repeat(n)));
@@ -351,7 +327,7 @@ fn data_model_bounds() {
     assert_bound(
         "variable typeof",
         MAX_TYPEOF_BYTES,
-        "/snapshot/root/data_model/0/value/typeof",
+        "/snapshot/sessions/0/data_model/0/value/typeof",
         &|d, n| {
             first_variable(d).value = VariableValue::Text(TextValue::new("t".repeat(n), "x"));
         },
@@ -360,14 +336,14 @@ fn data_model_bounds() {
         assert_bound(
             "variable value",
             MAX_VALUE_BYTES,
-            "/snapshot/root/data_model/0/value/value",
+            "/snapshot/sessions/0/data_model/0/value/value",
             &|d, n| first_variable(d).value = VariableValue::Value(make("t".repeat(n))),
         );
     }
     assert_bound(
         "json array value",
         MAX_VALUE_BYTES,
-        "/snapshot/root/data_model/0/value/value",
+        "/snapshot/sessions/0/data_model/0/value/value",
         &|d, n| {
             // `["aa…"]`, exactly `n` bytes.
             let text = format!("[\"{}\"]", "a".repeat(n - 4));
@@ -377,7 +353,7 @@ fn data_model_bounds() {
     assert_bound(
         "json object value",
         MAX_VALUE_BYTES,
-        "/snapshot/root/data_model/0/value/value",
+        "/snapshot/sessions/0/data_model/0/value/value",
         &|d, n| {
             let text = format!("{{\"a\":\"{}\"}}", "a".repeat(n - 8));
             first_variable(d).value = VariableValue::Value(Value::JsonObject(text));
@@ -403,7 +379,7 @@ fn oversized_values_start_one_past_the_inline_bound() {
         at(MAX_VALUE_BYTES),
         Err((
             SnapshotErrorCode::Inconsistent,
-            Some("/snapshot/root/data_model/0/value/bytes".into())
+            Some("/snapshot/sessions/0/data_model/0/value/bytes".into())
         ))
     );
     let inline = |bytes: usize| {
@@ -430,7 +406,7 @@ fn oversized_values_start_one_past_the_inline_bound() {
 }
 
 #[test]
-fn queue_bounds() {
+fn queues_have_no_entry_bound() {
     for (key, set) in [
         (
             "internal",
@@ -440,19 +416,14 @@ fn queue_bounds() {
         ),
         ("external", |d, n| *external(d) = vec![event("e"); n]),
     ] {
-        assert_bound(
-            key,
-            MAX_QUEUE_ENTRIES,
-            &format!("/snapshot/root/queues/{key}"),
-            &set,
-        );
+        assert_unbounded(key, 10_001, &set);
     }
 }
 
 #[test]
 fn event_bounds() {
-    let at = "/snapshot/root/queues/external/0";
-    assert_bound("event name", NAME, &format!("{at}/name"), &|d, n| {
+    let at = "/snapshot/sessions/0/queues/external/0";
+    assert_unbounded("event name", 4_096, &|d, n| {
         first_event(d).name = "e".repeat(n);
     });
     // Event metadata, raw, and data have no byte bound (SCXML sets none).
@@ -493,13 +464,10 @@ fn event_bounds() {
 }
 
 #[test]
-fn pending_send_bounds() {
-    assert_bound(
-        "pending_sends",
-        MAX_PENDING_SENDS,
-        "/snapshot/root/pending_sends",
-        &|d, n| *pending(d) = ids("sendid_", n).iter().map(|id| send(id)).collect(),
-    );
+fn pending_sends_have_no_count_or_name_bound() {
+    assert_unbounded("pending_sends", 1_025, &|d, n| {
+        *pending(d) = ids("sendid_", n).iter().map(|id| send(id)).collect();
+    });
     let large = 4 * 65_536;
     assert_eq!(
         bound_pointers(
@@ -514,50 +482,16 @@ fn pending_send_bounds() {
         Vec::<String>::new(),
         "a pending send's target and type have no byte bound"
     );
-    assert_bound(
-        "processor message event",
-        scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
-        "/snapshot/root/pending_sends/0/message/event",
-        &|d, n| {
-            let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.message {
-                message.event = Some("e".repeat(n));
-            }
-            *pending(d) = vec![entry];
-        },
-    );
-    assert_bound(
-        "processor message params",
-        MAX_PROCESSOR_SEND_PARAMS,
-        "/snapshot/root/pending_sends/0/message/params",
-        &|d, n| {
-            let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.message {
-                message.params = (0..n)
-                    .map(|_| Param {
-                        name: "p".into(),
-                        value: Value::Null,
-                    })
-                    .collect();
-            }
-            *pending(d) = vec![entry];
-        },
-    );
-    assert_bound(
-        "processor message param name",
-        NAME,
-        "/snapshot/root/pending_sends/0/message/params/0/name",
-        &|d, n| {
-            let mut entry = post("sendid_0");
-            if let Some(message) = &mut entry.message {
-                message.params = vec![Param {
-                    name: "p".repeat(n),
-                    value: Value::Null,
-                }];
-            }
-            *pending(d) = vec![entry];
-        },
-    );
+    assert_unbounded("processor message param name", 4_096, &|d, n| {
+        let mut entry = post("sendid_0");
+        if let Some(message) = &mut entry.message {
+            message.params = vec![Param {
+                name: "p".repeat(n),
+                value: Value::Null,
+            }];
+        }
+        *pending(d) = vec![entry];
+    });
 }
 
 /// A pending `BasicHTTP` send (SCXML C.2).
@@ -604,16 +538,15 @@ fn a_pending_send_holds_exactly_one_message() {
             issues(entry),
             [(
                 SnapshotErrorCode::Inconsistent,
-                "/snapshot/root/pending_sends/0".to_owned()
+                "/snapshot/sessions/0/pending_sends/0".to_owned()
             )]
         );
     }
 }
 
 #[test]
-fn transition_bounds() {
-    let transitions = "/snapshot/root/transitions";
-    assert_bound("transitions", MAX_TRANSITIONS, transitions, &|d, n| {
+fn transitions_have_no_count_or_length_bound() {
+    assert_unbounded("transitions", 10_001, &|d, n| {
         let first = transition(d).clone();
         *root(d).transitions.as_mut().expect("transitions") = (0..n)
             .map(|index| {
@@ -623,98 +556,62 @@ fn transition_bounds() {
             })
             .collect();
     });
-    assert_bound(
-        "events per transition",
-        MAX_TRANSITIONS,
-        &format!("{transitions}/0/events"),
-        &|d, n| transition(d).events = vec!["go".into(); n],
-    );
-    assert_bound(
-        "cond",
-        MAX_COND_BYTES,
-        &format!("{transitions}/0/cond"),
-        &|d, n| {
-            let entry = transition(d);
-            entry.cond = Some("c".repeat(n));
-            entry.has_cond = true;
-        },
-    );
-    assert_bound(
-        "targets",
-        MAX_CONFIGURATION_STATES,
-        &format!("{transitions}/0/targets"),
-        &|d, n| transition(d).targets = ids("s", n),
-    );
-    assert_bound(
-        "exit",
-        MAX_CONFIGURATION_STATES,
-        &format!("{transitions}/0/exit"),
-        &|d, n| transition(d).exit = Some(ids("s", n)),
-    );
-    assert_bound(
-        "entry",
-        MAX_CONFIGURATION_STATES,
-        &format!("{transitions}/0/entry"),
-        &|d, n| transition(d).entry = Some(ids("s", n)),
-    );
+    assert_unbounded("events per transition", 10_001, &|d, n| {
+        transition(d).events = vec!["go".into(); n];
+    });
+    assert_unbounded("cond", 65_536, &|d, n| {
+        let entry = transition(d);
+        entry.cond = Some("c".repeat(n));
+        entry.has_cond = true;
+    });
+    assert_unbounded("targets", 10_001, &|d, n| {
+        transition(d).targets = ids("s", n);
+    });
+    assert_unbounded("exit", 10_001, &|d, n| {
+        transition(d).exit = Some(ids("s", n));
+    });
+    assert_unbounded("entry", 10_001, &|d, n| {
+        transition(d).entry = Some(ids("s", n));
+    });
 }
 
 #[test]
-fn invocation_bounds() {
+fn invocations_have_no_count_bound() {
     let child = |d: &Document, index: usize| {
-        let mut session = d.snapshot.root.clone();
+        let mut session = d.snapshot.sessions[0].clone();
         let invoke_id = format!("i{index}");
         session.session_id = format!("child-{index}");
         session.invoked_by = Some(InvokedBy {
-            parent_session_id: d.snapshot.root.session_id.clone(),
+            parent_session_id: d.snapshot.sessions[0].session_id.clone(),
             invoke_id: invoke_id.clone(),
         });
         session.invocations = Some(Vec::new());
-        Invocation {
+        let invocation = Invocation {
             invoke_id,
             invoke_type: "http://www.w3.org/TR/scxml/".into(),
             state: "s".into(),
             index: 0,
             autoforward: false,
             finished: false,
-            session: Box::new(session),
-        }
+        };
+        (invocation, session)
     };
-    assert_bound(
-        "invocations",
-        MAX_INVOKED_SESSIONS,
-        "/snapshot/root/invocations",
-        &|d, n| {
-            let children = (0..n).map(|index| child(d, index)).collect();
-            root(d).invocations = Some(children);
-        },
-    );
+    assert_unbounded("invocations", 256, &|d, n| {
+        let (invocations, sessions): (Vec<_>, Vec<_>) = (0..n).map(|index| child(d, index)).unzip();
+        root(d).invocations = Some(invocations);
+        d.snapshot.sessions.extend(sessions);
+    });
     assert_eq!(
         bound_pointers(
             &|d, n| {
-                let mut invocation = child(d, 0);
+                let (mut invocation, session) = child(d, 0);
                 invocation.invoke_type = "t".repeat(n);
                 root(d).invocations = Some(vec![invocation]);
+                d.snapshot.sessions.push(session);
             },
             4 * 65_536
         ),
         Vec::<String>::new(),
         "an invocation type has no byte bound"
-    );
-}
-
-#[test]
-fn document_size_bound() {
-    let padded = |size: usize| {
-        let mut bytes = serde_json::to_vec(&base()).expect("serializes");
-        bytes.resize(size, b' ');
-        check(&bytes).map(drop).map_err(|error| error.code)
-    };
-    // At the bound the bytes are read and judged on their content (here:
-    // trailing whitespace is not canonical); one past it they are not read.
-    assert_eq!(padded(MAX_DOCUMENT_BYTES), Ok(()));
-    assert_eq!(
-        padded(MAX_DOCUMENT_BYTES + 1),
-        Err(SnapshotErrorCode::TooLarge)
     );
 }

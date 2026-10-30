@@ -5,7 +5,7 @@ use scxml_compiler_core::{
     ContentIr, InvokeChildIr, InvokeIr, MachineIr, MarkupContext, XmlNodeIr,
 };
 use scxml_types::{
-    DataValue, EventName, ExtensionAttribute, InvokeId, NamedValue, NamespaceUri, QualifiedName,
+    DataValue, ExtensionAttribute, InvokeId, NamedValue, NamespaceUri, QualifiedName,
     SCXML_INVOKE_TYPE_URI, StateId, is_scxml_invoke_type,
 };
 
@@ -322,17 +322,12 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             Some(id) => id.clone(),
             None => self.state.next_invoke_id(state),
         };
-        // An id the 1024-byte name bound cannot represent (a generated one
-        // over a long state id), or one whose `done.invoke.<id>` event
-        // (SCXML 6.4) it cannot, fails this invocation (SCXML 3.12.2: the
+        // An id that is not a name fails this invocation (SCXML 3.12.2: the
         // processor "MUST signal any errors that occur by raising SCXML
         // events whose names begin with 'error.'").
         let Ok(typed_invoke_id) = InvokeId::new(invoke_id.clone()) else {
             return failed(self, engine);
         };
-        if EventName::new(format!("done.invoke.{invoke_id}")).is_err() {
-            return failed(self, engine);
-        }
         if let Some(location) = &invoke.idlocation
             && self
                 .caps

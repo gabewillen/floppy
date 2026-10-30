@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::Snapshot;
 use crate::validate::decode;
 use crate::{
     ComponentRole, Configuration, DiffOptions, Document, Event, Invocation, InvokedBy, IrIdentity,
@@ -547,21 +548,16 @@ fn strip_session(session: &mut Session) {
             }
         }
     }
-    if let Some(invocations) = &mut session.invocations {
-        for invocation in invocations {
-            strip_session(&mut invocation.session);
-        }
-    }
 }
 
 /// The structural diff of two decoded documents.
 #[must_use]
 pub fn diff_documents(before: &Document, after: &Document, options: DiffOptions) -> DiffDocument {
-    let mut before_root = before.snapshot.root.clone();
-    let mut after_root = after.snapshot.root.clone();
+    let mut before_sessions = before.snapshot.sessions.clone();
+    let mut after_sessions = after.snapshot.sessions.clone();
     if !options.include_trace_context {
-        strip_session(&mut before_root);
-        strip_session(&mut after_root);
+        before_sessions.iter_mut().for_each(strip_session);
+        after_sessions.iter_mut().for_each(strip_session);
     }
     let skipped: BTreeSet<Section> = before
         .options
@@ -573,13 +569,16 @@ pub fn diff_documents(before: &Document, after: &Document, options: DiffOptions)
     let identical = before.options.exclude == after.options.exclude
         && before.snapshot.components == after.snapshot.components
         && before.snapshot.clock == after.snapshot.clock
-        && before_root == after_root;
+        && before_sessions == after_sessions;
     let mut differ = Differ {
         skipped: &skipped,
         compatible: true,
         sessions: Vec::new(),
     };
-    differ.root_and_invoked(&before_root, &after_root);
+    differ.root_and_invoked(
+        &Tree::of(&before.snapshot, &before_sessions),
+        &Tree::of(&after.snapshot, &after_sessions),
+    );
     let compatible = differ.compatible;
     let sessions = differ.sessions;
     let clock = (before.snapshot.clock != after.snapshot.clock).then_some(ClockChange {
@@ -635,47 +634,91 @@ struct Differ<'a> {
     sessions: Vec<SessionDiff>,
 }
 
-fn children(session: &Session) -> Vec<(&str, &Session)> {
-    session
-        .invocations
-        .iter()
-        .flatten()
-        .map(|invocation| (invocation.invoke_id.as_str(), invocation.session.as_ref()))
-        .collect()
+/// One document's sessions with the sessions each invoked.
+struct Tree<'a> {
+    sessions: &'a [Session],
+    invoked: Vec<Vec<(String, usize)>>,
+}
+
+impl<'a> Tree<'a> {
+    /// The links of `snapshot`, over its (possibly stripped) `sessions`.
+    fn of(snapshot: &Snapshot, sessions: &'a [Session]) -> Self {
+        let invoked = snapshot
+            .invoked()
+            .into_iter()
+            .map(|children| {
+                children
+                    .into_iter()
+                    .map(|(invoke_id, child)| (invoke_id.to_owned(), child))
+                    .collect()
+            })
+            .collect();
+        Self { sessions, invoked }
+    }
+
+    fn children(&self, index: usize) -> &[(String, usize)] {
+        self.invoked.get(index).map_or(&[], Vec::as_slice)
+    }
+}
+
+/// One step of the walk over the after document.
+enum Step {
+    /// Compare the sessions at these indices under `path`, then the
+    /// sessions they invoked.
+    Visit(Vec<String>, usize, usize),
+    /// A session only one side holds.
+    Only(Vec<String>, Change),
 }
 
 impl Differ<'_> {
-    fn root_and_invoked(&mut self, before: &Session, after: &Session) {
-        self.subtree(&["root".to_owned()], before, after);
-    }
-
-    /// The session at `path`, then the sessions it invoked (recursively,
-    /// in the after document's order), then the ones it no longer holds.
-    fn subtree(&mut self, path: &[String], before: &Session, after: &Session) {
-        self.session(path.to_vec(), before, after);
-        if self.skipped.contains(&Section::Invocations) {
+    /// Every session at its path, in the after document's pre-order: each
+    /// session, then the sessions it invoked, then the ones it no longer
+    /// holds. Walked with an explicit stack, so no depth takes native stack.
+    fn root_and_invoked(&mut self, before: &Tree<'_>, after: &Tree<'_>) {
+        if before.sessions.is_empty() || after.sessions.is_empty() {
             return;
         }
-        let before_children = children(before);
-        let after_children = children(after);
-        let child_path = |invoke_id: &str| {
-            let mut child = path.to_vec();
-            child.push(invoke_id.to_owned());
-            child
-        };
-        for (invoke_id, child) in &after_children {
-            match before_children.iter().find(|(id, _)| id == invoke_id) {
-                Some((_, previous)) => self.subtree(&child_path(invoke_id), previous, child),
-                None => self
-                    .sessions
-                    .push(SessionDiff::new(child_path(invoke_id), Change::Added)),
+        let mut pending = vec![Step::Visit(vec!["root".to_owned()], 0, 0)];
+        while let Some(step) = pending.pop() {
+            let (path, before_index, after_index) = match step {
+                Step::Only(path, change) => {
+                    self.sessions.push(SessionDiff::new(path, change));
+                    continue;
+                }
+                Step::Visit(path, before_index, after_index) => (path, before_index, after_index),
+            };
+            let (Some(before_session), Some(after_session)) = (
+                before.sessions.get(before_index),
+                after.sessions.get(after_index),
+            ) else {
+                continue;
+            };
+            self.session(path.clone(), before_session, after_session);
+            if self.skipped.contains(&Section::Invocations) {
+                continue;
             }
-        }
-        for (invoke_id, _) in &before_children {
-            if !after_children.iter().any(|(id, _)| id == invoke_id) {
-                self.sessions
-                    .push(SessionDiff::new(child_path(invoke_id), Change::Removed));
+            let before_children = before.children(before_index);
+            let after_children = after.children(after_index);
+            let child_path = |invoke_id: &str| {
+                let mut child = path.clone();
+                child.push(invoke_id.to_owned());
+                child
+            };
+            let mut steps = Vec::new();
+            for (invoke_id, child) in after_children {
+                match before_children.iter().find(|(id, _)| id == invoke_id) {
+                    Some((_, previous)) => {
+                        steps.push(Step::Visit(child_path(invoke_id), *previous, *child));
+                    }
+                    None => steps.push(Step::Only(child_path(invoke_id), Change::Added)),
+                }
             }
+            for (invoke_id, _) in before_children {
+                if !after_children.iter().any(|(id, _)| id == invoke_id) {
+                    steps.push(Step::Only(child_path(invoke_id), Change::Removed));
+                }
+            }
+            pending.extend(steps.into_iter().rev());
         }
     }
 

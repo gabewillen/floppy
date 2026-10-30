@@ -467,7 +467,7 @@ function encodeDocument(state, telemetry, { nowMs, session, dataModelName }, opt
     );
   } catch (error) {
     if (error instanceof ScxmlSnapshotError) {
-      if (['bounds-exceeded', 'too-large', 'depth-exceeded'].includes(error.code)) {
+      if (error.code === 'bounds-exceeded') {
         throw new ImportFailure(componentError('payload-too-large', 'the session snapshot exceeds a bound of its format'));
       }
       if (error.code === 'codec-unavailable') throw unavailable('the session snapshot is not available');

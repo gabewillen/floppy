@@ -9,8 +9,7 @@
 //! its arguments. The bytes are those of [`scxml_snapshot::encode`] and
 //! [`scxml_snapshot::diff`], so both hosts produce identical documents.
 //!
-//! Failures are `invalid-input` (or `payload-too-large` for `too-large`)
-//! with the static detail `snapshot-<code>`; no pointer, name, or payload
+//! Failures are `invalid-input` with the static detail `snapshot-<code>`; no pointer, name, or payload
 //! crosses the boundary. Telemetry is one `observe` per call with the
 //! output size as `snapshot-bytes`, plus one `event`.
 
@@ -23,13 +22,12 @@
     )
 )]
 
-use scxml_snapshot::{SnapshotError, SnapshotErrorCode};
+use scxml_snapshot::SnapshotErrorCode;
 
 /// The static `component-error.detail` of a codec failure.
 #[must_use]
 pub const fn error_detail(code: SnapshotErrorCode) -> &'static str {
     match code {
-        SnapshotErrorCode::TooLarge => "snapshot-too-large",
         SnapshotErrorCode::MalformedJson => "snapshot-malformed-json",
         SnapshotErrorCode::UnsupportedVersion => "snapshot-unsupported-version",
         SnapshotErrorCode::SchemaViolation => "snapshot-schema-violation",
@@ -38,19 +36,11 @@ pub const fn error_detail(code: SnapshotErrorCode) -> &'static str {
         SnapshotErrorCode::BoundsExceeded => "snapshot-bounds-exceeded",
         SnapshotErrorCode::InvalidName => "snapshot-invalid-name",
         SnapshotErrorCode::Inconsistent => "snapshot-inconsistent",
-        SnapshotErrorCode::DepthExceeded => "snapshot-depth-exceeded",
         SnapshotErrorCode::ClockInvariant => "snapshot-clock-invariant",
         SnapshotErrorCode::NotStable => "snapshot-not-stable",
         SnapshotErrorCode::StatusInvalid => "snapshot-status-invalid",
         SnapshotErrorCode::CodecUnavailable => "snapshot-codec-unavailable",
     }
-}
-
-/// Whether a failure is reported as `payload-too-large` (else
-/// `invalid-input`).
-#[must_use]
-pub fn is_too_large(error: &SnapshotError) -> bool {
-    error.code == SnapshotErrorCode::TooLarge
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -125,11 +115,7 @@ mod guest {
                 telemetry::event(operation, SignalEvent::InputRejected, None);
                 Err(wit::ComponentError {
                     version: wit::ErrorVersion::V1,
-                    code: if super::is_too_large(&error) {
-                        wit::ErrorCode::PayloadTooLarge
-                    } else {
-                        wit::ErrorCode::InvalidInput
-                    },
+                    code: wit::ErrorCode::InvalidInput,
                     detail: Some(super::error_detail(error.code).into()),
                 })
             }

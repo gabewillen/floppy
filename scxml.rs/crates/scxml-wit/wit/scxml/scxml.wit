@@ -67,7 +67,7 @@ interface types {
   /// One SCXML event.
   ///
   /// Bounds (enforced by every bundled provider): `name`, `send-id`, and
-  /// `invoke-id` at most 1024 bytes each and valid SCXML names; `origin`,
+  /// `invoke-id` valid SCXML names; `origin`,
   /// `origin-type`, `data`, and `raw` have no byte bound (SCXML sets none).
   /// JSON data MUST already be canonical.
   record event {
@@ -96,9 +96,8 @@ interface types {
   /// `<invoke>`, or `<donedata>`, in document order; duplicate names are
   /// kept (SCXML 6.2.4).
   ///
-  /// Bounds (bundled providers): `name` non-empty and at most 1024 bytes;
-  /// `value` within the `event` data bounds; at most 1024 entries in one
-  /// list.
+  /// Bounds (bundled providers): `name` non-empty;
+  /// `value` within the `event` data bounds.
   record named-value {
     /// Entry name exactly as authored (a `namelist` entry's data-model key).
     name: string,
@@ -142,24 +141,24 @@ interface types {
   /// processor never sees one, and the host routes the send by its
   /// `processor-type`.
   record processor-send {
-    /// Evaluated `type`/`typeexpr`, exactly as written (at most 4096 bytes):
+    /// Evaluated `type`/`typeexpr`, exactly as written:
     /// a processor's type URI or one of its aliases. A type no processor
     /// answers is refused by the host with `invalid-input` (SCXML 6.2.5:
     /// `error.execution`).
     processor-type: string,
-    /// The send's id (a valid SCXML name of at most 1024 bytes): the
+    /// The send's id (a valid SCXML name): the
     /// authored `id`, else the one the machine generated for this execution
     /// (SCXML 3.14, 6.2.4). It never enters the processor's message. The
     /// host keeps it with the request, so an `error.communication` it
     /// delivers after the `<send>` returned carries it as `send-id` (SCXML
     /// 5.10.1).
     send-id: string,
-    /// Evaluated `event`/`eventexpr` (at most 1024 bytes).
+    /// Evaluated `event`/`eventexpr`.
     event-name: option<string>,
-    /// Evaluated `target`/`targetexpr` (at most 16384 bytes).
+    /// Evaluated `target`/`targetexpr`.
     target: option<string>,
-    /// `namelist` entries then `<param>` children, in document order (at
-    /// most 256), as data-model form values.
+    /// `namelist` entries then `<param>` children, in document order, as
+    /// data-model form values.
     params: list<named-value>,
     /// Evaluated `<content>`; mutually exclusive with `params`.
     content: option<data-value>,
@@ -200,8 +199,8 @@ interface types {
   /// its session table. These are facts only; the host never classifies a
   /// target.
   ///
-  /// Bounds: `session-id` and `parent-session-id` valid SCXML names of at
-  /// most 1024 bytes; `invocations` strictly sorted by invoke id.
+  /// Bounds: `session-id` and `parent-session-id` valid SCXML names;
+  /// `invocations` strictly sorted by invoke id.
   record sender {
     /// The sending session's `_sessionid`.
     session-id: string,
@@ -250,8 +249,7 @@ interface types {
 
   /// Result of evaluating a `<foreach array>` expression (SCXML 4.6).
   variant foreach-result {
-    /// Shallow snapshot of the collection's items in iteration order (at
-    /// most 10000 items).
+    /// Shallow snapshot of the collection's items in iteration order.
     items(list<data-value>),
     /// The value is not a legal collection (`error.execution`).
     illegal,
@@ -261,11 +259,10 @@ interface types {
   /// type is neither absent nor the SCXML processor type, every expression
   /// evaluated by the machine; the service never sees one.
   ///
-  /// Bounds (bundled providers): `invoke-id` a valid SCXML name of at most
-  /// 1024 bytes; `type-uri` at most 4096 bytes; `source` at most 16384
+  /// Bounds (bundled providers): `invoke-id` a valid SCXML name;
+  /// `type-uri` at most 4096 bytes; `source` at most 16384
   /// bytes; `content` and every parameter value within the `event` data
-  /// bounds; at most 1024 `parameters`; at most 32 `attributes` and
-  /// `references`.
+  /// bounds; at most 32 `attributes` and `references`.
   record invoke-request {
     /// Interpreter-owned invocation identifier.
     invoke-id: string,
@@ -766,7 +763,7 @@ interface machine-capability-types {
   /// One invoked SCXML session the machine asks the host to start
   /// (SCXML 6.4).
   record invoked-session {
-    /// Interpreter-owned invoke id (at most 1024 bytes, valid SCXML name).
+    /// Interpreter-owned invoke id (a valid SCXML name).
     /// The host names the invoked session itself: its `_sessionid` is unique
     /// among every session of the run and bounded at any nesting depth.
     invoke-id: string,
@@ -1153,20 +1150,15 @@ interface telemetry {
 /// `check-syntax`, `check-effects`, and the pure functions (`namelist-key`, `event-payload`,
 /// `inline-content`, `external-data`, `event-data-field`, `accepts-event-data`); calls before a successful
 /// `initialize` fail with `unavailable`. A failed call changes no data.
-/// Bundled-provider bounds: the `initialize` declarations' placeholder
-/// encoding at most 65536 bytes, each expression, location, or `add-attribute` name at most 16384 bytes, each
-/// script at most 65536 bytes; no text/JSON/XML value has a byte bound; the
-/// ECMAScript provider also bounds its data locations (portable values,
-/// functions, and opaque values together) to 256 and each location name to
-/// 1024 bytes: a call that would commit more fails and changes no data. The XPath
-/// provider bounds declared variables to 256, and gives each expression evaluation 1000000
-/// fuel units; running out of fuel, like any other evaluator limit, fails
+/// Bundled-provider bounds: no text/JSON/XML value or location name has a
+/// byte bound. The XPath provider gives
+/// each expression evaluation 1000000 fuel units; running out of fuel, like any other evaluator limit, fails
 /// that call with `execution` (SCXML `error.execution`) and changes no data.
 interface data-model-api {
   use types.{data-value, assign-placement, assign-source, event, component-error, trace-context, named-value, data-initializer, inline-body, foreach-result};
   /// SCXML system variables (SCXML 1.0 section 5.10).
   record system-values {
-    /// `_sessionid`; a valid SCXML name of at most 1024 bytes.
+    /// `_sessionid`; a valid SCXML name.
     session-id: string,
     /// `_name`: the document's `name` attribute; none when it has none, and
     /// the data model then binds `_name` to no value (ECMAScript
@@ -1321,9 +1313,7 @@ interface data-model-api {
   /// `XPath` IRP template processor name
   /// `http://www.w3.org/TR/scxml/#SCXMLProcessor` in `_ioprocessors` to the
   /// `http://www.w3.org/TR/scxml/#SCXMLEventProcessor` entry.
-  /// Bounds (bundled providers): at most 256 declarations, each a valid
-  /// variable name; the declarations' placeholder encoding at most 65536
-  /// bytes.
+  /// Bounds (bundled providers): each declaration a valid variable name.
   /// Errors: `invalid-input` for an invalid, reserved, or duplicate name, a
   /// non-empty list on the null provider, or malformed system values;
   /// `payload-too-large` for over-bound input. Failure preserves prior
@@ -1373,8 +1363,7 @@ interface data-model-api {
   /// Errors: as `evaluate-location`.
   evaluate-form-value: func(source: string, location: bool, event: option<event>) -> result<data-value, component-error>;
   /// Evaluates a `<foreach array>` expression to its item snapshot.
-  /// Errors: as `evaluate-value`, plus `payload-too-large` beyond 10000
-  /// items.
+  /// Errors: as `evaluate-value`.
   foreach-items: func(expression: string, event: option<event>) -> result<foreach-result, component-error>;
   /// Every `<foreach>` in progress is over: the machine call that ran them
   /// returned, so each finished, or an error in its body ended it early
@@ -1477,8 +1466,7 @@ interface data-model-api {
     system: system-values,
     /// Every declared `<data>` id in document order (ECMAScript: late-bound
     /// ids declared afterwards follow; XPath: datamodel document order) with
-    /// its current value; at most 256, each name at most 1024 bytes, and
-    /// each carried text at most 65536 bytes (a longer one is `oversized`).
+    /// its current value; each carried text at most 65536 bytes (a longer one is `oversized`).
     variables: list<variable>,
   }
   /// Read-only dump of the data model for introspection. Evaluates
@@ -1558,7 +1546,7 @@ interface io-processor-api {
 
   /// One due item that could not be delivered, identified by its timer id.
   record rejected-due {
-    /// Clock timer id, which equals the original send id (at most 256 bytes).
+    /// Clock timer id, which equals the original send id.
     send-id: string,
     /// Closed rejection reason.
     reason: due-rejection,
@@ -1593,17 +1581,14 @@ interface io-processor-api {
   /// delivery the host executes. The host never classifies itself.
   ///
   /// Preconditions: `processor-type` is absent, an alias, or the type URI;
-  /// `event.send-id` is absent or equals `send-id`; a delayed request carries a send id of
-  /// at most 256 bytes; the encoded request is at most 65536 bytes.
+  /// `event.send-id` is absent or equals `send-id`; a delayed request carries a send id.
   /// Errors: `protocol` for another processor type; `invalid-input` for
-  /// malformed input, a missing or over-bound delayed send id, a bad trace
+  /// malformed input, a missing delayed send id, a bad trace
   /// carrier, or an `internal` or `invalid` target (classified before the
   /// delay is applied);
-  /// `payload-too-large` (including the raw message bound, a stamped event
-  /// over the `event` bounds, and the clock's 4194304-byte aggregate
-  /// retained-payload bound); `duplicate-id` for a
-  /// live send id; `capacity-exhausted` when the clock holds 1024 timers;
-  /// `unavailable` for an `unreachable` target (the host answers the
+  /// `payload-too-large` (including the raw message bound and a stamped
+  /// event over the `event` bounds); `duplicate-id` for a
+  /// live send id; `unavailable` for an `unreachable` target (the host answers the
   /// machine `undeliverable`). Nothing is scheduled on failure.
   dispatch: func(request: send-request, sender: sender) -> result<dispatch-decision, component-error>;
   /// Routes one delayed request returned by `drain-due` for `sender`, at
@@ -1617,18 +1602,15 @@ interface io-processor-api {
   /// before it would send is reported at the `<send>`; the send is
   /// dispatched only when it falls due (`drain-due`).
   ///
-  /// Preconditions: `delay-ms` > 0; `send-id` at most 256 bytes; the
-  /// encoded send is at most 65536 bytes.
-  /// Errors: `invalid-input` for a zero delay, an over-bound send id, a
-  /// malformed field, or a bad trace carrier; `payload-too-large` (including
-  /// the clock's 4194304-byte aggregate retained-payload bound);
-  /// `duplicate-id` for a live send id; `capacity-exhausted` when the clock
-  /// holds 1024 timers. Nothing is scheduled on failure.
+  /// Preconditions: `delay-ms` > 0.
+  /// Errors: `invalid-input` for a zero delay, a malformed field, or a bad
+  /// trace carrier; `payload-too-large` for a field wider than the encoding;
+  /// `duplicate-id` for a live send id. Nothing is scheduled on failure.
   schedule-processor: func(request: processor-send) -> result<_, component-error>;
   /// Cancels a pending delayed send (of either processor); an absent id
   /// succeeds without effect.
-  /// Errors: `invalid-input` for a malformed id (empty or over 256 bytes) or
-  /// a bad trace carrier.
+  /// Errors: `invalid-input` for a malformed (empty) id or a bad trace
+  /// carrier.
   cancel: func(send-id: string, context: option<trace-context>) -> result<_, component-error>;
   /// Removes at most `max-items` due sends (of either processor) from the
   /// clock and decodes them per item. One undeliverable item never prevents
@@ -2035,7 +2017,7 @@ interface session-snapshot-host {
   /// (including `initialize` and `shutdown`) or when the executing host or
   /// machine supplied no executable-content image; `capacity-exhausted` for a
   /// call after the 64th of one `execute` call; `payload-too-large` for a
-  /// document over a bound of the format (32 MiB, or a list bound); `execution`
+  /// document over a bound of the format (a string or integer bound); `execution`
   /// when a component's read-only `snapshot` export failed; `platform` when the
   /// host failed.
   ///
@@ -2173,7 +2155,7 @@ interface script-bundle {
 /// * Every other effect capability error, including `unavailable` from a
 ///   capability the host does not provide, is a terminal failure.
 /// * A session constructed with an invalid `session-id` (empty, not a valid
-///   SCXML name, or over 1024 bytes) starts in `failed` with
+///   SCXML name) starts in `failed` with
 ///   `invalid-input`. Otherwise construction calls `ir-source.machine-ir`
 ///   once; IR that fails the bounds, version, structural, or semantic checks
 ///   documented on `ir-source` starts the session in `failed` with the
@@ -2513,15 +2495,14 @@ interface session-snapshot-api {
     /// Shared virtual clock position, in milliseconds.
     now-ms: u64,
     /// Pre-order: the root first, each session after the session that
-    /// invoked it; at most 255 invoked sessions under the root session, at
-    /// most 32 nested invoke depth.
+    /// invoked it, at any nested invoke depth.
     sessions: list<session-capture>,
   }
   /// Canonical `scxml.session-snapshot/v2` document bytes.
-  /// Errors: `invalid-input`/`payload-too-large`, detail `snapshot-<code>`.
+  /// Errors: `invalid-input`, detail `snapshot-<code>`.
   encode: func(capture: capture, options: snapshot-options) -> result<list<u8>, component-error>;
   /// Canonical `scxml.session-snapshot-diff/v2` bytes of two valid documents.
-  /// Errors: `invalid-input`/`payload-too-large`, detail `snapshot-<code>`.
+  /// Errors: `invalid-input`, detail `snapshot-<code>`.
   diff: func(before: list<u8>, after: list<u8>, include-trace-context: bool) -> result<list<u8>, component-error>;
 }
 

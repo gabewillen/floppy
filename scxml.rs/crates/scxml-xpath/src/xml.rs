@@ -377,9 +377,6 @@ impl<'a> Parser<'a> {
         if end == 0 {
             return Err(Error::Xml(XmlError::Malformed));
         }
-        if end > limits::MAX_NAME_BYTES.saturating_mul(2) {
-            return Err(Error::Limit(Limit::NameBytes));
-        }
         self.take(end)
     }
 

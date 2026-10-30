@@ -5,9 +5,8 @@ use sha2::{Digest as _, Sha256};
 use crate::validate::{Pointer, validate_document};
 use crate::{
     Capture, Children, Clock, Configuration, Counters, Document, Event, Invocation, IrIdentity,
-    MAX_DOCUMENT_BYTES, MAX_INVOKE_DEPTH, MAX_INVOKED_SESSIONS, Options, Queues,
-    SESSION_SNAPSHOT_VERSION, Section, Session, SessionCapture, Snapshot, SnapshotError,
-    SnapshotErrorCode, TraceContextPolicy, Transition,
+    Options, Queues, SESSION_SNAPSHOT_VERSION, Section, Session, SessionCapture, Snapshot,
+    SnapshotError, SnapshotErrorCode, TraceContextPolicy, Transition,
 };
 
 /// Machine IR schema version every session loads (`ir.version`).
@@ -19,8 +18,8 @@ pub(crate) const MACHINE_IR_VERSION: u32 = 5;
 /// sections are omitted; a data-model image the host did not gather (the
 /// session is `ready`, or no data model is linked) omits `system` and
 /// `data_model`. Every session's invocations are listed in ascending
-/// invoke-id order, each with the session it invoked, at any depth up to
-/// [`MAX_INVOKE_DEPTH`].
+/// invoke-id order, and the sessions follow in pre-order (each session's
+/// invoked sessions after it, in that order), at any depth.
 /// Under [`TraceContextPolicy::Strip`] every carrier is dropped.
 ///
 /// The produced document passes exactly the checks [`crate::decode`] runs,
@@ -31,7 +30,6 @@ pub(crate) const MACHINE_IR_VERSION: u32 = 5;
 /// # Errors
 ///
 /// Any [`SnapshotErrorCode`] the decoder checks, plus
-/// [`SnapshotErrorCode::DepthExceeded`] and
 /// [`SnapshotErrorCode::Inconsistent`] for malformed invocations.
 pub fn encode(capture: &Capture, options: &Options) -> Result<Vec<u8>, SnapshotError> {
     let mut options = options.clone();
@@ -44,19 +42,12 @@ pub fn encode(capture: &Capture, options: &Options) -> Result<Vec<u8>, SnapshotE
     if let Some(first) = issues.into_iter().next() {
         return Err(first);
     }
-    let bytes = serde_json::to_vec(&document).map_err(|_| schema_violation())?;
-    if bytes.len() > MAX_DOCUMENT_BYTES {
-        return Err(SnapshotError::new(SnapshotErrorCode::TooLarge, None));
-    }
-    Ok(bytes)
+    serde_json::to_vec(&document).map_err(|_| schema_violation())
 }
 
 /// Wraps a snapshot in its envelope with the digest of its canonical bytes.
 fn seal(options: Options, snapshot: Snapshot) -> Result<Document, SnapshotError> {
     let bytes = serde_json::to_vec(&snapshot).map_err(|_| schema_violation())?;
-    if bytes.len() > MAX_DOCUMENT_BYTES {
-        return Err(SnapshotError::new(SnapshotErrorCode::TooLarge, None));
-    }
     Ok(Document {
         version: SESSION_SNAPSHOT_VERSION.into(),
         sha256: sha256_hex(&bytes),
@@ -96,18 +87,12 @@ fn build_snapshot(capture: &Capture, options: &Options) -> Result<Snapshot, Snap
             Some("/sessions".into()),
         ));
     };
-    if capture.sessions.len().saturating_sub(1) > MAX_INVOKED_SESSIONS {
-        return Err(SnapshotError::new(
-            SnapshotErrorCode::BoundsExceeded,
-            Some("/sessions".into()),
-        ));
-    }
     if root_capture.parent.is_some() {
         return Err(capture_error(SnapshotErrorCode::Inconsistent, 0, "parent"));
     }
     let children_section = Children::under(&options.exclude);
-    // Pre-order: every session's parent comes before it; depths follow.
-    let mut depths = vec![0_usize; capture.sessions.len()];
+    // Every session's parent comes before it.
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); capture.sessions.len()];
     for (index, session) in capture.sessions.iter().enumerate().skip(1) {
         let parent = match session.parent {
             Some(parent) if children_section == Children::Included => usize::try_from(parent)
@@ -122,20 +107,26 @@ fn build_snapshot(capture: &Capture, options: &Options) -> Result<Snapshot, Snap
                 ));
             }
         };
-        let depth = depths.get(parent).copied().unwrap_or(0) + 1;
-        if depth > MAX_INVOKE_DEPTH {
-            return Err(capture_error(
-                SnapshotErrorCode::DepthExceeded,
-                index,
-                "parent",
-            ));
-        }
-        if let Some(slot) = depths.get_mut(index) {
-            *slot = depth;
+        if let Some(list) = children.get_mut(parent) {
+            list.push(index);
         }
     }
     let mut used = vec![false; capture.sessions.len()];
-    let root = build_invoked(capture, 0, options, children_section, &mut used)?;
+    let mut sessions = Vec::with_capacity(capture.sessions.len());
+    // Pre-order with an explicit stack, so no depth takes native stack.
+    let mut pending = vec![0_usize];
+    while let Some(index) = pending.pop() {
+        let (session, invoked) = build_invoked(
+            capture,
+            index,
+            options,
+            children_section,
+            &children,
+            &mut used,
+        )?;
+        sessions.push(session);
+        pending.extend(invoked.into_iter().rev());
+    }
     if let Some(orphan) = used.iter().skip(1).position(|used| !used) {
         return Err(capture_error(
             SnapshotErrorCode::Inconsistent,
@@ -150,19 +141,21 @@ fn build_snapshot(capture: &Capture, options: &Options) -> Result<Snapshot, Snap
         clock: Clock {
             now_ms: capture.now_ms,
         },
-        root,
+        sessions,
     })
 }
 
-/// The session at `index` with the sessions it invoked, matched to its
-/// machine's live invocations by invoke id, ascending, at any depth.
+/// The session at `index` with its invocations, matched to the sessions it
+/// invoked by invoke id, ascending, and those sessions' capture indices in
+/// that order.
 fn build_invoked(
     capture: &Capture,
     index: usize,
     options: &Options,
     children_section: Children,
+    children: &[Vec<usize>],
     used: &mut [bool],
-) -> Result<Session, SnapshotError> {
+) -> Result<(Session, Vec<usize>), SnapshotError> {
     let Some(session_capture) = capture.sessions.get(index) else {
         return Err(capture_error(
             SnapshotErrorCode::Inconsistent,
@@ -172,22 +165,15 @@ fn build_invoked(
     };
     let mut session = build_session(session_capture, options);
     if children_section == Children::Excluded {
-        return Ok(session);
+        return Ok((session, Vec::new()));
     }
-    let children: Vec<usize> = capture
-        .sessions
-        .iter()
-        .enumerate()
-        .filter(|(_, child)| {
-            child.parent.and_then(|parent| usize::try_from(parent).ok()) == Some(index)
-        })
-        .map(|(child, _)| child)
-        .collect();
+    let candidates = children.get(index).map_or(&[][..], Vec::as_slice);
     let mut live = session_capture.machine.invocations.clone();
     live.sort_by(|left, right| left.invoke_id.cmp(&right.invoke_id));
     let mut invocations = Vec::with_capacity(live.len());
+    let mut invoked = Vec::with_capacity(live.len());
     for invocation in live {
-        let found = children.iter().copied().find(|child| {
+        let found = candidates.iter().copied().find(|child| {
             capture.sessions.get(*child).is_some_and(|child| {
                 child
                     .machine
@@ -228,17 +214,11 @@ fn build_invoked(
             index: invocation.index,
             autoforward: invocation.autoforward,
             finished,
-            session: Box::new(build_invoked(
-                capture,
-                child,
-                options,
-                children_section,
-                used,
-            )?),
         });
+        invoked.push(child);
     }
     session.invocations = Some(invocations);
-    Ok(session)
+    Ok((session, invoked))
 }
 
 #[allow(

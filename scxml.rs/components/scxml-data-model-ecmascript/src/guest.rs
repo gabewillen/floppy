@@ -40,8 +40,7 @@ use stateforward::scxml::{execution_host, telemetry};
 
 use super::{
     Answerer, DataModelError, EcmaScriptDataModel, ExecutionHost, ForeachItems, HostQuery,
-    HostReply, MAX_AGGREGATE_BYTES, MAX_EXPRESSION_BYTES, MAX_FOREACH_ITEMS, MAX_SCRIPT_BYTES,
-    MAX_SOURCE_BYTES, SystemContext, VariableValue,
+    HostReply, SystemContext, VariableValue,
 };
 use scxml_types::{
     AssignPlacement, AssignSource, BaggagePolicy, DataInitializer, DataValue, Event, EventName,
@@ -93,12 +92,20 @@ impl Guest for Component {
     /// session starts from (`EcmaScriptDataModel::prepare`), so the
     /// snapshot the build takes after it holds that realm. A failure
     /// leaves no realm, and `initialize` then creates one.
+    ///
+    /// It then grows the heap by 4 MiB and frees it, so the snapshot's
+    /// memory starts with that much free heap. The host copies a memory
+    /// whole each time it grows (`docs/limits.md`), and the allocator grows
+    /// it 64 KiB at a time, so a session whose heap grows by megabytes
+    /// copied its whole memory dozens of times; the free pages are zero,
+    /// so the snapshot carries no data for them.
     fn wizer_initialize() {
         MODEL.with_borrow(|model| {
             if model.prepare().is_err() {
                 // No realm is kept; `initialize` creates its own.
             }
         });
+        drop(std::hint::black_box(Vec::<u8>::with_capacity(4 << 20)));
     }
 }
 
@@ -117,18 +124,7 @@ impl DataModelApi for Component {
             WitSyntaxKind::Location => super::SyntaxKind::Location,
             WitSyntaxKind::Script => super::SyntaxKind::Script,
         };
-        let limit = if kind == super::SyntaxKind::Script {
-            MAX_SCRIPT_BYTES
-        } else {
-            MAX_EXPRESSION_BYTES
-        };
-        let result = if source.len() > limit {
-            Err(ComponentError {
-                version: ErrorVersion::V1,
-                code: ErrorCode::PayloadTooLarge,
-                detail: Some("syntax-check source exceeds its byte bound".into()),
-            })
-        } else {
+        let result = {
             super::check_syntax(kind, &source)
                 .map_err(to_component_error)
                 .and_then(|issues| {
@@ -173,7 +169,6 @@ impl DataModelApi for Component {
 
     fn initialize(declarations: Vec<String>, context: SystemValues) -> Result<(), ComponentError> {
         observed(telemetry::Operation::Initialize, None, || {
-            validate_total_len(declarations.iter().map(String::len), MAX_SOURCE_BYTES)?;
             validate_wit_system(&context)?;
             MODEL.with_borrow_mut(|model| {
                 model.initialize_declarations(
@@ -190,25 +185,15 @@ impl DataModelApi for Component {
 
     fn declare(id: String) -> Result<(), ComponentError> {
         observed(telemetry::Operation::Assign, None, || {
-            validate_wit_text(&id, MAX_EXPRESSION_BYTES)?;
             MODEL.with_borrow_mut(|model| model.declare(&id))
         })
     }
 
     fn initialize_data(id: String, initializer: WitDataInitializer) -> Result<(), ComponentError> {
-        let validated = (|| {
-            validate_wit_text(&id, MAX_EXPRESSION_BYTES)?;
-            match &initializer {
-                WitDataInitializer::Expression(expression) => {
-                    validate_wit_text(expression, MAX_EXPRESSION_BYTES)?;
-                    validate_total([id.len(), expression.len()])
-                }
-                WitDataInitializer::Value(value) => {
-                    validate_wit_value(value)?;
-                    validate_total([id.len(), wit_value_bytes(value)])
-                }
-            }
-        })();
+        let validated = match &initializer {
+            WitDataInitializer::Expression(_) => Ok(()),
+            WitDataInitializer::Value(value) => validate_wit_value(value),
+        };
         observed(telemetry::Operation::Assign, None, || {
             validated?;
             let initializer = match initializer {
@@ -223,8 +208,6 @@ impl DataModelApi for Component {
 
     fn set_parameter(name: String, value: WitValue) -> Result<bool, ComponentError> {
         observed(telemetry::Operation::Assign, None, || {
-            validate_wit_text(&name, MAX_EXPRESSION_BYTES)?;
-            validate_total([name.len(), wit_value_bytes(&value)])?;
             let value = from_wit_value(value)?;
             MODEL.with_borrow_mut(|model| model.set_parameter(&name, &value))
         })
@@ -234,7 +217,7 @@ impl DataModelApi for Component {
         location: String,
         event: Option<WitEvent>,
     ) -> Result<WitValue, ComponentError> {
-        let context = validate_input_and_event(&location, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateValue, context, || {
             let event = event.map(from_wit_event).transpose()?;
             MODEL
@@ -247,7 +230,7 @@ impl DataModelApi for Component {
         expression: String,
         event: Option<WitEvent>,
     ) -> Result<Option<String>, ComponentError> {
-        let context = validate_input_and_event(&expression, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateValue, context, || {
             let event = event.map(from_wit_event).transpose()?;
             MODEL.with_borrow(|model| model.evaluate_text(&expression, event.as_ref(), &mut Host))
@@ -255,7 +238,7 @@ impl DataModelApi for Component {
     }
 
     fn evaluate_log(expression: String, event: Option<WitEvent>) -> Result<String, ComponentError> {
-        let context = validate_input_and_event(&expression, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateValue, context, || {
             // SCXML 4.7: the deterministic ECMAScript log rendering of
             // `<log expr>`, the text the checked-in IRP baselines record.
@@ -274,7 +257,7 @@ impl DataModelApi for Component {
         location: bool,
         event: Option<WitEvent>,
     ) -> Result<WitValue, ComponentError> {
-        let context = validate_input_and_event(&source, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateValue, context, || {
             let event = event.map(from_wit_event).transpose()?;
             // The WIT `location` flag is the wire form of the source kind.
@@ -295,7 +278,7 @@ impl DataModelApi for Component {
         expression: String,
         event: Option<WitEvent>,
     ) -> Result<ForeachResult, ComponentError> {
-        let context = validate_input_and_event(&expression, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         let trace = context.as_ref().ok().cloned().flatten();
         let result = context
             .and_then(|_| {
@@ -305,7 +288,7 @@ impl DataModelApi for Component {
                 })
             })
             .map_err(to_component_error)
-            .and_then(to_wit_foreach);
+            .map(to_wit_foreach);
         record_context(
             telemetry::Operation::EvaluateValue,
             classify_component_result(&result),
@@ -318,9 +301,6 @@ impl DataModelApi for Component {
     // closed: the caller raises `error.execution` rather than using a
     // fabricated value.
     fn namelist_key(location: String) -> Option<String> {
-        if location.len() > MAX_EXPRESSION_BYTES {
-            return None;
-        }
         super::namelist_key(&location).map(str::to_owned)
     }
 
@@ -356,7 +336,7 @@ impl DataModelApi for Component {
         expression: String,
         event: Option<WitEvent>,
     ) -> Result<bool, ComponentError> {
-        let context = validate_input_and_event(&expression, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateCondition, context, || {
             // `none`: SCXML defines no current event, so `_event` stays
             // unbound; never fabricate one.
@@ -374,7 +354,7 @@ impl DataModelApi for Component {
         expression: String,
         event: Option<WitEvent>,
     ) -> Result<WitValue, ComponentError> {
-        let context = validate_input_and_event(&expression, MAX_EXPRESSION_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::EvaluateValue, context, || {
             let value = match event.map(from_wit_event).transpose()? {
                 Some(event) => {
@@ -395,31 +375,13 @@ impl DataModelApi for Component {
         event: Option<WitEvent>,
         context: Option<WitTraceContext>,
     ) -> Result<(), ComponentError> {
-        let attribute_bytes = match &placement {
-            WitAssignPlacement::AddAttribute(name) => name.len(),
-            _ => 0,
-        };
         let validated_context = (|| {
-            validate_wit_text(&location, MAX_EXPRESSION_BYTES)?;
-            validate_wit_text_len(attribute_bytes, MAX_EXPRESSION_BYTES)?;
-            let source_bytes = match &source {
-                WitAssignSource::Expression(expression) => {
-                    validate_wit_text(expression, MAX_EXPRESSION_BYTES)?;
-                    expression.len()
-                }
-                WitAssignSource::Value(value) | WitAssignSource::ForeachValue(value) => {
-                    validate_wit_value(value)?;
-                    wit_value_bytes(value)
-                }
-            };
-            let event_bytes = match &event {
-                Some(event) => {
-                    validate_wit_event_fields(event)?;
-                    wit_event_bytes(event)?
-                }
-                None => 0,
-            };
-            validate_total([location.len(), attribute_bytes, source_bytes, event_bytes])?;
+            if let WitAssignSource::Value(value) | WitAssignSource::ForeachValue(value) = &source {
+                validate_wit_value(value)?;
+            }
+            if let Some(event) = &event {
+                validate_wit_event_fields(event)?;
+            }
             validate_wit_context(context.as_ref())
         })();
         observed_context(telemetry::Operation::Assign, validated_context, || {
@@ -442,7 +404,7 @@ impl DataModelApi for Component {
     }
 
     fn execute(script: String, event: Option<WitEvent>) -> Result<(), ComponentError> {
-        let context = validate_input_and_event(&script, MAX_SCRIPT_BYTES, event.as_ref());
+        let context = event.as_ref().map_or(Ok(None), validate_wit_event);
         observed_context(telemetry::Operation::Execute, context, || {
             match event.map(from_wit_event).transpose()? {
                 Some(event) => {
@@ -529,24 +491,13 @@ fn observed<T>(
     result.map_err(to_component_error)
 }
 
-/// The WIT `foreach-result` of one item snapshot. More than
-/// [`MAX_FOREACH_ITEMS`] items (WIT contract bound) is `payload-too-large`.
-fn to_wit_foreach(items: ForeachItems) -> Result<ForeachResult, ComponentError> {
+/// The WIT `foreach-result` of one item snapshot.
+fn to_wit_foreach(items: ForeachItems) -> ForeachResult {
     match items {
-        ForeachItems::Items(items) if items.len() > MAX_FOREACH_ITEMS => Err(too_many_items()),
-        ForeachItems::TooLarge => Err(too_many_items()),
-        ForeachItems::Items(items) => Ok(ForeachResult::Items(
-            items.into_iter().map(to_wit_value).collect(),
-        )),
-        ForeachItems::Illegal => Ok(ForeachResult::Illegal),
-    }
-}
-
-fn too_many_items() -> ComponentError {
-    ComponentError {
-        version: ErrorVersion::V1,
-        code: ErrorCode::PayloadTooLarge,
-        detail: Some("foreach collection exceeds 10000 items".into()),
+        ForeachItems::Items(items) => {
+            ForeachResult::Items(items.into_iter().map(to_wit_value).collect())
+        }
+        ForeachItems::Illegal => ForeachResult::Illegal,
     }
 }
 
@@ -559,7 +510,7 @@ fn from_wit_entries(entries: Vec<NamedValue>) -> Option<Vec<(String, DataValue)>
     entries
         .into_iter()
         .map(|entry| {
-            if entry.name.is_empty() || entry.name.len() > scxml_types::MAX_NAME_BYTES {
+            if entry.name.is_empty() {
                 return None;
             }
             Some((entry.name, from_wit_value(entry.value).ok()?))
@@ -710,11 +661,7 @@ fn validate_wit_context(
 }
 
 fn validate_wit_text(value: &str, max: usize) -> Result<(), DataModelError> {
-    validate_wit_text_len(value.len(), max)
-}
-
-fn validate_wit_text_len(len: usize, max: usize) -> Result<(), DataModelError> {
-    if len <= max {
+    if value.len() <= max {
         Ok(())
     } else {
         Err(DataModelError::InvalidInput)
@@ -736,20 +683,6 @@ fn validate_wit_value(value: &WitValue) -> Result<(), DataModelError> {
     }
 }
 
-fn wit_value_bytes(value: &WitValue) -> usize {
-    match value {
-        WitValue::Text(value)
-        | WitValue::JsonArray(value)
-        | WitValue::JsonObject(value)
-        | WitValue::Xml(value) => value.len(),
-        WitValue::Absent
-        | WitValue::Undefined
-        | WitValue::Null
-        | WitValue::Boolean(_)
-        | WitValue::Number(_) => 8,
-    }
-}
-
 fn validate_wit_system(value: &SystemValues) -> Result<(), DataModelError> {
     if value.session_id.is_empty() || value.machine_name.as_ref().is_some_and(String::is_empty) {
         return Err(DataModelError::InvalidInput);
@@ -758,11 +691,7 @@ fn validate_wit_system(value: &SystemValues) -> Result<(), DataModelError> {
     if !matches!(value.io_processors, WitValue::JsonObject(_)) {
         return Err(DataModelError::InvalidInput);
     }
-    validate_total([
-        value.session_id.len(),
-        value.machine_name.as_ref().map_or(0, String::len),
-        wit_value_bytes(&value.io_processors),
-    ])
+    Ok(())
 }
 
 fn validate_wit_trace_context_fields(value: &WitTraceContext) -> Result<(), DataModelError> {
@@ -777,86 +706,16 @@ fn validate_wit_trace_context_fields(value: &WitTraceContext) -> Result<(), Data
 }
 
 fn validate_wit_event_fields(event: &WitEvent) -> Result<(), DataModelError> {
-    validate_wit_text(&event.name, scxml_types::MAX_NAME_BYTES)?;
-    if let Some(value) = event.send_id.as_deref() {
-        validate_wit_text(value, scxml_types::MAX_NAME_BYTES)?;
-    }
-    if let Some(value) = event.invoke_id.as_deref() {
-        validate_wit_text(value, scxml_types::MAX_NAME_BYTES)?;
-    }
     validate_wit_value(&event.data)?;
     if let Some(value) = event.trace_context.as_ref() {
         validate_wit_trace_context_fields(value)?;
     }
-    validate_total([wit_event_bytes(event)?])
-}
-
-fn wit_event_bytes(event: &WitEvent) -> Result<usize, DataModelError> {
-    [
-        event.name.len(),
-        event.send_id.as_ref().map_or(0, String::len),
-        event.origin.as_ref().map_or(0, String::len),
-        event.origin_type.as_ref().map_or(0, String::len),
-        event.invoke_id.as_ref().map_or(0, String::len),
-        wit_value_bytes(&event.data),
-        event.trace_context.as_ref().map_or(0, |context| {
-            context.traceparent.len()
-                + context.tracestate.as_ref().map_or(0, String::len)
-                + context.baggage.as_ref().map_or(0, String::len)
-        }),
-    ]
-    .into_iter()
-    .try_fold(0_usize, |total, value| {
-        total.checked_add(value).ok_or(DataModelError::InvalidInput)
-    })
-}
-
-/// Bounds one expression or script and, when present, its `_event`;
-/// returns the event's validated trace context.
-fn validate_input_and_event(
-    input: &str,
-    max: usize,
-    event: Option<&WitEvent>,
-) -> Result<Option<WitTraceContext>, DataModelError> {
-    validate_wit_text(input, max)?;
-    match event {
-        Some(event) => {
-            validate_total([input.len(), wit_event_bytes(event)?])?;
-            validate_wit_event(event)
-        }
-        None => validate_total([input.len()]).map(|()| None),
-    }
+    Ok(())
 }
 
 fn validate_wit_event(event: &WitEvent) -> Result<Option<WitTraceContext>, DataModelError> {
     validate_wit_event_fields(event)
         .and_then(|()| validate_wit_context(event.trace_context.as_ref()))
-}
-
-/// Bounds the summed byte length of `values` by `max`.
-fn validate_total_len(
-    values: impl IntoIterator<Item = usize>,
-    max: usize,
-) -> Result<(), DataModelError> {
-    let total = values.into_iter().try_fold(0_usize, |total, value| {
-        total.checked_add(value).ok_or(DataModelError::InvalidInput)
-    })?;
-    validate_wit_text_len(total, max)
-}
-
-fn validate_total(values: impl IntoIterator<Item = usize>) -> Result<(), DataModelError> {
-    values
-        .into_iter()
-        .try_fold(0_usize, |total, value| {
-            total.checked_add(value).ok_or(DataModelError::InvalidInput)
-        })
-        .and_then(|total| {
-            if scxml_types::exceeds_wasm_bound(total, MAX_AGGREGATE_BYTES) {
-                Err(DataModelError::InvalidInput)
-            } else {
-                Ok(())
-            }
-        })
 }
 
 fn classify_component_result<T>(result: &Result<T, ComponentError>) -> telemetry::Outcome {

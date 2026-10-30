@@ -384,43 +384,6 @@ fn rejected_send_after_a_recoverable_guard_error_leaves_the_engine_unchanged() {
     assert!(observable(&engine).internal.is_empty());
 }
 
-// The per-step effect bound applies to wasm builds only, so this rollback is
-// exercised on wasm32; natively the same rollback is covered by
-// `failed_internal_scan_restores_the_internal_queue_exactly`.
-#[cfg(target_arch = "wasm32")]
-#[test]
-fn wasm_only_rejected_microstep_after_a_recoverable_guard_error_leaves_the_engine_unchanged() {
-    // Selection succeeds (the recoverable guard queues error.execution and
-    // the unguarded transition is enabled), but planning the microstep
-    // exceeds the per-step effect bound. The Send is rejected, so the
-    // selection's error event must not stay queued either.
-    let logs = "<log label=\"x\"/>".repeat(scxml_engine::MAX_EFFECTS_PER_COMMAND);
-    let body = format!(
-        r#"<state id="s">
-    <transition event="e" cond="recoverable" target="t"/>
-    <transition event="e" target="t"><log label="go"/></transition>
-  </state>
-  <state id="t"><onentry>{logs}</onentry></state>"#
-    );
-    let mut engine = Engine::new(machine(&body, "s")).expect("guarded chart is supported");
-    let mut recorder = Recorder {
-        guard: Some(|_, _| Err(EvaluationError::InvalidInput)),
-        ..Recorder::default()
-    };
-    engine.run(Command::Start, &mut recorder).expect("start");
-    let before = observable(&engine);
-    let failure = engine
-        .run(Command::Send(&external("e")), &mut recorder)
-        .expect_err("the oversized microstep is rejected");
-    assert_eq!(failure.kind, RunFailureKind::Rejected);
-    assert_eq!(failure.error, EngineError::EffectLimit);
-    assert_eq!(
-        observable(&engine),
-        before,
-        "a rejected Send changes nothing"
-    );
-}
-
 #[test]
 fn failed_internal_scan_restores_the_internal_queue_exactly() {
     // Start enters s0, whose onentry raises e1. The first eventless

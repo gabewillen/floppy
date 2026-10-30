@@ -112,7 +112,6 @@ const MAX_ALLOWLIST_ENTRY_BYTES = 2_048;
 const MAX_ENV_SLOT_BYTES = 64;
 const MAX_WASI_DIRS = 32;
 const MAX_WASI_GUEST_PATH_BYTES = 1_024;
-const MAX_NAME_BYTES = 1_024;
 const NANOS_PER_MS = 1_000_000n;
 const TRANSPORT_HEADERS = new Set(['host', 'content-length', 'transfer-encoding', 'connection']);
 const SCXML_INVOKE_TYPES = new Set(['scxml', 'http://www.w3.org/TR/scxml/', 'http://www.w3.org/TR/scxml']);
@@ -662,12 +661,12 @@ const transportFailed = () => unavailable('the HTTP transport failed');
 const tooLarge = () => failure('payload-too-large', 'the response body exceeds its byte bound');
 
 /**
- * The UTF-8 bytes of one event, or undefined for an empty or over-bound
- * name. Its data, raw message, and metadata have no byte bound (SCXML sets none).
+ * The UTF-8 bytes of one event, or undefined for an empty name. Its name,
+ * data, raw message, and metadata have no byte bound (SCXML sets none).
  */
 function eventBytes(event) {
   let total = byteLength(event.name);
-  if (event.name === '' || total > MAX_NAME_BYTES) return undefined;
+  if (event.name === '') return undefined;
   for (const value of [event.origin, event.originType, event.sendId, event.invokeId, event.raw]) {
     if (value !== undefined) total += byteLength(value);
   }

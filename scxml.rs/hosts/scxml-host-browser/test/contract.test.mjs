@@ -216,12 +216,12 @@ async function startOutcome(ir, { fuel, dataModelFuel = fuel } = {}) {
 }
 
 test('nested data-model work is charged to the machine command budget', async () => {
-  // Twenty <foreach> iterations each run a <script> of about 3.6 million
-  // charges: every data-model call fits the 40 million budget alone, the
+  // Twenty <foreach> iterations each run a <script> of about 1.5 million
+  // charges: every data-model call fits the 20 million budget alone, the
   // command's total does not. The command fails deterministically instead
   // of granting each nested call a fresh budget.
   const ir = await compileIr(foreachDocument(20, '<foreach array="arr" item="it"><script>acc+=burn()</script></foreach>'));
-  const budget = { fuel: 40_000_000 };
+  const budget = { fuel: 20_000_000 };
   assert.equal(await startOutcome(ir, budget), 'fuel-exhausted');
   assert.equal(await startOutcome(ir, budget), 'fuel-exhausted');
   // A command whose nested work fits the budget runs.

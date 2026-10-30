@@ -50,15 +50,9 @@ export const SNAPSHOT_SECTIONS = Object.freeze([
 export const SNAPSHOT_MODES = Object.freeze(['lazy', 'none']);
 /** `snapshot({traceContext})` values. */
 export const TRACE_CONTEXT_POLICIES = Object.freeze(['strip', 'preserve']);
-/** Most invoked sessions one snapshot document holds (the crate's `MAX_INVOKED_SESSIONS`). */
-export const MAX_SNAPSHOT_INVOKED_SESSIONS = 255;
-/** Deepest nested invoke depth one snapshot document holds (the crate's `MAX_INVOKE_DEPTH`). */
-export const MAX_SNAPSHOT_INVOKE_DEPTH = 32;
-/** Largest snapshot or diff document, in bytes (32 MiB; the crate's bound). */
-export const MAX_SNAPSHOT_BYTES = 33_554_432;
 /**
  * Per-call fuel budget of the codec component. Encoding is linear in the
- * document size; the budget admits documents at the size bound.
+ * document size.
  */
 export const DEFAULT_SNAPSHOT_FUEL = 4_000_000_000;
 
@@ -190,7 +184,6 @@ class Codec {
       throw new ScxmlSnapshotError(code);
     }
     if (!(bytes instanceof Uint8Array)) throw new ScxmlHostError('host-invariant');
-    if (bytes.byteLength > MAX_SNAPSHOT_BYTES) throw new ScxmlSnapshotError('too-large');
     return bytes;
   }
 }
@@ -306,10 +299,6 @@ export async function diffSnapshots(before, after, options) {
   ) {
     telemetry.observe('snapshot-diff', 'rejected');
     throw new ScxmlHostError('invalid-argument');
-  }
-  if (before.byteLength > MAX_SNAPSHOT_BYTES || after.byteLength > MAX_SNAPSHOT_BYTES) {
-    telemetry.observe('snapshot-diff', 'rejected');
-    throw new ScxmlSnapshotError('too-large');
   }
   const span = telemetry.start('snapshot-diff');
   try {

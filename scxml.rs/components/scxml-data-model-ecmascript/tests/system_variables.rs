@@ -4,7 +4,7 @@
 use scxml_data_model_ecmascript::{
     DataModelError, EcmaScriptDataModel, ExecutionHost, SystemContext,
 };
-use scxml_types::{DataValue, Event, EventName};
+use scxml_types::{BaggagePolicy, DataValue, Event, EventName, TraceContext};
 
 struct NoStates;
 
@@ -247,6 +247,48 @@ fn read_only_system_objects_read_as_their_values() {
     assert_eq!(
         model.evaluate_log("_event.data.q", &tick, host),
         Ok("[1]".into())
+    );
+}
+
+/// An event bound again is the same `_event` object, whichever operation
+/// binds it, and so is an event that differs only in its trace context
+/// (which `_event` does not expose); another event is a new object.
+#[test]
+fn an_event_bound_again_is_the_same_event_object() {
+    let mut model = model();
+    let host = &mut NoStates;
+    let tick = payload_event();
+    model
+        .assign_expression("kept", "_event", &tick, host)
+        .expect("the event is assignable");
+    assert_eq!(
+        model.evaluate_condition("kept === _event", &tick, host),
+        Ok(true)
+    );
+    assert_eq!(
+        model.evaluate_value("kept === _event", &tick, host),
+        Ok(DataValue::Bool(true))
+    );
+    let mut traced = tick.clone();
+    traced.trace_context = Some(TraceContext {
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01".into(),
+        tracestate: None,
+        baggage: None,
+        baggage_policy: BaggagePolicy::Drop,
+    });
+    assert_eq!(
+        model.evaluate_condition("kept === _event", &traced, host),
+        Ok(true)
+    );
+    let mut other = tick.clone();
+    other.data = DataValue::JsonObject(r#"{"p":2,"q":[1]}"#.into());
+    assert_eq!(
+        model.evaluate_condition("kept !== _event && _event.data.p === 2", &other, host),
+        Ok(true)
+    );
+    assert_eq!(
+        model.evaluate_condition("kept !== _event", &tick, host),
+        Ok(true)
     );
 }
 

@@ -1287,14 +1287,8 @@ impl SessionLinks {
         // invoke id, so the invoker knows the child's address before it
         // starts, and a child invoked again under the same id keeps it.
         // Invoke ids are unique among one session's live invocations, so
-        // the id is unique within the run. One over the name bound fails
-        // the invocation, as the invoke limits do.
+        // the id is unique within the run.
         let session_id = format!("{}.{}", self.session_id, request.invoke_id);
-        if scxml_types::SessionId::new(session_id.as_str()).is_err() {
-            return Err(invalid_input(
-                "the invoked session id exceeds the name bound",
-            ));
-        }
         let clock_now = self
             .clock_now()
             .map_err(|failure| fatal(&self.shared, failure))?;

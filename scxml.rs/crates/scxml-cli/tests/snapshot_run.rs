@@ -118,7 +118,7 @@ fn content(bytes: &[u8]) -> serde_json::Value {
         "version": document["version"],
         "options": document["options"],
         "clock": document["snapshot"]["clock"],
-        "root": document["snapshot"]["root"],
+        "sessions": document["snapshot"]["sessions"],
     })
 }
 

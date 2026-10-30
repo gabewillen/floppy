@@ -4,11 +4,10 @@ use proptest::prelude::*;
 use scxml_snapshot::{
     BaggagePolicy, Capture, Change, Color, ComponentIdentity, ComponentRole, DataModelCapture,
     DiffOptions, Event, EventSchema, EventType, FifoDiff, HistoryValue, InvocationCapture,
-    InvokedBy, MAX_INVOKE_DEPTH, MAX_PENDING_SENDS, MAX_VARIABLES, MachineCapture, Options,
-    PendingSend, SESSION_SNAPSHOT_DIFF_VERSION, Section, SessionCapture, SnapshotErrorCode,
-    SnapshotPoint, Status, System, TextValue, TraceContext, TraceContextPolicy, TransitionCapture,
-    TransitionType, Value, Variable, VariableValue, check, decode, diff, diff_documents, encode,
-    render_diff, render_show,
+    InvokedBy, MachineCapture, Options, PendingSend, SESSION_SNAPSHOT_DIFF_VERSION, Section,
+    SessionCapture, SnapshotErrorCode, SnapshotPoint, Status, System, TextValue, TraceContext,
+    TraceContextPolicy, TransitionCapture, TransitionType, Value, Variable, VariableValue, check,
+    decode, diff, diff_documents, encode, render_diff, render_show,
 };
 
 fn digest(fill: char) -> String {
@@ -221,8 +220,8 @@ fn encodes_canonical_bytes_that_decode_and_reencode_identically() {
     assert!(body.contains(r#""type":"external","cond":"x > 1","has_cond":true,"domain":"main""#));
     assert!(body.contains(r#""type":"internal","has_cond":false,"exit":[],"entry":[]"#));
     assert!(!body.contains(r#""action""#) && !body.contains(r#""cancel""#));
-    assert!(body.contains(r#""invocations":[{"invoke_id":"i1","type":"http://www.w3.org/TR/scxml/","state":"s0","index":0,"autoforward":true,"finished":false,"session":{"session_id":"child1","name":"worker""#));
-    assert_eq!(document.snapshot.root.name.as_deref(), Some("main"));
+    assert!(body.contains(r#""invocations":[{"invoke_id":"i1","type":"http://www.w3.org/TR/scxml/","state":"s0","index":0,"autoforward":true,"finished":false}]},{"session_id":"child1","name":"worker""#));
+    assert_eq!(document.snapshot.sessions[0].name.as_deref(), Some("main"));
     assert_eq!(
         encode(&capture(), &Options::default()).expect("encodes"),
         bytes
@@ -295,7 +294,7 @@ fn encoder_rejects_captures_outside_a_checkpoint_or_the_invocation_shape() {
     assert_eq!(error.code, SnapshotErrorCode::NotStable);
     assert_eq!(
         error.pointer.as_deref(),
-        Some("/snapshot/root/queues/internal")
+        Some("/snapshot/sessions/0/queues/internal")
     );
 
     // A session its parent never invoked is an orphan.
@@ -308,14 +307,15 @@ fn encoder_rejects_captures_outside_a_checkpoint_or_the_invocation_shape() {
         encode(&stray, &Options::default()).map_err(|error| error.pointer),
         Err(Some("/sessions/2/machine".into()))
     );
-    // A chain one session deeper than the ceiling.
+    // A chain of any depth: the sessions are a flat pre-order list, so
+    // neither the encoder nor the decoder nests per level.
+    let deep = encode(&chain(2_000), &Options::default()).expect("a deep chain encodes");
+    let document = decode(&deep).expect("a deep chain decodes");
+    assert_eq!(document.snapshot.sessions.len(), 2_001);
     assert_eq!(
-        encode(&chain(MAX_INVOKE_DEPTH), &Options::default()).map(|_| ()),
-        Ok(())
-    );
-    assert_eq!(
-        encode(&chain(MAX_INVOKE_DEPTH + 1), &Options::default()).map_err(|error| error.code),
-        Err(SnapshotErrorCode::DepthExceeded)
+        document.snapshot.paths()[2_000].len(),
+        2_000,
+        "the deepest session is 2,000 invocations below the root"
     );
 
     let mut orphan = capture();
@@ -381,9 +381,7 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
     let busy_document =
         decode(&encode(&busy, &executable_content).expect("encodes")).expect("decodes");
     assert_eq!(
-        busy_document
-            .snapshot
-            .root
+        busy_document.snapshot.sessions[0]
             .queues
             .as_ref()
             .map(|queues| queues.internal.len()),
@@ -400,8 +398,13 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
     entering.sessions[0].machine.configuration = vec!["s0".into()];
     let document = decode(&encode(&entering, &executable_content).expect("encodes"))
         .expect("an executable-content document with no atomic state decodes");
-    assert!(document.snapshot.root.configuration.atomic.is_empty());
-    assert_eq!(document.snapshot.root.configuration.full, ["s0"]);
+    assert!(
+        document.snapshot.sessions[0]
+            .configuration
+            .atomic
+            .is_empty()
+    );
+    assert_eq!(document.snapshot.sessions[0].configuration.full, ["s0"]);
     assert_eq!(
         encode(&entering, &checkpoint).map_err(|error| error.code),
         Err(SnapshotErrorCode::Inconsistent)
@@ -416,7 +419,7 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
     // session invoked.
     let document = decode(&encode(&invoked, &checkpoint).expect("encodes"))
         .expect("a one-session checkpoint document of an invoked session decodes");
-    assert!(document.snapshot.root.invoked_by.is_some());
+    assert!(document.snapshot.sessions[0].invoked_by.is_some());
     let mut whole_run = capture();
     whole_run.sessions[0].machine.invoked_by = Some(InvokedBy {
         parent_session_id: "parent".into(),
@@ -424,7 +427,7 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
     });
     assert_eq!(
         encode(&whole_run, &Options::default()).map_err(|error| error.pointer),
-        Err(Some("/snapshot/root/invoked_by".into()))
+        Err(Some("/snapshot/sessions/0/invoked_by".into()))
     );
     for exclude in [vec![Section::Previews], vec![Section::Invocations]] {
         let partial = Options {
@@ -463,9 +466,7 @@ fn children_are_listed_in_ascending_invoke_id_order() {
         autoforward: false,
     });
     let document = decode(&encode(&two, &Options::default()).expect("encodes")).expect("decodes");
-    let ids: Vec<&str> = document
-        .snapshot
-        .root
+    let ids: Vec<&str> = document.snapshot.sessions[0]
         .invocations
         .iter()
         .flatten()
@@ -538,13 +539,6 @@ fn decoder_rejects_every_mutation_with_its_code() {
         body.replacen("\"go\"", "\"gp\"", 1).as_bytes(),
         SnapshotErrorCode::IntegrityMismatch,
     );
-    let mut oversized = bytes.clone();
-    oversized.resize(scxml_snapshot::MAX_DOCUMENT_BYTES + 1, b' ');
-    expect_code(&oversized, SnapshotErrorCode::TooLarge);
-    assert_eq!(
-        check(&oversized).map_err(|error| error.code),
-        Err(SnapshotErrorCode::TooLarge)
-    );
     assert_eq!(
         check(body.replacen("\"go\"", "\"gp\"", 1).as_bytes())
             .expect("an issue list")
@@ -563,14 +557,14 @@ fn pointers_hold_only_fixed_keys_and_indices() {
     assert_eq!(error.code, SnapshotErrorCode::InvalidName);
     assert_eq!(
         error.pointer.as_deref(),
-        Some("/snapshot/root/queues/external/1/name")
+        Some("/snapshot/sessions/0/queues/external/1/name")
     );
     assert!(!error.to_string().contains("bad name"));
 }
 
 #[test]
-fn bounds_hold_at_the_maximum_and_fail_one_past_it() {
-    let at_max = |sends: usize, variables: usize| {
+fn pending_sends_and_variables_have_no_count_bound() {
+    let at = |sends: usize, variables: usize| {
         let mut capture = capture();
         capture.sessions.truncate(1);
         capture.sessions[0].machine.invocations.clear();
@@ -587,16 +581,8 @@ fn bounds_hold_at_the_maximum_and_fail_one_past_it() {
         }
         encode(&capture, &Options::default()).map(|bytes| decode(&bytes).map(drop))
     };
-    assert_eq!(at_max(0, 0), Ok(Ok(())));
-    assert_eq!(at_max(MAX_PENDING_SENDS, MAX_VARIABLES), Ok(Ok(())));
-    assert_eq!(
-        at_max(MAX_PENDING_SENDS + 1, 0).map_err(|error| error.code),
-        Err(SnapshotErrorCode::BoundsExceeded)
-    );
-    assert_eq!(
-        at_max(0, MAX_VARIABLES + 1).map_err(|error| error.code),
-        Err(SnapshotErrorCode::BoundsExceeded)
-    );
+    assert_eq!(at(0, 0), Ok(Ok(())));
+    assert_eq!(at(1_025, 257), Ok(Ok(())));
 }
 
 #[test]
@@ -790,7 +776,7 @@ fn a_session_without_a_name_omits_it_and_round_trips() {
     let bytes = encode(&nameless, &Options::default()).expect("a nameless session encodes");
     let body = text(&bytes);
     assert!(
-        body.contains(r#""root":{"session_id":"root1","datamodel_name":"#),
+        body.contains(r#""sessions":[{"session_id":"root1","datamodel_name":"#),
         "no `name` after the root session id: {body}"
     );
     assert!(
@@ -798,7 +784,7 @@ fn a_session_without_a_name_omits_it_and_round_trips() {
         "no `_name` in system: {body}"
     );
     let document = decode(&bytes).expect("a nameless session decodes");
-    assert_eq!(document.snapshot.root.name, None);
+    assert_eq!(document.snapshot.sessions[0].name, None);
     assert_eq!(check(&bytes).expect("checks"), vec![]);
     assert_eq!(serde_json::to_vec(&document).expect("re-encodes"), bytes);
     let schema: serde_json::Value =
@@ -836,7 +822,10 @@ fn transitions_carry_their_event_schema_and_its_digest_is_checked() {
     });
     let bytes = encode(&described, &options(&[], TraceContextPolicy::Strip)).expect("encodes");
     let document = decode(&bytes).expect("decodes");
-    let transitions = document.snapshot.root.transitions.clone().expect("listed");
+    let transitions = document.snapshot.sessions[0]
+        .transitions
+        .clone()
+        .expect("listed");
     assert_eq!(
         transitions[0].event_schema,
         described.sessions[0].machine.transitions[0].event_schema
