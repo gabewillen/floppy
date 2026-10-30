@@ -1512,7 +1512,10 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
     );
     assert_eq!(done["schemas"], schemas(&["pedestrian.button"]));
     assert_eq!(done["script"], "");
-    assert_eq!(done["path"], "../../behaviors/traffic_light.scx");
+    assert_eq!(
+        done["path"],
+        "../../behaviors/traffic_light/traffic_light.scx"
+    );
     assert_eq!(done["tests"], tests());
 
     let report = &done["report"];
@@ -1523,11 +1526,18 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
     assert_eq!(report["plan"]["name"], "traffic_light");
     assert_eq!(report["history"][0]["diagnostics"][0]["code"], "SCXML005");
     let simulation = report["simulation"].as_array().expect("simulation results");
-    assert_eq!(simulation.len(), 2, "{report}");
+    assert_eq!(
+        simulation.len(),
+        4,
+        "the draft's two tests and their IRP cases: {report}"
+    );
     assert!(
         simulation.iter().all(|result| result["passed"] == true),
         "{report}"
     );
+    assert_eq!(simulation[2]["name"], "test100", "{report}");
+    assert_eq!(simulation[2]["outcome"], "pass", "{report}");
+    assert_eq!(simulation[3]["name"], "test101", "{report}");
     assert_eq!(
         simulation[0]["observed"],
         json!(["light.green", "light.yellow", "light.red", "walk.on"]),
@@ -1915,8 +1925,8 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     let simulation = report["simulation"].as_array().expect("simulation results");
     assert_eq!(
         simulation.len(),
-        2,
-        "the draft's test and the forced tick: {report}"
+        3,
+        "the draft's test, the forced tick and the test's IRP case: {report}"
     );
     assert_eq!(simulation[1]["name"], "first tick", "{report}");
     assert_eq!(
@@ -2047,8 +2057,8 @@ fn a_turn_behavior_that_selects_on_the_live_turn_is_built() {
     let simulation = report["simulation"].as_array().expect("simulation results");
     assert_eq!(
         simulation.len(),
-        2,
-        "the draft's test and the live turn: {report}"
+        3,
+        "the draft's test, the live turn and the test's IRP case: {report}"
     );
     assert_eq!(simulation[1]["name"], "live turn", "{report}");
     assert_eq!(simulation[1]["passed"], true, "{report}");
@@ -2056,7 +2066,7 @@ fn a_turn_behavior_that_selects_on_the_live_turn_is_built() {
     assert_eq!(simulation[1]["apply"], json!([]), "{report}");
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
     assert!(
-        behaviors_of(&document).join("Greet.scx").is_file(),
+        behaviors_of(&document).join("Greet/Greet.scx").is_file(),
         "the built document is written"
     );
 }
@@ -2076,7 +2086,7 @@ fn without_a_live_turn_a_turn_behavior_runs_only_its_own_tests() {
     assert_eq!(label, "done", "{done}");
     assert_eq!(
         done["report"]["simulation"].as_array().map(Vec::len),
-        Some(1),
+        Some(2),
         "{done}"
     );
 }
@@ -2095,7 +2105,7 @@ fn a_routine_is_checked_by_its_first_tick_not_the_live_turn() {
     let simulation = done["report"]["simulation"]
         .as_array()
         .expect("simulation results");
-    assert_eq!(simulation.len(), 2, "{done}");
+    assert_eq!(simulation.len(), 3, "{done}");
     assert_eq!(simulation[1]["name"], "first tick", "{done}");
 }
 
@@ -2287,7 +2297,10 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
     assert_eq!(report["failures"], 2, "{report}");
     assert_eq!(report["history"][0]["diagnostics"][0]["code"], "SCXML005");
     // The request's name, one plain file name: `traffic_light`.
-    assert_eq!(done["path"], "../../behaviors/traffic_light.scx", "{done}");
+    assert_eq!(
+        done["path"], "../../behaviors/traffic_light/traffic_light.scx",
+        "{done}"
+    );
     assert_eq!(done["script"], SCRIPT, "{done}");
     let behaviors = behaviors_of(&document);
     let read = |file: &str| {
@@ -2295,14 +2308,33 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
             .unwrap_or_else(|error| panic!("{file} is written: {error}"))
     };
     assert_eq!(
-        read("traffic_light.scx"),
+        read("traffic_light/traffic_light.scx"),
         done["scxml"].as_str().unwrap_or_default()
     );
     assert_eq!(
-        serde_json::from_str::<Json>(&read("traffic_light.json")).expect("JSON"),
+        serde_json::from_str::<Json>(&read("traffic_light/traffic_light.json")).expect("JSON"),
         schemas(&["pedestrian.button"])
     );
-    assert_eq!(read("traffic_light.js"), SCRIPT);
+    assert_eq!(read("traffic_light/traffic_light.js"), SCRIPT);
+    // Its IRP beside it: the manifest, its statement and one case per test
+    // script, which invokes the document by its literal relative path.
+    let manifest = read("traffic_light/irp/manifest.xml");
+    assert!(
+        manifest.contains(r#"<assert id="traffic_light-1" specnum="1""#)
+            && manifest.contains(r#"<start uri="100/test100.scxml"/>"#),
+        "{manifest}"
+    );
+    assert!(
+        read("traffic_light/irp/README.md").contains("**traffic_light-1**"),
+        "the statement"
+    );
+    let case = read("traffic_light/irp/sources/100/test100.scxml");
+    assert!(
+        case.contains(
+            r#"<invoke id="traffic_light" type="scxml" src="../../../traffic_light.scx"/>"#
+        ) && case.contains(r#"<log label="Outcome" expr="'pass'"/>"#),
+        "{case}"
+    );
     assert!(
         report["simulation"]
             .as_array()
@@ -2758,8 +2790,8 @@ fn repair_is_not_offered_without_a_plan() {
 
 /// The builder does not restrict drafts (decision D28): a draft that invokes
 /// the `generate` service the run binds validates, and its simulation
-/// reaches the service through the run's own `env` scopes and origins, so
-/// the build ends in `done`.
+/// reaches the service through the run's own `env` scopes and origins, as
+/// its IRP case's run does, so the build ends in `done`.
 #[test]
 fn a_draft_that_invokes_the_runs_generate_service_is_simulated_through_it() {
     let mock = Mock::start();
@@ -2785,7 +2817,11 @@ fn a_draft_that_invokes_the_runs_generate_service_is_simulated_through_it() {
             request.path == "/service/v1/chat/completions" && request.schema_name().is_none()
         })
         .collect::<Vec<_>>();
-    assert_eq!(own.len(), 1, "the draft generated once: {received:?}");
+    assert_eq!(
+        own.len(),
+        2,
+        "the draft generated once in its test and once in its IRP case: {received:?}"
+    );
     assert_eq!(
         own[0].authorization.as_deref(),
         Some(format!("Bearer {FAKE_FLOPPY_KEY}").as_str()),

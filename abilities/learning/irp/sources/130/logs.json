@@ -4,7 +4,7 @@
     "bot.behavior.break"
   ],
   "learning.learned": [
-    "lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock.scx",
-    "lesson of turn 2: GreetOnKnock ../../behaviors/GreetOnKnock.scx BROKEN"
+    "lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock/GreetOnKnock.scx",
+    "lesson of turn 2: GreetOnKnock ../../behaviors/GreetOnKnock/GreetOnKnock.scx BROKEN"
   ]
 }

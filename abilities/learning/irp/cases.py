@@ -104,7 +104,7 @@ S.statement(4, "A lesson implemented as `bot.behavior.break` sets the named beha
 S.case(100, 1, "a lesson is built and stored, and the output says it was learned.",
        [send(LESSON, lesson(1)), LEARNED],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR)], clock="wall",
-       logs={"reflection.revision": ["create GreetOnKnock"], "learning.selected": ["bot.behavior.create"], "learning.learned": ["lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock.scx"]})
+       logs={"reflection.revision": ["create GreetOnKnock"], "learning.selected": ["bot.behavior.create"], "learning.learned": ["lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock/GreetOnKnock.scx"]})
 
 S.case(110, 2, "without a database the lesson is not learned.",
        [send(LESSON, lesson(1)), not_learned()],
@@ -133,7 +133,7 @@ S.case(130, 4, "a lesson to stop a learned behavior breaks it, and the output sa
                        " && _event.data.behavior.status === 'BROKEN'")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(BREAK)], clock="wall",
        logs={"learning.selected": ["bot.behavior.create", "bot.behavior.break"],
-       "learning.learned": ["lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock.scx", "lesson of turn 2: GreetOnKnock ../../behaviors/GreetOnKnock.scx BROKEN"]})
+       "learning.learned": ["lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock/GreetOnKnock.scx", "lesson of turn 2: GreetOnKnock ../../behaviors/GreetOnKnock/GreetOnKnock.scx BROKEN"]})
 S.case(131, 4, "a break of a name the inventory does not hold is refused by its pinned schema and not learned.",
        [send(LESSON, lesson(1, content="Stop greeting a knock.")), not_learned("Stop greeting a knock.")],
        params=[DB, SLOW_SELECT], backend=[select(BREAK)], clock="wall",

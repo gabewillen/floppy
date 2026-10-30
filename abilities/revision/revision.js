@@ -31,9 +31,10 @@ function hasNoDocuments() {
   return existing_behavior === undefined || existing_behavior.source === '';
 }
 
-// The file of the row's program named by its path's last segment.
+// The file of the row's program, its path below the behaviors directory
+// (<name>/<name>.scx, or <name>.scx as builders before the IRP wrote it).
 function documentFile(extension) {
-  return existing_behavior.source.split('/').pop().replace(/\.scx$/, '') + extension;
+  return existing_behavior.source.replace(/^(\.\.\/)*behaviors\//, '').replace(/\.scx$/, '') + extension;
 }
 
 function seededSchemas(_event) {

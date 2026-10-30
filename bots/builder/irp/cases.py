@@ -134,7 +134,7 @@ def built(extra=""):
 
 
 S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
-S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>.scx`, `<name>.json` and `<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>.scx`.")
+S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>/<name>.scx`, `<name>/<name>.json` and `<name>/<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121) with its IRP beside them (`<name>/irp/README.md`, `manifest.xml` and `sources/<id>/test<id>.scxml`: one statement, the spec, and one case per test script, ids from 100), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path, then, once every test passed, each IRP case run as an invoked child, which invokes the draft itself and must end in `pass`, the simulation result `test<id>`); a draft that validates and passes every test and IRP case ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>/<name>.scx`.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
 S.statement(5, "A failure with a diagnostic an earlier failure of the build had does not end the build (decision D133); at `max_attempts` failures, 8 unless the request sets it, it ends in `failed` `{reason: \"attempts-exhausted\"}` with the last diagnostics and, when a check rejected a draft, its `scxml`.")
@@ -154,8 +154,9 @@ S.case(110, 2, "a plan and a valid draft are built in one attempt.",
         built("_event.data.report.attempts === 1 && _event.data.report.failures === 0 && _event.data.report.fixes_applied === 0"
               " && _event.data.report.plan.name === 'pinger' && _event.data.report.decisions.length === 0"
               " && _event.data.schemas.$defs.ping.type === 'object' && _event.data.script === ''"
-              " && _event.data.path === '../../behaviors/pinger.scx'"
-              " && _event.data.tests[0].name === 'a ping is answered' && _event.data.report.simulation.length === 1")],
+              " && _event.data.path === '../../behaviors/pinger/pinger.scx'"
+              " && _event.data.tests[0].name === 'a ping is answered' && _event.data.report.simulation.length === 2"
+              " && _event.data.report.simulation[1].name === 'test100' && _event.data.report.simulation[1].outcome === 'pass'")],
        backend=[PLAN, draft(PINGER)], clock="wall")
 
 S.case(120, 3, "a draft with a machine-applicable fix is fixed and built in one attempt.",
@@ -229,8 +230,9 @@ S.case(170, 8, "with the lifetime bounds, a routine scheduled every 30 s is a li
        backend=[PLAN, draft(routine("30s", CHIME), tests=WAITS, schemas=NO_SCHEMAS)], clock="wall")
 S.case(171, 8, "with the lifetime bounds, an hourly routine passes its forced first tick and is built.",
        [send(REQUEST, request(**BOUNDS)),
-        expect(DONE, "_event.data.scxml.indexOf('bot.behavior.tick') >= 0 && _event.data.report.simulation.length === 2"
-                     " && _event.data.report.simulation[1].name === 'first tick' && _event.data.report.simulation[1].passed === true")],
+        expect(DONE, "_event.data.scxml.indexOf('bot.behavior.tick') >= 0 && _event.data.report.simulation.length === 3"
+                     " && _event.data.report.simulation[1].name === 'first tick' && _event.data.report.simulation[1].passed === true"
+                     " && _event.data.report.simulation[2].name === 'test100' && _event.data.report.simulation[2].passed === true")],
        backend=[PLAN, draft(routine("3600s", CHIME), tests=WAITS, schemas=NO_SCHEMAS)], clock="wall")
 S.case(172, 8, "with the lifetime bounds, a routine whose forced tick selects nothing is an apply E0008 diagnostic.",
        [send(REQUEST, request(max_attempts=1, **BOUNDS)),
@@ -244,8 +246,9 @@ S.case(135, 4, "each failure is triaged again: two different failures, two decis
                 decided("triage.repair")], clock="wall")
 S.case(180, 9, "with a live turn, a turn behavior that selects on its input is built after its run on that turn.",
        [send(REQUEST, request(**LIVE)),
-        expect(DONE, "_event.data.scxml.indexOf('greeter') >= 0 && _event.data.report.simulation.length === 2"
+        expect(DONE, "_event.data.scxml.indexOf('greeter') >= 0 && _event.data.report.simulation.length === 3"
                      " && _event.data.report.simulation[1].name === 'live turn' && _event.data.report.simulation[1].passed === true"
+                     " && _event.data.report.simulation[2].name === 'test100' && _event.data.report.simulation[2].passed === true"
                      " && _event.data.tests.length === 1")],
        backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
 S.case(181, 9, "with a live turn, a turn behavior whose selection hardcodes an input value is an apply E0008 diagnostic.",

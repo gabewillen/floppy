@@ -31,7 +31,7 @@ final states and its parent receives that state's done data as
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
 | `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the data the specification refers to (an object, which the design and author prompts carry beside it; reflection sends the change input, decision D201), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `gemma-4-26b-a4b`; a revision that has a reflection model sends it, decision D260), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets, choices?, handled?}`: the turn, the behavior input as autonomy builds it, the sessions that turn's output names, at most 32, and the turn's choices `[{event, schema, target?}]`, which each selection must be one of with data its schema admits, as the dispatch is checked, decision D221, and `handled`, false for a turn that taught the behavior, whose run may leave it unhandled, decision D222; and `decline`, a second input the behavior must decline, run as `declined turn` after the live run, decision D229; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and the author call's first token bound (1024 to 65536, default 16384; a truncated author generation doubles it for the next author call, up to 65536, decision D135) |
-| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
+| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `attempts-exhausted` (the failure cap, decision D133), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the reflection stores the rejected source as a draft) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
@@ -71,19 +71,52 @@ A draft is three documents beside each other, so the model never escapes
 one inside another (decision D121): the `author` tool call returns
 `scxml` (structure only), `schemas` (a JSON object, `$defs` keyed by input
 event) and `script` (plain ECMAScript, or empty), and `writing` writes
-them as `<name>.scx`, `<name>.json` and `<name>.js` through the files
+them as `<name>/<name>.scx`, `<name>/<name>.json` and `<name>/<name>.js`
+through the files
 service ([`services/files`](../../services/files/README.md)) into the
-directory the run grants it, `behaviors/` beside `bots/` and `abilities/`
+directory the run grants it, each behavior in its own directory as every
+bot and ability is, `behaviors/` beside `bots/` and `abilities/`
 (`--dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors"`;
 create `behaviors/` first; it is ignored by git). The chart references
 them by relative URI: `event:schema="<name>.json#/$defs/<event>"` on the
 transitions that take an input event and, when there is a script, one
 root `<script src="<name>.js"/>`. The simulation, and every later invoker
 of a learned behavior, loads it by `<invoke srcexpr>` on its path,
-`../../behaviors/<name>.scx`, which resolves the same from this document
+`../../behaviors/<name>/<name>.scx`, which resolves the same from this document
 and from every document that invokes a learned behavior (each two levels
 below the layout root); scxml.rs loads its schema file and script against
 its own base URI, as they are when it is invoked.
+
+## Its IRP
+
+`writing` then writes the draft's implementation report plan beside it,
+as floppy keeps its own documents' (`tests/irp/harness.py`'s layout and
+cases): `<name>/irp/README.md` with one numbered statement, `<name>-1`,
+the specification; `<name>/irp/manifest.xml`, the W3C SCXML IRP's
+`assertions` manifest with that one assertion and one mandatory,
+unattended test per test script, ids from 100; and each test script as
+the case `<name>/irp/sources/<id>/test<id>.scxml`. A case invokes the
+draft as its child by its literal relative path (`../../../<name>.scx`),
+sends itself `harness.go` so the child has started, sends the test's
+events with their delays and `harness.waited` after its settle time, and
+expects the test's outputs in order (the child's other events may come
+between); a test that expects `done` then expects `done.invoke.<name>`,
+one that does not expects `harness.waited`. Anything else it receives
+(the settle time passing first, the child finishing when it should not,
+an `error.*` such as a send of a test event the draft's schema refuses)
+ends it in `fail`. Each final state logs its `Outcome` and carries it as
+its donedata. Test scripts out of bounds get no IRP (`validate` refuses
+them).
+
+The simulation runs the IRP (below): once every test, and the forced tick
+or the live turn, passed, each case runs as an invoked child by
+`srcexpr` on its path, in order, until one fails, each a simulation result
+`{name: "test<id>", invokeid, passed, outcome, error}` (`outcome` the
+case's `pass` or `fail`, `error` the `error.*` that ended its invocation,
+without the invoke id); a case that did not end in `pass` is a
+`simulate` `test-failed` diagnostic naming the case and its test. So a
+built behavior is done only when its written IRP passes, and the IRP stays
+beside it, for anyone to run again.
 
 ## Topology
 
@@ -201,7 +234,7 @@ text.
   failed to start) is dropped. With the lifetime bounds, a persistent
   routine also runs one more test, `first tick` (the forced tick, which
   stands in for waiting on the schedule's clock): a fresh child runs the
-  draft's forced tick copy, `<name>.tick.scx` beside it (each schedule's
+  draft's forced tick copy, `<name>/<name>.tick.scx` beside it (each schedule's
   `delay` or `delayexpr` replaced by a `delay` of 1500 ms, from
   `<behavior:lifetime_errors ticklocation>`), and is sent nothing, so its
   own schedule send must arm and fire (decision D153: a schedule that
@@ -292,8 +325,8 @@ the backend stops sending tokens), and no answer reaches anyone. `scx`
 puts no time limit of its own on a service request: the invoking state's
 `builder.timeout` is the bound. The simulation is bounded the same way:
 `simulate-timeout` is a delayed send cancelled on exit that fires after
-`max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
-`validate` admits (8 tests of at most 120 s each).
+`2 * max_tests * sim_test_cap_ms` plus 60 s, longer than the longest simulation
+`validate` admits (8 tests of at most 120 s each, then their 8 IRP cases).
 
 ## Drafts are unrestricted
 

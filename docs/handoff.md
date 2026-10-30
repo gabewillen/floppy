@@ -7,10 +7,18 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-29.
+Last updated: 2026-10-30.
 
 ## Current state (2026-10-09) — resume here
 
+- **The builder writes and runs an IRP (2026-10-30, D278):** a learned
+  behavior is `behaviors/<name>/<name>.scx` (`.json`, `.js` beside it)
+  with its IRP in `<name>/irp/` (README statement, `manifest.xml`, one
+  harness case per test script, `tests/irp/harness.py`'s shape), and the
+  simulation runs every case once the tests pass; a failing case is a
+  `simulate` `test-failed` diagnostic. The files service writes relative
+  paths. Next on this line: run the existing behavior's IRP when a change
+  revises it.
 - **Latency hill climb: fanout (2026-10-28, D275):** the tier after the
   decision layer (intuition, else reasoning) gets the turn with
   `reached: false` as the decision layer starts, recalls and asks its model
