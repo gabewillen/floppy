@@ -180,10 +180,11 @@ function scoredCandidates(output) {
   }).sort(function (a, b) { return b.score - a.score || a.order - b.order; });
 }
 
-// The ids of the best candidates that hold at most 24576 characters of
-// content in all.
+// The ids of the best candidates that hold at most 4096 characters of
+// content in all (mosfet.py's Associative budget, 1024 tokens of four
+// bytes, decision D279).
 function rankedEpisodeIds(output) {
-  var room = 24576;
+  var room = 4096;
   var ids = [];
   scoredCandidates(output).forEach(function (row) {
     if (row.length <= room) {

@@ -51,8 +51,9 @@
   recency (0.35) times 0.5 to the power of its age before the newest
   candidate over the half-life (2 days); an episode without a vector
   scores by recency alone. The prior episodes recalled are the best,
-  ties newer first, that hold at most 24576 characters of content in
-  all, read oldest first (logged reasoning.recall: the best three, id and
+  ties newer first, that hold at most 4096 characters of content in
+  all (mosfet.py's Associative budget, 1024 tokens; decision D279),
+  read oldest first (logged reasoning.recall: the best three, id and
   cosine). A stimulus without words, or a cue the Embedding ability
   fails (logged reasoning.embedding: the failure's kind), recalls the
   newest episodes as above.
@@ -276,7 +277,7 @@
          engines (SQLite and Postgres); JSON rows are told by their
          content_format, the 50 most recent by created_at,
          then memory_id (the insertion order), as many of the newest as
-         hold at most 24576 characters of content in all (so the memory
+         hold at most 4096 characters of content in all (so the memory
          ability's answer stays inside its event bound), read oldest
          first. -->
     <data id="memory" expr="null"/>
@@ -302,14 +303,14 @@
          vector, if any; mosfet.py's found), how each is scored (similarity times the cosine with the
          cue plus recency times 0.5 to the power of its age before the
          newest over the half-life, mosfet.py's Weights), and the ids of
-         the best that hold at most 24576 characters of content in all,
+         the best that hold at most 4096 characters of content in all,
          null to recall the newest instead. -->
     <data id="cue" expr="null"/>
     <data id="found" expr="null"/>
     <data id="weights" expr="({similarity: 1, recency: 0.35, recency_half_life_ms: 172800000})"/>
     <data id="episode_ids" expr="null"/>
     <data id="candidate_select" expr="'SELECT m.memory_id, CAST(m.created_at AS TEXT), LENGTH(m.content), e.embedding FROM bot_memory m LEFT JOIN bot_memory_embedding e ON e.memory_id = m.memory_id AND e.kind = \'text\' WHERE m.query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR m.context_ref IS NULL OR m.context_ref = ?2) AND m.content_format = \'application/json\' ORDER BY m.created_at DESC, m.memory_id DESC LIMIT 64'"/>
-    <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id, SUM(LENGTH(content)) OVER (ORDER BY created_at DESC, memory_id DESC ROWS UNBOUNDED PRECEDING) AS total FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS newest) AS recent WHERE total &lt;= 24576 ORDER BY created_at, memory_id'"/>
+    <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id, SUM(LENGTH(content)) OVER (ORDER BY created_at DESC, memory_id DESC ROWS UNBOUNDED PRECEDING) AS total FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS newest) AS recent WHERE total &lt;= 4096 ORDER BY created_at, memory_id'"/>
   </datamodel>
   <script src="reasoning.js"/>
 
