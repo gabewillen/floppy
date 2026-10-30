@@ -140,4 +140,13 @@
       <start uri="223/test223.scxml"/>
     </test>
   </assert>
+  <assert id="conversation-14" specnum="14" specid="#conversation-14">
+    <![CDATA[Every committed message with words is also written to the short-term register (decision D251), as mosfet.py's Conversation writes it: `bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` sent to the parent before the commit's handoff or answer. An inbound text commit is a `heard` turn, speakers its turn's source participants; an outbound append a `said` one, speakers the source participants its append stamps. id is the message's provenance id, else its turn_ref, else the committing event's name; conversation is the conversation's session id; the words are cut by `<memory:cut_at_word>`. A commit that is not text, or only white space, and an append already committed write nothing.]]>
+    <test id="230" conformance="mandatory" manual="false">
+      <start uri="230/test230.scxml"/>
+    </test>
+    <test id="231" conformance="mandatory" manual="false">
+      <start uri="231/test231.scxml"/>
+    </test>
+  </assert>
 </assertions>
