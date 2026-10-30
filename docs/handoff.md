@@ -77,8 +77,8 @@ Last updated: 2026-10-30.
   (reflection, stored in `bot_memory_embedding`) and each turn's cue
   (reasoning), on `FLOPPY_EMBEDDING_BASE_URL` (`embeddinggemma-2`, 256
   dimensions, api.willen.dev). Reasoning ranks the 64 newest episodes by
-  mosfet.py's associative score and recalls the best within 24576
-  characters; without an embedder recall is by recency.
+  mosfet.py's associative score and recalls the best within 4096
+  characters (D279; was 24576); without an embedder recall is by recency.
 - **Decisions from the snapshot (2026-10-26, D257, #84 #95 #96):** a
   failed turn hands back its whole stimulus, so the turn that perceives the
   failure answers what went unanswered; the environment stamps the bot as
