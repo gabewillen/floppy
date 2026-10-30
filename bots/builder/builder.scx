@@ -27,22 +27,25 @@
   structure, its input events' schemas as one JSON object with $defs keyed
   by event, and its ECMAScript, or none, + test scripts) -> writing (the
   files service: the draft as three documents beside each other,
-  <name>.scx, <name>.json and <name>.js, in the directory the run grants it,
-  so the model never escapes one inside another; decision D121) -> validate
+  <name>/<name>.scx, <name>/<name>.json and <name>/<name>.js, in the
+  directory the run grants it, so the model never escapes one inside
+  another, decision D121; then its IRP, <name>/irp/, one case per test
+  script, decision D278) -> validate
   (scx:validate; EVENT004, the schema file it is not given, waived; machine-applicable
   fixes through apply_fixes and writing, at most 2 passes per draft; with the request's
   min_every_ms and turn_after_bound_ms, the lifetime bounds, E0009,
   <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
   child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
   a draft that sends bot.behavior.tick, also runs as its forced tick copy
-  (<name>.tick.scx, written by writing_tick: each schedule 1500 ms away, sent
+  (<name>/<name>.tick.scx, written by writing_tick: each schedule 1500 ms away, sent
   nothing, so its own schedule send must arm and fire, decision D153) and
   must tick with a selection within 2 s (the forced tick, E0008,
   <behavior:verify_tick>); and, with the request's apply, a turn behavior
   (one that sends no bot.behavior.tick) also runs once on that live turn, as the
   candidates runner runs it, by <invoke srcexpr> with the params turn and input,
   within min(turn_after_bound_ms, 2000) ms, and <behavior:verify_apply> checks its
-  donedata, the live-turn check of a turn behavior, E0008, decision D131) -> done. Every failure goes through retry_gate, which takes its
+  donedata, the live-turn check of a turn behavior, E0008, decision D131;
+  then each IRP case, invoked by srcexpr on its path, must end in pass) -> done. Every failure goes through retry_gate, which takes its
   fingerprint, marks the diagnostics an earlier failure of the build already
   had as repeated for the next author call, and ends the build
   (attempts-exhausted) at max_attempts failures, 8 unless the request sets
@@ -75,7 +78,8 @@
   FLOPPY_REFLECTION_BASE_URL with FLOPPY_REFLECTION_API_KEY (decision
   D260). The simulation is bounded the same way: each test runs
   at most sim_test_cap_ms, and simulate-timeout fires only after
-  max_tests * sim_test_cap_ms plus a margin.
+  2 * max_tests * sim_test_cap_ms (the tests, then their IRP cases) plus a
+  margin.
 
   Drafts are unrestricted: a draft may use any SCXML, extension
   namespaces, <invoke> (SCXML children and services), <script>, and
@@ -233,6 +237,9 @@
     <data id="simulation" expr="0"/>
     <data id="sim_run_seq" expr="0"/>
     <data id="sim_results" expr="[]"/>
+    <!-- The draft's IRP file being written (writing_irp), then the IRP case
+         being run (sim_irp). -->
+    <data id="irp_index" expr="0"/>
     <!-- The draft's tests and, for a routine, its forced tick, or, for a turn
          behavior given the live turn, its run on that turn. -->
     <data id="sim_tests" expr="[]"/>
@@ -454,37 +461,55 @@
   </state>
 
   <!-- Writes the draft as three documents beside each other through the
-       files service (decision D121): <name>.scx (its text, fixes applied),
-       <name>.json (its schemas) and <name>.js (its script, empty for none),
-       which the chart references by relative URI; the simulation and every
-       later invoker load them from the draft's path. One at a time, so a
-       write that fails ends the writing with one error. -->
+       files service (decision D121): <name>/<name>.scx (its text, fixes
+       applied), <name>/<name>.json (its schemas) and <name>/<name>.js (its
+       script, empty for none), which the chart references by relative URI;
+       the simulation and every later invoker load them from the draft's
+       path. Then its IRP beside them (writing_irp): <name>/irp/README.md,
+       manifest.xml and sources/<id>/test<id>.scxml, one case per test
+       script, which the simulation runs. One at a time, so a write that
+       fails ends the writing with one error. -->
   <state id="writing" initial="writing_scxml">
     <transition event="error.*" target="retry_gate">
       <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
     </transition>
     <state id="writing_scxml">
       <invoke id="write_scxml" type="https://github.com/stateforward/floppy/services/files">
-        <param name="name" expr="draftFile('.scx')"/>
+        <param name="name" expr="storedFile(draftFile('.scx'))"/>
         <param name="text" expr="scxml_text"/>
       </invoke>
       <transition event="done.invoke.write_scxml" target="writing_schemas"/>
     </state>
     <state id="writing_schemas">
       <invoke id="write_schemas" type="https://github.com/stateforward/floppy/services/files">
-        <param name="name" expr="draftFile('.json')"/>
+        <param name="name" expr="storedFile(draftFile('.json'))"/>
         <param name="text" expr="schemasText()"/>
       </invoke>
       <transition event="done.invoke.write_schemas" target="writing_script"/>
     </state>
     <state id="writing_script">
       <invoke id="write_script" type="https://github.com/stateforward/floppy/services/files">
-        <param name="name" expr="draftFile('.js')"/>
+        <param name="name" expr="storedFile(draftFile('.js'))"/>
         <param name="text" expr="draft.script"/>
       </invoke>
-      <transition event="done.invoke.write_script" target="validate">
+      <transition event="done.invoke.write_script" target="writing_irp">
         <!-- Each attempt's draft, by path and digest (decision D226). -->
         <log label="builder.draft" expr="draftLog()"/>
+        <assign location="irp_index" expr="0"/>
+      </transition>
+    </state>
+    <!-- Test scripts out of bounds have no IRP: validate refuses them. -->
+    <state id="writing_irp">
+      <transition cond="hasIrpFile()" target="writing_irp_file"/>
+      <transition target="validate"/>
+    </state>
+    <state id="writing_irp_file">
+      <invoke id="write_irp" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="irpFile().name"/>
+        <param name="text" expr="irpFile().text"/>
+      </invoke>
+      <transition event="done.invoke.write_irp" target="writing_irp">
+        <assign location="irp_index" expr="increment(irp_index)"/>
       </transition>
     </state>
   </state>
@@ -544,7 +569,7 @@
        builder delivers. -->
   <state id="writing_tick">
     <invoke id="write_tick" type="https://github.com/stateforward/floppy/services/files">
-      <param name="name" expr="draftFile('.tick.scx')"/>
+      <param name="name" expr="storedFile(draftFile('.tick.scx'))"/>
       <param name="text" expr="tick_scxml"/>
     </invoke>
     <transition event="done.invoke.write_tick" target="simulate"/>
@@ -578,6 +603,7 @@
       </send>
       <assign location="sim_index" expr="0"/>
       <assign location="sim_results" expr="[]"/>
+      <assign location="irp_index" expr="0"/>
     </onentry>
     <onexit>
       <cancel sendid="simulate-timeout"/>
@@ -590,6 +616,7 @@
     </transition>
 
     <state id="sim_next">
+      <transition cond="isIrpCaseToRun()" target="sim_irp"/>
       <transition cond="allTestsRun()" target="sim_verdict"/>
       <transition cond="isApplyTest()" target="sim_apply"/>
       <transition target="sim_run"/>
@@ -704,6 +731,33 @@
       </transition>
       <transition event="*" cond="isFrom(_event, candidate_id)">
         <assign location="observed" expr="appended(observed, _event.name)"/>
+      </transition>
+    </state>
+
+    <!-- One IRP case the draft's writing wrote, once every test passed: the
+         case runs as a fresh invocation, invokes the draft as its own child
+         by its literal relative path, drives it, and ends in pass or fail,
+         its Outcome, which its donedata carries. -->
+    <state id="sim_irp">
+      <onentry>
+        <if cond="reportsProgress()">
+          <send event="builder.progress" targetexpr="progress_target">
+            <content expr="progressData('simulate')"/>
+          </send>
+        </if>
+        <assign location="sim_error" expr="null"/>
+        <assign location="child_data" expr="null"/>
+      </onentry>
+      <invoke idlocation="candidate_id" type="scxml" srcexpr="irpCasePath()"/>
+      <transition event="done.invoke" cond="isFrom(_event, candidate_id)" target="sim_next">
+        <assign location="child_data" expr="_event.data"/>
+        <assign location="sim_results" expr="nextIrpResults()"/>
+        <assign location="irp_index" expr="increment(irp_index)"/>
+      </transition>
+      <transition event="error.*" cond="isOwnOrCandidateEvent(_event)" target="sim_next">
+        <assign location="sim_error" expr="_event.name"/>
+        <assign location="sim_results" expr="nextIrpResults()"/>
+        <assign location="irp_index" expr="increment(irp_index)"/>
       </transition>
     </state>
 

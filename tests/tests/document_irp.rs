@@ -46,7 +46,9 @@
 //!   directory without it).
 //!
 //! A case passes when `scx run` ends with the root finished (exit 0) and
-//! the run logged `Outcome` `pass`. The run grants each service the
+//! its root session logged `Outcome` `pass` (the IRP cases a document runs
+//! of its own, such as the builder's of a draft, log theirs in sessions
+//! with a parent). The run grants each service the
 //! document tree binds a fresh scratch directory, as the integration tests
 //! do; a case whose document binds the files service (the builder and the
 //! documents that invoke it, decision D121) runs in a scratch copy of
@@ -468,7 +470,19 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
             .map(|(_, text)| text.clone())
             .collect()
     };
-    let outcome = texts("Outcome");
+    // The case's own Outcome: a document it runs may run IRP cases of its
+    // own (the builder runs a draft's), whose logs name the session that
+    // invoked them as their parent.
+    let outcome: Vec<String> = finished
+        .all
+        .iter()
+        .filter(|record| {
+            record["type"] == "log"
+                && record["label"] == "Outcome"
+                && record.get("parent").is_none()
+        })
+        .map(|record| record["text"].as_str().unwrap_or_default().to_owned())
+        .collect();
     let expected = expected_logs(case);
     let unmet: Vec<String> = expected
         .iter()

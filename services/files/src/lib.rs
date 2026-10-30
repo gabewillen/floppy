@@ -1,9 +1,10 @@
 //! The `files` invoked service: reads and writes the files of one directory
 //! the run grants, as a `stateforward:scxml/invoked-service` Wasm component.
 //! The builder bot (`bots/builder/builder.scx`) writes each draft through it
-//! as three documents beside each other, `<name>.scx`, `<name>.json` and
-//! `<name>.js` (decision D121), and reflection reads a stored behavior's
-//! back through it to revise it. It is modeled on scxml.rs's files example
+//! as three documents beside each other, `<name>/<name>.scx`,
+//! `<name>/<name>.json` and `<name>/<name>.js` (decision D121), with its IRP
+//! in `<name>/irp/`, and reflection reads a stored behavior's back through
+//! it to revise it. It is modeled on scxml.rs's files example
 //! service (`scxml.rs/components/scxml-service-files`), with its parameter
 //! names and its result.
 //!
@@ -12,7 +13,7 @@
 //!
 //! ```xml
 //! <invoke type="https://github.com/stateforward/floppy/services/files">
-//!   <param name="name" expr="'GreetOnKnock.scx'"/>
+//!   <param name="name" expr="'GreetOnKnock/GreetOnKnock.scx'"/>
 //!   <param name="text" expr="scxml_text"/>
 //! </invoke>
 //! ```
@@ -25,10 +26,11 @@
 //! * `name` and `text`, both or neither: the name of a file to write and its
 //!   text (a string), written whole (created, or truncated first).
 //!
-//! A name is one plain path component ([`is_file_name`]): non-empty, at most
-//! [`MAX_FILE_NAME_BYTES`] bytes, not `.` or `..`, and free of `/`, `\` and
-//! control characters, so it names a file directly in [`DIRECTORY`] and
-//! never one outside it. Any other parameter is ignored, as the example
+//! A name is a relative path of plain components ([`is_file_name`]): at most
+//! [`MAX_FILE_NAME_BYTES`] bytes, its components separated by `/`, each
+//! non-empty, not `.` or `..`, and free of `\` and control characters, so it
+//! names a file in [`DIRECTORY`] or a directory below it and never one
+//! outside it. A write creates the directories its name names first. Any other parameter is ignored, as the example
 //! ignores it; the last of a parameter given twice wins.
 //!
 //! The directory is the run's grant:
@@ -83,12 +85,13 @@ pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/f
 pub const DIRECTORY: &str = "/behaviors";
 
 /// Upper bound on a file name's bytes (wasm builds only).
-pub const MAX_FILE_NAME_BYTES: usize = wasm_bound(255);
+pub const MAX_FILE_NAME_BYTES: usize = wasm_bound(1024);
 
 /// Why the service rejected its start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FilesError {
-    /// A file name parameter is not text naming one plain path component.
+    /// A file name parameter is not text naming a relative path of plain
+    /// components.
     InvalidName,
     /// `text` is not text, or `name` and `text` are not both given.
     InvalidText,
@@ -126,18 +129,21 @@ pub struct FilesRequest {
     pub write: Option<(String, String)>,
 }
 
-/// Whether `name` is one plain path component: non-empty, at most
-/// [`MAX_FILE_NAME_BYTES`] bytes, not `.` or `..`, and free of `/`, `\` and
-/// control characters, so it names a file directly in [`DIRECTORY`].
+/// Whether `name` is a relative path of plain components: at most
+/// [`MAX_FILE_NAME_BYTES`] bytes, its components separated by `/`, each
+/// non-empty, not `.` or `..`, and free of `\` and control characters, so
+/// it names a file in [`DIRECTORY`] or below it.
 #[must_use]
 pub fn is_file_name(name: &str) -> bool {
-    !name.is_empty()
-        && !exceeds_wasm_bound(name.len(), MAX_FILE_NAME_BYTES)
-        && name != "."
-        && name != ".."
-        && !name
-            .chars()
-            .any(|character| matches!(character, '/' | '\\') || character.is_control())
+    !exceeds_wasm_bound(name.len(), MAX_FILE_NAME_BYTES)
+        && name.split('/').all(|component| {
+            !component.is_empty()
+                && component != "."
+                && component != ".."
+                && !component
+                    .chars()
+                    .any(|character| character == '\\' || character.is_control())
+        })
 }
 
 impl FilesRequest {
@@ -325,6 +331,9 @@ mod guest {
     }
 
     fn write(name: &str, text: &str) -> Result<usize, ComponentError> {
+        if let Some((directories, _)) = name.rsplit_once('/') {
+            std::fs::create_dir_all(super::path(directories)).map_err(|_| filesystem())?;
+        }
         let mut file = std::fs::File::create(super::path(name)).map_err(|_| filesystem())?;
         file.write_all(text.as_bytes()).map_err(|_| filesystem())?;
         Ok(text.len())

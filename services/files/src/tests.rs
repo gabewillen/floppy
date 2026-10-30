@@ -5,12 +5,19 @@ fn parse(parameters: &[(&str, Parameter<'_>)]) -> Result<FilesRequest, FilesErro
 }
 
 #[test]
-fn a_name_is_one_plain_path_component() {
-    for good in ["GreetOnKnock.scx", "a b.json", "x..js", ".hidden"] {
+fn a_name_is_a_relative_path_of_plain_components() {
+    for good in [
+        "GreetOnKnock.scx",
+        "a b.json",
+        "x..js",
+        ".hidden",
+        "a/b",
+        "Greet/irp/sources/100/test100.scxml",
+    ] {
         assert!(is_file_name(good), "{good}");
     }
     for bad in [
-        "", ".", "..", "../x.scx", "a/b", "a\\b", "/abs", "a\nb", "a\0b",
+        "", ".", "..", "../x.scx", "a/../b", "a/./b", "a//b", "a/", "a\\b", "/abs", "a\nb", "a\0b",
     ] {
         assert!(!is_file_name(bad), "{bad:?}");
     }

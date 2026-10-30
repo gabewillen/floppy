@@ -259,11 +259,18 @@ function draftFile(extension) {
   return fileName() + extension;
 }
 
+// A file of the draft's directory, <name>/, as the files service names it
+// in the behaviors directory: every behavior is <name>/<name>.scx with its
+// .json and .js beside it, and its IRP in <name>/irp/.
+function storedFile(file) {
+  return fileName() + '/' + file;
+}
+
 // The path of its .scx, relative to this document and to every document
 // that invokes a learned behavior: each sits two levels below the layout
 // root, whose behaviors directory the run grants the files service.
 function draftPath() {
-  return '../../behaviors/' + draftFile('.scx');
+  return '../../behaviors/' + storedFile(draftFile('.scx'));
 }
 
 function schemasText() {
@@ -271,7 +278,124 @@ function schemasText() {
 }
 
 function writeFailedDiagnostics() {
-  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written as ' + draftFile('.scx') + ', .json and .js (error.execution: no directory granted to the files service, or a name it refuses)'}];
+  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written as ' + storedFile(draftFile('.scx')) + ', .json, .js and its IRP (error.execution: no directory granted to the files service, or a name it refuses)'}];
+}
+
+// The draft's IRP (the W3C SCXML IRP's manifest format and Outcome oracle,
+// as floppy's own documents keep theirs, tests/irp/harness.py): one
+// statement, <name>-1, the specification, and one case per test script,
+// test<id>.scxml with ids from 100, written with the draft as
+// <name>/irp/README.md, <name>/irp/manifest.xml and
+// <name>/irp/sources/<id>/test<id>.scxml.
+function irpFiles() {
+  return draft.tests.map(function (t, i) {
+    return {name: storedFile('irp/sources/' + irpCaseId(i) + '/test' + irpCaseId(i) + '.scxml'), text: irpCase(t, irpCaseId(i))};
+  }).concat([{name: storedFile('irp/manifest.xml'), text: irpManifest()}, {name: storedFile('irp/README.md'), text: irpReadme()}]);
+}
+
+function irpCaseId(index) {
+  return 100 + index;
+}
+
+function irpFile() {
+  return irpFiles()[irp_index];
+}
+
+// Its cases, then the manifest and the README.
+function hasIrpFile() {
+  return hasTestsWithinBounds() && irp_index < draft.tests.length + 2;
+}
+
+function irpStatement() {
+  return String(spec).replace(/\s+/g, ' ').trim();
+}
+
+function xmlText(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function xmlAttribute(text) {
+  return '"' + xmlText(text).replace(/"/g, '&quot;') + '"';
+}
+
+// One test script as an IRP case (a harness document, as harness.py writes
+// one): it invokes the draft as its child by its literal relative path,
+// sends itself harness.go so the child has started, sends the test's events
+// with their delays and harness.waited after its settle time, and expects
+// the test's outputs in order; the child's other events may come between,
+// and a test that expects done expects done.invoke.<name> after them, one
+// that does not expects harness.waited. Anything else (the settle time
+// passing first, the child finishing when it should not, error.*) fails
+// the case. Each final state carries its Outcome as its donedata too, so
+// the builder, which invokes the case, reads it.
+function irpCase(t, id) {
+  var child = fileName();
+  var lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!-- ' + child + '-1: ' + xmlText(t.name).replace(/--/g, '- -') + ' -->',
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">',
+    '<state id="harness" initial="boot">',
+    '  <invoke id=' + xmlAttribute(child) + ' type="scxml" src=' + xmlAttribute('../../../' + draftFile('.scx')) + '/>',
+    '  <state id="boot">',
+    '    <onentry><send event="harness.go"/></onentry>',
+    '    <transition event="harness.go" target="step0"/>',
+    '  </state>',
+    '  <state id="step0">',
+    '    <onentry>'
+  ];
+  t.events.forEach(function (e) {
+    lines.push('      <send event=' + xmlAttribute(e.name) + ' target=' + xmlAttribute('#_' + child) + ' delay=' + xmlAttribute(clampedDelayMs(e) + 'ms') + '><content expr=' + xmlAttribute('(' + JSON.stringify(e.data) + ')') + '/></send>');
+  });
+  lines.push('      <send event="harness.waited" delay=' + xmlAttribute(settleMs(t) + 'ms') + '/>');
+  lines.push('    </onentry>');
+  t.expect_events.forEach(function (name, i) {
+    if (i > 0) {
+      lines.push('  <state id="step' + i + '">');
+    }
+    lines.push('    <transition event=' + xmlAttribute(name) + ' cond=' + xmlAttribute('_event.invokeid === ' + JSON.stringify(child) + ' && _event.name === ' + JSON.stringify(name)) + ' target="step' + (i + 1) + '"/>');
+    lines.push('  </state>');
+  });
+  if (t.expect_events.length > 0) {
+    lines.push('  <state id="step' + t.expect_events.length + '">');
+  }
+  lines.push(t.expect_done ? '    <transition event=' + xmlAttribute('done.invoke.' + child) + ' target="pass"/>' : '    <transition event="harness.waited" target="pass"/>');
+  lines.push('  </state>');
+  lines.push('  <transition event="*" cond=' + xmlAttribute('_event.invokeid === ' + JSON.stringify(child) + ' && _event.name !== ' + JSON.stringify('done.invoke.' + child)) + '/>');
+  lines.push('  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + \' \' + JSON.stringify(_event.data)"/></transition>');
+  return lines.concat([
+    '</state>',
+    '<final id="pass"><onentry><log label="Outcome" expr="\'pass\'"/></onentry><donedata><content expr="\'pass\'"/></donedata></final>',
+    '<final id="fail"><onentry><log label="Outcome" expr="\'fail\'"/></onentry><donedata><content expr="\'fail\'"/></donedata></final>',
+    '</scxml>',
+    ''
+  ]).join('\n');
+}
+
+function irpManifest() {
+  var assertion = fileName() + '-1';
+  return ['<?xml version="1.0"?>',
+    '<!-- The ' + fileName() + ' document\'s implementation report plan: each assertion is a',
+    '     numbered statement of README.md ("Statements"). -->',
+    '<assertions baseuri=' + xmlAttribute('https://github.com/stateforward/floppy/tree/main/behaviors/' + fileName() + '/irp/sources') + '>',
+    '  <assert id="' + assertion + '" specnum="1" specid="#' + assertion + '">',
+    '    <![CDATA[' + irpStatement().replace(/\]\]>/g, ']]]]><![CDATA[>') + ']]>']
+    .concat(draft.tests.map(function (t, i) {
+      var id = irpCaseId(i);
+      return '    <test id="' + id + '" conformance="mandatory" manual="false">\n      <start uri="' + id + '/test' + id + '.scxml"/>\n    </test>';
+    }), ['  </assert>', '</assertions>', '']).join('\n');
+}
+
+function irpReadme() {
+  var name = fileName();
+  return '# `' + name + '` implementation report plan\n\n'
+    + 'The implementation report plan of [`' + name + '.scx`](../' + name + '.scx), written by the builder: the W3C SCXML IRP\'s\n'
+    + 'manifest format and `Outcome` oracle over the document\'s numbered\n'
+    + 'statements below, one assertion each in [`manifest.xml`](manifest.xml),\n'
+    + 'tested by the harness documents in [`sources/`](sources), one per test script\n'
+    + 'of the build. Each harness invokes the document as its child, drives it, and\n'
+    + 'ends in `pass` (logging `Outcome` `pass`) or `fail`.\n\n'
+    + '## Statements\n\n'
+    + '- <a id="' + name + '-1"></a>**' + name + '-1**. ' + irpStatement() + '\n';
 }
 
 // validate
@@ -496,9 +620,10 @@ function simulateLog() {
   return sim_tests.length + ' test script(s)';
 }
 
-// The longest simulation validate admits plus a margin.
+// The longest simulation validate admits, its tests and then their IRP
+// cases, plus a margin.
 function simulateTimeoutDelay() {
-  return delay(max_tests * sim_test_cap_ms + 60000);
+  return delay(2 * max_tests * sim_test_cap_ms + 60000);
 }
 
 function simulateTimeoutDiagnostics() {
@@ -519,7 +644,7 @@ function currentTest() {
 
 // The forced tick runs the routine's copy (decision D153), every other test the draft.
 function testPath() {
-  return isTickTest() ? '../../behaviors/' + draftFile('.tick.scx') : draftPath();
+  return isTickTest() ? '../../behaviors/' + storedFile(draftFile('.tick.scx')) : draftPath();
 }
 
 function currentTestEvents() {
@@ -530,13 +655,21 @@ function candidateTarget() {
   return '#_' + candidate_id;
 }
 
+function clampedDelayMs(step) {
+  return Math.min(Math.max(step.delay_ms, 0), 60000);
+}
+
 function stepDelay(step) {
-  return delay(Math.min(Math.max(step.delay_ms, 0), 60000));
+  return delay(clampedDelayMs(step));
 }
 
 // The settle time: the script's settle_ms, after its last event, within sim_test_cap_ms.
+function settleMs(t) {
+  return Math.min(sim_test_cap_ms, Math.max.apply(null, [1, t.settle_ms].concat(t.events.map(function (e) { return e.delay_ms + 1; }))));
+}
+
 function settleDelay() {
-  return delay(Math.min(sim_test_cap_ms, Math.max.apply(null, [1, currentTest().settle_ms].concat(currentTest().events.map(function (e) { return e.delay_ms + 1; })))));
+  return delay(settleMs(currentTest()));
 }
 
 function isOwnOrCandidateEvent(_event) {
@@ -597,6 +730,23 @@ function applyError() {
   return sim_error === null ? null : withoutInvokeId(sim_error, candidate_id);
 }
 
+// sim_irp
+
+// Once every test (and the forced tick or live turn) passed, each IRP case
+// the writing wrote runs, until one fails.
+function isIrpCaseToRun() {
+  return allTestsRun() && allTestsPassed() && irp_index < draft.tests.length;
+}
+
+function irpCasePath() {
+  return '../../behaviors/' + storedFile('irp/sources/' + irpCaseId(irp_index) + '/test' + irpCaseId(irp_index) + '.scxml');
+}
+
+// sim_results with the IRP case's result: passed when it ended in pass.
+function nextIrpResults() {
+  return sim_results.concat([{name: 'test' + irpCaseId(irp_index), invokeid: candidate_id, passed: sim_error === null && child_data === 'pass', outcome: sim_error === null ? child_data : null, error: sim_error === null ? null : withoutInvokeId(sim_error, candidate_id)}]);
+}
+
 // sim_check
 
 // sim_results with the current test's result: expect_events in order
@@ -642,7 +792,16 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.outcome !== undefined ? [irpDiagnostic(r)] : r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+}
+
+// An IRP case that did not end in pass, though its test passed: the case
+// expects the test's outputs in order with no error between and fails on
+// anything else it receives (an error.* of its own, such as a send of a
+// test event the draft's schema refuses).
+function irpDiagnostic(r) {
+  var t = draft.tests[Number(r.name.slice(4)) - 100];
+  return {kind: 'simulate', code: 'test-failed', message: 'IRP case ' + r.name + ' (' + storedFile('irp/sources/' + r.name.slice(4) + '/' + r.name + '.scxml') + ') of test ' + t.name + ' ended ' + (r.error !== null ? 'with error ' + r.error : 'in ' + r.outcome) + ': it expected the outputs ' + JSON.stringify(t.expect_events) + ' in order and done=' + t.expect_done + ', and fails on any other event it receives that the draft did not send'};
 }
 
 // A test's error event name without the candidate's generated invoke id
