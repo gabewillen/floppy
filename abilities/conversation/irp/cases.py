@@ -14,6 +14,23 @@ DB = "'/memory/floppy.sqlite'"
 # Memory under a loaded host can outlast the default 5 s bound: cases
 # that reach the sql service wait longer (the bound itself loses every race to an in-process child: no case can make it fire).
 MEMORY = [memory(DB), ("memory_timeout_ms", "600000")]
+# Every commit with words is also a short-term memory turn sent to the
+# parent (decision D251): a case that expects none drops them.
+STM = "bot.ability.memory.stm.turn"
+_case = S.case
+
+
+def _expects(steps, event):
+    return any(isinstance(item, type(expect(event))) and item.event == event
+               for step in steps for item in (step if isinstance(step, list) else [step]))
+
+
+def _dropping_stm(test_id, number, comment, steps, ignore=(), **options):
+    ignore = list(ignore) + ([] if _expects(steps, STM) else [STM])
+    return _case(test_id, number, comment, steps, ignore=ignore, **options)
+
+
+S.case = _dropping_stm
 
 AMBIENT = 'relationship-{"identity_groups":[[],["alice"]]}'
 ALICE_BOT = 'relationship-{"identity_groups":[["alice"],["bot"]]}'
@@ -256,3 +273,25 @@ S.case(223, 13, "a database the memory cannot open fails a voice at the memory s
         expect(FAILED, "_event.data.stage === 'memory' && typeof _event.data.message === 'string' && _event.data.message.length > 0")]
        + snapshot([]),
        params=[memory("'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")
+
+S.statement(14, "Every committed message with words is also written to the short-term register (decision D251), as mosfet.py's Conversation writes it: `bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` sent to the parent before the commit's handoff or answer. An inbound text commit is a `heard` turn, speakers its turn's source participants; an outbound append a `said` one, speakers the source participants its append stamps. id is the message's provenance id, else its turn_ref, else the committing event's name; conversation is the conversation's session id; the words are cut by `<memory:cut_at_word>`. A commit that is not text, or only white space, and an append already committed write nothing.")
+
+STM_ALICE = "JSON.stringify(_event.data.speakers) === JSON.stringify([{ref: 'alice', role: 'source'}])"
+
+S.case(230, 14, "the heard input and the said reply each write a short-term memory turn before their handoff and answer.",
+       [READY, say("hello there"),
+        expect(STM, "_event.data.direction === 'heard' && _event.data.id === 'input-1:turn:alice' && _event.data.text === 'hello there'"
+                    " && _event.data.cut === false && " + STM_ALICE
+                    + " && typeof _event.data.conversation === 'string' && _event.data.conversation.length > 0"),
+        committed("hello there"),
+        outbound("hi alice", "r-1", participants=[{"ref": "bot", "role": "source"}, {"ref": "alice", "role": "target"}]),
+        expect(STM, "_event.data.direction === 'said' && _event.data.id === 'r-1' && _event.data.text === 'hi alice' && _event.data.cut === false"
+                    " && JSON.stringify(_event.data.speakers) === JSON.stringify([{ref: 'bot', role: 'source'}])"),
+        exchange(2)])
+# These keep the short-term memory turns: one would fail the case.
+_case(231, 14, "a commit that is not text, and an append already committed, write no short-term memory turn.",
+      [READY, send(INPUT, js({"source_ids": ["alice"], "target_ids": [], "content": "AAAA", "content_type": "Audio/PCM",
+                              "sample_rate_hz": 16000, "channels": 1})),
+       exchange(1, "_event.data.messages[0].content === null"),
+       outbound("once", "r-1", source="q"), expect(STM, "_event.data.direction === 'said' && _event.data.text === 'once'"),
+       exchange(2), outbound("once", "r-1", source="q"), exchange(2)])

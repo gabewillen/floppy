@@ -298,12 +298,13 @@ D33 to D43.
 ### Builder output
 
 A builder-produced behavior or routine is three documents beside each
-other (decision D121): `<name>.scx` (its structure), `<name>.json` (its
-input events' schemas, `$defs` keyed by event) and `<name>.js` (its
-ECMAScript, or empty), which the builder writes through `services/files`
-into the run's behaviors directory (`behaviors/`, beside `bots/` and
-`abilities/`). Its inventory row's `bot_behavior.source` is the path of
-the `.scx`, `../../behaviors/<name>.scx`, and it runs as an SCXML child
+other (decision D121): `<name>/<name>.scx` (its structure),
+`<name>/<name>.json` (its input events' schemas, `$defs` keyed by event)
+and `<name>/<name>.js` (its ECMAScript, or empty), with its IRP in
+`<name>/irp/` (decision D278), which the builder writes through
+`services/files` into the run's behaviors directory (`behaviors/`, beside
+`bots/` and `abilities/`). Its inventory row's `bot_behavior.source` is
+the path of the `.scx`, `../../behaviors/<name>/<name>.scx`, and it runs as an SCXML child
 invoked by that path (`<invoke id srcexpr="source">`), the one exception
 to the literal relative `src` rule. scxml.rs loads a `srcexpr` child's
 schema files and scripts against its own base URI, as it is when invoked,

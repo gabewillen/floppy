@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- conversation-14: a commit that is not text, and an append already committed, write no short-term memory turn. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="conversation" type="scxml" src="../../../conversation.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.conversation.input" target="#_conversation"><content expr='{"source_ids": ["alice"], "target_ids": [], "content": "AAAA", "content_type": "Audio/PCM", "sample_rate_hz": 16000, "channels": 1}'/></send>
+    </onentry>
+    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1 &amp;&amp; _event.data.messages[0].content === null" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.turn" cond="_event.data.direction === 'said' &amp;&amp; _event.data.text === 'once'" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 2" target="step4"/>
+  </state>
+  <state id="step4">
+    <onentry>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
+    </onentry>
+    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 2" target="step5"/>
+  </state>
+  <state id="step5">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
