@@ -2189,77 +2189,11 @@ fn inline_content_children_become_a_standalone_child_document() {
     );
 }
 
-/// SCXML 3.12.2: "Once the SCXML processor has begun executing a
-/// well-formed SCXML document, it MUST signal any errors that occur by
-/// raising SCXML events whose names begin with 'error.'." A generated
-/// invoke id (`<state>.<n>`, SCXML 6.4.1) longer than the 1024-byte name
-/// bound cannot be represented: that `<invoke>` raises `error.execution`
-/// and starts nothing; the session runs on.
-#[test]
-fn a_generated_invoke_id_over_the_name_bound_raises_error_execution() {
-    // 1,023 bytes: the state id fits; `.0` makes the generated id 1,025
-    // bytes.
-    let state = format!("s{}", "x".repeat(1_022));
-    assert_eq!(state.len(), 1_023);
-    let mut caps = Mock::default();
-    caps.documents
-        .insert("file:child.scxml".into(), CHILD.into());
-    let session = Session::started(
-        machine(
-            &format!(r#"initial="{state}""#),
-            &format!(
-                r#"<state id="{state}">
-                     <invoke src="file:child.scxml"/>
-                     <transition event="error.execution" target="exec"/>
-                   </state>
-                   <final id="exec"/>"#
-            ),
-        ),
-        caps,
-    );
-    assert_eq!(session.active(), ["exec"]);
-    assert!(session.caps.invocations.is_empty());
-}
-
-/// A generated invoke id that fits the name bound but whose
-/// `done.invoke.<id>` event (SCXML 6.4: the service "MUST return a special
-/// event 'done.invoke.id'") would not could never report that it finished:
-/// that `<invoke>` raises `error.execution` (SCXML 3.12.2) and starts
-/// nothing; the session runs on.
-#[test]
-fn a_generated_invoke_id_whose_done_event_exceeds_the_name_bound_raises_error_execution() {
-    // 1,011 bytes: `.0` makes a 1,013-byte id, and `done.invoke.` a
-    // 1,025-byte event name.
-    let state = format!("s{}", "x".repeat(1_010));
-    assert_eq!(state.len(), 1_011);
-    let mut caps = Mock::default();
-    caps.documents
-        .insert("file:child.scxml".into(), CHILD.into());
-    let session = Session::started(
-        machine(
-            &format!(r#"initial="{state}""#),
-            &format!(
-                r#"<state id="{state}">
-                     <invoke src="file:child.scxml"/>
-                     <transition event="error.execution" target="exec"/>
-                   </state>
-                   <final id="exec"/>"#
-            ),
-        ),
-        caps,
-    );
-    assert_eq!(session.active(), ["exec"]);
-    assert!(session.caps.invocations.is_empty());
-}
-
 /// A generated invoke id is `<state>.<n>` (SCXML 6.4.1 `stateid.platformid`)
-/// and carries no session id, so a state id whose `done.invoke.<id>` event
-/// just fits the 1024-byte name bound still invokes.
+/// and has no length bound, so a long state id still invokes.
 #[test]
-fn a_generated_invoke_id_whose_done_event_fits_the_name_bound_starts() {
-    // 1,010 bytes: `.0` makes a 1,012-byte id, and `done.invoke.` a
-    // 1,024-byte event name.
-    let state = format!("s{}", "x".repeat(1_009));
+fn a_generated_invoke_id_of_any_length_starts() {
+    let state = format!("s{}", "x".repeat(4_096));
     let mut caps = Mock::default();
     caps.documents
         .insert("file:child.scxml".into(), CHILD.into());
@@ -2305,8 +2239,8 @@ fn invocation_failures_raise_error_execution_and_start_nothing() {
     let session = Session::started(invoking_machine(r#"<invoke src="file:x"/>"#), caps);
     assert_eq!(session.active(), ["exec"]);
     // Compiled child IR that does not decode, or that decodes but fails
-    // Machine IR validation (a `<raise>` event over the 1024-byte name
-    // bound): the invocation fails (SCXML 3.12.2), the session goes on.
+    // Machine IR validation (a `<raise>` event that is not a name): the
+    // invocation fails (SCXML 3.12.2), the session goes on.
     let named = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="c"><state id="c"><onentry><raise event="NAME"/></onentry></state></scxml>"#;
     let named = lower(
         &parse_xml(SourceText::new(NAMED_CHILD_SOURCE, "named", named)).expect("child parses"),
@@ -2314,11 +2248,11 @@ fn invocation_failures_raise_error_execution_and_start_nothing() {
     .expect("child lowers")
     .to_json()
     .expect("child IR encodes");
-    let over_bound = String::from_utf8(named)
+    let not_a_name = String::from_utf8(named)
         .expect("IR JSON is UTF-8")
-        .replace("\"NAME\"", &format!("\"{}\"", "e".repeat(1025)))
+        .replace("\"NAME\"", "\"e e\"")
         .into_bytes();
-    for compiled in [b"not machine IR".to_vec(), over_bound] {
+    for compiled in [b"not machine IR".to_vec(), not_a_name] {
         let mut caps = Mock::default();
         caps.documents.insert("file:x".into(), CHILD.into());
         caps.compiled_ir = Some(compiled);

@@ -519,14 +519,12 @@ test('a child the page does not pre-lower fails the invocation with error.execut
 });
 
 test('page child IR that fails Machine IR validation fails the <invoke> with error.execution, as under Wasmtime', async () => {
-  // SCXML 3.12.2: the machine decodes and validates the page's IR; a
-  // <raise> event over the 1024-byte name bound fails that invocation only.
+  // SCXML 3.12.2: the machine decodes and validates the page's IR; an
+  // empty <raise> event name fails that invocation only.
   const named = await compile(
     document('ecmascript', '<state id="c"><onentry><raise event="NAME"/></onentry></state>', ' initial="c"'),
   );
-  const overBound = new TextEncoder().encode(
-    new TextDecoder().decode(named).replace('"NAME"', `"${'e'.repeat(1025)}"`),
-  );
+  const invalid = new TextEncoder().encode(new TextDecoder().decode(named).replace('"NAME"', '""'));
   const { session } = await open(
     'ecmascript',
     document(
@@ -543,7 +541,7 @@ test('page child IR that fails Machine IR validation fails the <invoke> with err
     {
       capabilities: {
         loadDocument: () => 'unused: the page compiles every child',
-        compileInvocation: () => overBound,
+        compileInvocation: () => invalid,
       },
     },
   );
@@ -576,8 +574,8 @@ test("a invoked session's work is charged to the invoking command; exhaustion fa
 
 test('one host call spends one fuel budget across every child start it carries out, as under Wasmtime', async () => {
   // A child whose start runs a script costing about 0.6 of the budget
-  // below: with the root's own start, one child costs about 11.7 million
-  // charges of 20 million.
+  // below: with the root's own start, one child costs about 7 million
+  // charges of 11 million.
   const burning = document(
     'ecmascript',
     `<state id="c0"><onentry><script>function burn(){var x=0;for(var i=0;i&lt;50000;i++){x+=i}return x}var y=0;for(var j=0;j&lt;7;j++){y+=burn()}</script></onentry></state>`,
@@ -587,7 +585,7 @@ test('one host call spends one fuel budget across every child start it carries o
     const { session } = await open(
       'ecmascript',
       document('ecmascript', `<state id="r0">${'<invoke src="file:burn.scxml"/>'.repeat(invokes)}</state>`, ' initial="r0"'),
-      { fuel: 20_000_000, capabilities: { loadDocument: () => burning } },
+      { fuel: 11_000_000, capabilities: { loadDocument: () => burning } },
     );
     try {
       return session.start().activeConfiguration;
@@ -973,7 +971,7 @@ test('without invokeLimits no invoke bound applies: 9 nested levels and 65 invok
 
 // Invocations nested inside their invoking calls overflowed this host's
 // stack between 100 and 300 levels; these chains run past that.
-test('a chain of invocations runs from the host loop, not nested calls: 300 levels, and self-invocation until the session id name bound, as under Wasmtime', async () => {
+test('a chain of invocations runs from the host loop, not nested calls: 300 levels, and self-invocation with no depth limit, as under Wasmtime', async () => {
   // 300 nested levels without invokeLimits (the null data model, so the
   // one host call's fuel budget holds them all): each child starts after
   // its invoking session's call suspended, so the depth takes no stack.
@@ -998,14 +996,13 @@ test('a chain of invocations runs from the host loop, not nested calls: 300 leve
   // gives): the deepest is the root's id and `.k` per level.
   assert.ok(sessions.has(`machine-session${'.k'.repeat(depth)}`), [...sessions].slice(0, 3).join());
   deep.session.dispose();
-  // A document that invokes itself without end, with no invokeLimits:
-  // SCXML 6.4 sets no depth and the host refuses no <invoke>; each level
-  // adds its generated invoke id (`.c.0`) to the session id, so the chain
-  // grows until the next child's id would exceed the 1024-byte name bound
-  // (that <invoke> raises error.execution), never a stack overflow that
-  // loses the instance: `machine-session.a.0` (19 bytes), then 251 levels.
-  const self = `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="null"><state id="c"><invoke src="file:child.scxml"/></state></scxml>`;
-  const unbounded = await open('null', document('null', '<state id="a"><invoke src="file:child.scxml"/></state>'), {
+  // A document that invokes itself until its own session id is 1,020 bytes
+  // or longer, with no invokeLimits: SCXML 6.4 sets no depth and the host
+  // refuses no <invoke>; each level adds its generated invoke id (`.c.0`)
+  // to the session id, never a stack overflow that loses the instance:
+  // `machine-session.a.0` (19 bytes), then 251 levels.
+  const self = `<scxml xmlns="${SCXML_NS}" version="1.0" datamodel="ecmascript"><state id="c"><transition cond="_sessionid.length &gt; 1019" target="f"/><invoke src="file:child.scxml"/></state><final id="f"/></scxml>`;
+  const unbounded = await open('ecmascript', document('ecmascript', '<state id="a"><invoke src="file:child.scxml"/></state>'), {
     trace: true,
     maxCommands: 4000,
     capabilities: { loadDocument: () => self },
@@ -1014,7 +1011,7 @@ test('a chain of invocations runs from the host loop, not nested calls: 300 leve
   const chain = new Set(unbounded.session.trace().entries.map((entry) => entry.session));
   const deepest = `machine-session.a.0${'.c.0'.repeat(251)}`;
   assert.equal(deepest.length, 1023);
-  assert.equal(chain.size, 1 + 1 + 251, 'the root and every level the name bound admits');
+  assert.equal(chain.size, 1 + 1 + 251, 'the root and every level');
   assert.ok(chain.has(deepest));
   unbounded.session.dispose();
 });
@@ -1148,9 +1145,7 @@ test('the command budget and trace follow the Wasmtime session host', async () =
 });
 
 /**
- * `body` run `outer` × `inner` times. The machine bounds one `<foreach>`
- * array (10,000 items) and the effects of one step, so the loops nest and
- * the work spreads over several results.
+ * `body` run `outer` × `inner` times, as two nested `<foreach>` loops.
  */
 const repeated = (outer, inner, body) =>
   `<foreach array="Array.from({length: ${outer}}, (_, n) => n)" item="i"><foreach array="Array.from({length: ${inner}}, (_, n) => n)" item="j">${body}</foreach></foreach>`;

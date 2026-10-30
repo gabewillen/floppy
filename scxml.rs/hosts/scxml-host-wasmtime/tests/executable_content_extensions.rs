@@ -361,7 +361,7 @@ fn a_extension_reads_the_executing_session_snapshot_only_during_execution() {
             "point": "executable-content"
         })
     );
-    let root = &doc["snapshot"]["root"];
+    let root = &doc["snapshot"]["sessions"][0];
     assert_eq!(root["session_id"], "root");
     assert_eq!(root["status"], "running");
     assert_eq!(
@@ -386,7 +386,7 @@ fn a_extension_reads_the_executing_session_snapshot_only_during_execution() {
         ]
     );
     let full: serde_json::Value = serde_json::from_str(full).expect("JSON");
-    let variables = full["snapshot"]["root"]["data_model"]
+    let variables = full["snapshot"]["sessions"][0]["data_model"]
         .as_array()
         .expect("the data model is included unless excluded");
     assert!(
@@ -446,7 +446,7 @@ fn checkpoint(text: &str, session_id: &str) -> serde_json::Value {
     assert_eq!(doc["options"]["trace_context"], "strip");
     let exclude = doc["options"]["exclude"].as_array().expect("exclude");
     assert!(exclude.contains(&"invocations".into()) && exclude.contains(&"previews".into()));
-    assert_eq!(doc["snapshot"]["root"]["session_id"], session_id);
+    assert_eq!(doc["snapshot"]["sessions"][0]["session_id"], session_id);
     doc
 }
 
@@ -506,7 +506,7 @@ fn a_extension_reads_another_session_of_the_run_by_its_send_target() {
     let (byid, byaddress) = (text("byid"), text("byaddress"));
     assert_eq!(byid, byaddress, "both addresses name the same session");
     let kid = checkpoint(&byid, "root.kid");
-    let root = &kid["snapshot"]["root"];
+    let root = &kid["snapshot"]["sessions"][0];
     assert_eq!(
         root["configuration"],
         serde_json::json!({"atomic": ["k0"], "full": ["k0"]})
@@ -521,14 +521,18 @@ fn a_extension_reads_another_session_of_the_run_by_its_send_target() {
     );
     let parent = checkpoint(&text("up"), "root");
     assert!(
-        parent["snapshot"]["root"]["data_model"]
+        parent["snapshot"]["sessions"][0]["data_model"]
             .as_array()
             .expect("the data model")
             .iter()
             .any(|variable| variable["name"] == "flag")
     );
     let sibling = checkpoint(&text("sib"), "root.kid");
-    assert!(sibling["snapshot"]["root"].get("data_model").is_none());
+    assert!(
+        sibling["snapshot"]["sessions"][0]
+            .get("data_model")
+            .is_none()
+    );
 }
 
 /// A target that is malformed, names no session of the run, or names one
@@ -682,7 +686,7 @@ fn a_extension_reads_the_snapshot_in_a_compound_state_entry_content() {
         "the document is canonical and consistent: {doc}"
     );
     let doc: serde_json::Value = serde_json::from_str(doc).expect("JSON");
-    let root = &doc["snapshot"]["root"];
+    let root = &doc["snapshot"]["sessions"][0];
     assert_eq!(
         root["configuration"],
         serde_json::json!({"atomic": [], "full": ["outer"]}),

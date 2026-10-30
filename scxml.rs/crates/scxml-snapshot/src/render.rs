@@ -385,23 +385,16 @@ pub fn render_show(document: &Document, color: Color) -> String {
         &format!("exclude {}, trace_context {policy}", list(&exclude)),
     );
     let now_ms = document.snapshot.clock.now_ms;
-    show_session(&mut out, &document.snapshot.root, "root", now_ms);
-    show_invoked(&mut out, &document.snapshot.root, "", now_ms);
-    out.text
-}
-
-/// Renders every session `parent` invoked, in pre-order, each titled by
-/// its invoke-id path (`a`, `a/x`).
-fn show_invoked(out: &mut Out, parent: &Session, prefix: &str, now_ms: u64) {
-    for invocation in parent.invocations.iter().flatten() {
-        let path = if prefix.is_empty() {
-            invocation.invoke_id.clone()
-        } else {
-            format!("{prefix}/{}", invocation.invoke_id)
+    let paths = document.snapshot.paths();
+    for (index, session) in document.snapshot.sessions.iter().enumerate() {
+        // Each invoked session is titled by its invoke-id path (`a`, `a/x`).
+        let path = match paths.get(index) {
+            Some(path) if index > 0 => path.join("/"),
+            _ => "root".to_owned(),
         };
-        show_session(out, &invocation.session, &path, now_ms);
-        show_invoked(out, &invocation.session, &path, now_ms);
+        show_session(&mut out, session, &path, now_ms);
     }
+    out.text
 }
 
 #[allow(

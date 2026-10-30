@@ -529,10 +529,9 @@ fn untrusted_ir_list_items_hold_no_white_space() {
 }
 
 /// Every name the engine turns into an event name, send ID, or invoke ID is
-/// a valid name (non-empty, no white space, at most 1,024 bytes), and so is
-/// every `done.state.<ID>` and `done.invoke.<ID>` event the machine will
-/// raise: untrusted IR that breaks one is refused when it is decoded, on
-/// every build, instead of failing the session when the machine reaches it.
+/// a valid name (non-empty, no white space, of any length): untrusted IR
+/// that breaks one is refused when it is decoded, on every build, instead of
+/// failing the session when the machine reaches it.
 #[test]
 fn untrusted_ir_names_are_checked_when_decoded() {
     let decode = |ir: &MachineIr| {
@@ -544,64 +543,54 @@ fn untrusted_ir_names_are_checked_when_decoded() {
         )))
         .expect("fixture lowers")
     };
-    let long = "x".repeat(1_025);
+    let long = "x".repeat(4_096);
+    let spaced = "a b".to_owned();
 
     let atomic = lowered(r#"<state id="s"/>"#);
-    for id in [long.clone(), "a b".to_owned()] {
-        let mut ir = atomic.clone();
-        ir.states[0].id = Some(id);
-        assert_eq!(decode(&ir), Err(LowerError::InvalidName("state id")));
-    }
-
-    // A state that can complete raises `done.state.<ID>`: 11 more bytes.
+    let mut ir = atomic.clone();
+    ir.states[0].id = Some(spaced.clone());
+    assert_eq!(decode(&ir), Err(LowerError::InvalidName("state id")));
+    // A state that can complete raises `done.state.<ID>` of any length.
     let compound = lowered(r#"<state id="s"><final id="f"/></state>"#);
     let mut ir = compound.clone();
-    ir.states[0].id = Some("x".repeat(1_013));
+    ir.states[0].id = Some(long.clone());
     ir.initial.targets.clone_from(&compound.initial.targets);
     assert!(
         decode(&ir).is_ok(),
-        "a 1,013-byte ID leaves room for its done event"
-    );
-    ir.states[0].id = Some("x".repeat(1_014));
-    assert_eq!(
-        decode(&ir),
-        Err(LowerError::InvalidName("state done event"))
-    );
-    let mut atomic_long = atomic.clone();
-    atomic_long.states[0].id = Some("x".repeat(1_014));
-    assert!(
-        decode(&atomic_long).is_ok(),
-        "an atomic state raises no done event"
+        "a long ID and its done event are valid"
     );
 
     let actions = lowered(
         r#"<state id="s"><onentry><raise event="r"/><send event="e" id="i"/></onentry><invoke id="k" src="c.scxml"/></state>"#,
     );
-    let mut ir = actions.clone();
-    if let ExecutableContentIr::Raise { event, .. } = &mut ir.states[0].onentry[0].actions[0] {
-        event.clone_from(&long);
-    }
-    assert_eq!(decode(&ir), Err(LowerError::InvalidName("raise event")));
-    for (field, name) in [("send event", long.clone()), ("send id", long.clone())] {
+    for name in [&spaced, &long] {
+        let valid = name == &long;
         let mut ir = actions.clone();
-        if let ExecutableContentIr::Send { value } = &mut ir.states[0].onentry[0].actions[1] {
-            if field == "send event" {
-                value.event = Some(name);
+        if let ExecutableContentIr::Raise { event, .. } = &mut ir.states[0].onentry[0].actions[0] {
+            event.clone_from(name);
+        }
+        assert_eq!(decode(&ir).is_ok(), valid, "raise event {}", name.len());
+        for field in ["send event", "send id"] {
+            let mut ir = actions.clone();
+            if let ExecutableContentIr::Send { value } = &mut ir.states[0].onentry[0].actions[1] {
+                if field == "send event" {
+                    value.event = Some(name.clone());
+                } else {
+                    value.id = Some(name.clone());
+                }
+            }
+            if valid {
+                assert!(decode(&ir).is_ok(), "{field}");
             } else {
-                value.id = Some(name);
+                assert_eq!(decode(&ir), Err(LowerError::InvalidName(field)));
             }
         }
-        assert_eq!(decode(&ir), Err(LowerError::InvalidName(field)));
+        let mut ir = actions.clone();
+        ir.states[0].invokes[0].id = Some(name.clone());
+        if valid {
+            assert!(decode(&ir).is_ok(), "a long invoke id and its done event");
+        } else {
+            assert_eq!(decode(&ir), Err(LowerError::InvalidName("invoke id")));
+        }
     }
-    let mut ir = actions.clone();
-    ir.states[0].invokes[0].id = Some(long);
-    assert_eq!(decode(&ir), Err(LowerError::InvalidName("invoke id")));
-    // An invoke raises `done.invoke.<ID>`: 12 more bytes.
-    ir.states[0].invokes[0].id = Some("x".repeat(1_012));
-    assert!(decode(&ir).is_ok());
-    ir.states[0].invokes[0].id = Some("x".repeat(1_013));
-    assert_eq!(
-        decode(&ir),
-        Err(LowerError::InvalidName("invoke done event"))
-    );
 }

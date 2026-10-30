@@ -43,10 +43,6 @@
 
 use std::fmt;
 
-/// Maximum `<param>`/`namelist` entries accepted by `start-invoked`; the
-/// WIT `named-value` list bound.
-pub const MAX_INVOCATION_PARAMETERS: usize = scxml_types::MAX_SEND_MESSAGE_PARAMS;
-
 /// Typed failure of loading untrusted Machine IR at session construction.
 ///
 /// Each variant maps to one closed WIT `error-code` and one static detail, so
@@ -206,15 +202,7 @@ impl fmt::Display for MachineBoundaryError {
 
 impl std::error::Error for MachineBoundaryError {}
 
-#[derive(Clone, Copy)]
-#[cfg(any(target_arch = "wasm32", test))]
-struct BoundaryEvent<'a> {
-    name: &'a str,
-    send_id: Option<&'a str>,
-    invoke_id: Option<&'a str>,
-}
-
-#[cfg(any(target_arch = "wasm32", test))]
+#[cfg(target_arch = "wasm32")]
 fn checked_value_bytes(
     value: &str,
     maximum: usize,
@@ -225,19 +213,6 @@ fn checked_value_bytes(
     } else {
         Ok(value.len())
     }
-}
-
-/// Checks an event's names. Its data, `raw`, and metadata have no byte
-/// bound (SCXML sets none).
-#[cfg(any(target_arch = "wasm32", test))]
-fn validate_event_boundary(event: BoundaryEvent<'_>) -> Result<(), MachineBoundaryError> {
-    for value in [Some(event.name), event.send_id, event.invoke_id]
-        .into_iter()
-        .flatten()
-    {
-        checked_value_bytes(value, scxml_types::MAX_NAME_BYTES, MachineInputKind::Name)?;
-    }
-    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -502,7 +477,7 @@ fn gate_snapshot(
 enum EngineFailureClass {
     /// Malformed IR input (`invalid-input`).
     InvalidInput,
-    /// A queue or per-command effect bound is full (`capacity-exhausted`).
+    /// The internal queue or the effect count is full (`capacity-exhausted`).
     CapacityExhausted,
     /// A lifecycle or effect-protocol contract was broken (`protocol`).
     Protocol,
@@ -640,10 +615,10 @@ mod guest {
     use std::cell::{Cell, RefCell};
 
     use super::{
-        BoundaryEvent, Engine, IrLoadError, LastCall, LifecycleRejection, MachineBoundaryError,
-        MachineInputKind, SessionCommand, SessionLifecycle, SessionStart, Stability,
-        check_sent_provenance, checked_value_bytes, child_event_trace_context, gate_session,
-        gate_snapshot, telemetry_traceparent, validate_event_boundary,
+        Engine, IrLoadError, LastCall, LifecycleRejection, MachineBoundaryError, MachineInputKind,
+        SessionCommand, SessionLifecycle, SessionStart, Stability, check_sent_provenance,
+        checked_value_bytes, child_event_trace_context, gate_session, gate_snapshot,
+        telemetry_traceparent,
     };
     use scxml_compiler_core::XmlNodeIr;
     use scxml_engine::interpret::{
@@ -748,15 +723,8 @@ mod guest {
         fn new(session_id: String, capabilities: MachineCapabilities) -> Self {
             let input_bytes = metric(session_id.len());
             let state = SessionState::new(session_id.clone());
-            let session = checked_value_bytes(
-                &session_id,
-                scxml_types::MAX_NAME_BYTES,
-                MachineInputKind::Name,
-            )
-            .and_then(|_| {
-                SessionId::new(session_id)
-                    .map_err(|_| MachineBoundaryError::InvalidValue(MachineInputKind::Name))
-            });
+            let session = SessionId::new(session_id)
+                .map_err(|_| MachineBoundaryError::InvalidValue(MachineInputKind::Name));
             let (engine, failure, outcome) = match session {
                 Ok(_) => match load_engine(&capabilities) {
                     Ok(engine) => (Some(engine), None, Outcome::Ok),
@@ -1980,8 +1948,7 @@ mod guest {
     }
 
     /// Validates a `start-invoked` context: the parent's session id, the
-    /// invoke id, and at most [`super::MAX_INVOCATION_PARAMETERS`] bounded
-    /// parameters.
+    /// invoke id, and bounded parameters.
     fn to_invocation(
         context: InvocationContext,
     ) -> Result<
@@ -1996,17 +1963,11 @@ mod guest {
             .map_err(|_| error(ErrorCode::InvalidInput, "parent session id is invalid"))?;
         scxml_types::InvokeId::new(context.invoke_id.clone())
             .map_err(|_| error(ErrorCode::InvalidInput, "invoke id is invalid"))?;
-        if context.parameters.len() > super::MAX_INVOCATION_PARAMETERS {
-            return Err(error(
-                ErrorCode::PayloadTooLarge,
-                "invocation parameters exceed their count bound",
-            ));
-        }
         let parameters = context
             .parameters
             .into_iter()
             .map(|parameter| {
-                if parameter.name.is_empty() || parameter.name.len() > scxml_types::MAX_NAME_BYTES {
+                if parameter.name.is_empty() {
                     return Err(error(
                         ErrorCode::InvalidInput,
                         "invocation parameter name is invalid",
@@ -2573,12 +2534,7 @@ mod guest {
     }
 
     fn validate_wit_event(event: &WitEvent) -> Result<(), MachineBoundaryError> {
-        check_trace_bytes(event)?;
-        validate_event_boundary(BoundaryEvent {
-            name: &event.name,
-            send_id: event.send_id.as_deref(),
-            invoke_id: event.invoke_id.as_deref(),
-        })
+        check_trace_bytes(event)
     }
 
     export!(Component);
@@ -3090,15 +3046,7 @@ mod tests {
             "../../../crates/scxml-wit/wit/scxml/scxml.wit"
         ));
         for phrase in [
-            format!(
-                "`invoke-id` at most {} bytes each",
-                scxml_types::MAX_NAME_BYTES
-            ),
             "`origin`, `origin-type`, `data`, and `raw` have no byte bound".to_owned(),
-            format!(
-                "or over {} bytes) starts in `failed` with `invalid-input`",
-                scxml_types::MAX_NAME_BYTES
-            ),
             format!("rejects more than {DOCUMENTED_MAX_IR_BYTES} bytes with `payload-too-large`"),
         ] {
             assert!(
@@ -3106,27 +3054,6 @@ mod tests {
                 "scxml.wit must document the enforced bound: {phrase:?}"
             );
         }
-    }
-
-    #[test]
-    fn event_boundary_bounds_names_only() {
-        let oversized_send_id = "s".repeat(scxml_types::MAX_NAME_BYTES + 1);
-        let invalid_send_id = BoundaryEvent {
-            name: "event",
-            send_id: Some(&oversized_send_id),
-            invoke_id: None,
-        };
-        assert_eq!(
-            validate_event_boundary(invalid_send_id),
-            Err(MachineBoundaryError::ValueTooLarge(MachineInputKind::Name))
-        );
-        assert_eq!(
-            validate_event_boundary(BoundaryEvent {
-                send_id: None,
-                ..invalid_send_id
-            }),
-            Ok(())
-        );
     }
 
     #[test]

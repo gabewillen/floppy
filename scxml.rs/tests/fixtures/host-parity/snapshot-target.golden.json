@@ -18,7 +18,7 @@
     ],
     [
       "parent",
-      "{\"exclude\":[\"system\",\"pending_sends\",\"previews\",\"invocations\"],\"trace_context\":\"strip\"}{\"session_id\":\"session\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"956bc473e867c11ea6baa12eb67906c3e6be18c12741e057126c6c40e5b75d86\"},\"status\":\"running\",\"configuration\":{\"atomic\":[\"reading\"],\"full\":[\"s0\",\"reading\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"data_model\":[{\"name\":\"flag\",\"value\":{\"type\":\"text\",\"value\":\"root\"}},{\"name\":\"doc\",\"value\":{\"type\":\"text\",\"value\":\"unavailable\"}}],\"queues\":{\"internal\":[],\"external\":[]},\"transitions\":[{\"source\":\"reading\",\"index\":0,\"events\":[\"read\"],\"targets\":[\"done\"],\"type\":\"external\",\"has_cond\":false}]}"
+      "{\"exclude\":[\"system\",\"pending_sends\",\"previews\",\"invocations\"],\"trace_context\":\"strip\"}{\"session_id\":\"session\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"afc9cb6e695cac66cf00645ef7b01bc4d9b2bf1975e79a62007501b39a127c15\"},\"status\":\"running\",\"configuration\":{\"atomic\":[\"reading\"],\"full\":[\"s0\",\"reading\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"data_model\":[{\"name\":\"flag\",\"value\":{\"type\":\"text\",\"value\":\"root\"}},{\"name\":\"doc\",\"value\":{\"type\":\"text\",\"value\":\"unavailable\"}}],\"queues\":{\"internal\":[],\"external\":[]},\"transitions\":[{\"source\":\"reading\",\"index\":0,\"events\":[\"read\"],\"targets\":[\"done\"],\"type\":\"external\",\"has_cond\":false}]}"
     ],
     [
       "sibling",

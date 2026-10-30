@@ -315,9 +315,9 @@ fn ecmascript_operations_run_in_the_kept_realm_within_a_small_fuel_bound() {
     }
 }
 
-/// A loop that calls a looping function: every individual loop stays under
-/// the ECMAScript provider's per-loop iteration bound, so only the store's
-/// per-call instruction fuel can stop the multiplied total work.
+/// A loop that calls a looping function: the ECMAScript provider bounds no
+/// loop's iterations, so only the store's per-call instruction fuel can
+/// stop the multiplied total work.
 fn nested_loops(outer: u32, inner: u32) -> String {
     format!(
         "(() => {{ function spin() {{ let n = 0; for (let j = 0; j < {inner}; j++) {{ n = n + 1; }} return n; }} \
@@ -327,14 +327,7 @@ fn nested_loops(outer: u32, inner: u32) -> String {
 
 #[test]
 fn hostile_nested_loop_expression_is_bounded_by_store_fuel_with_a_typed_failure() {
-    // The shipped component's per-loop bound (a wasm build); natively the
-    // data model has none.
-    const COMPONENT_LOOP_ITERATIONS: u32 = 100_000;
-    assert_eq!(
-        scxml_data_model_ecmascript::MAX_LOOP_ITERATIONS,
-        scxml_types::wasm_bound(COMPONENT_LOOP_ITERATIONS as usize) as u64
-    );
-    let per_loop = COMPONENT_LOOP_ITERATIONS - 1;
+    let per_loop = 99_999;
     let event = external("go");
     let with_fuel = |fuel: u64| {
         ComponentDataModel::instantiate(
@@ -357,8 +350,7 @@ fn hostile_nested_loop_expression_is_bounded_by_store_fuel_with_a_typed_failure(
         Ok(number(100.0))
     );
 
-    // Every loop stays below the per-loop iteration bound, but the total
-    // (~10^10 loop bodies) is far beyond the default per-call fuel: the call
+    // The total (~10^10 loop bodies) is far beyond the default per-call fuel: the call
     // traps on fuel exhaustion and surfaces as the typed `Platform` failure
     // instead of hanging the host.
     let started = std::time::Instant::now();
@@ -377,7 +369,7 @@ fn hostile_nested_loop_expression_is_bounded_by_store_fuel_with_a_typed_failure(
         Err(DataModelFailure::Platform)
     );
 
-    // Fuel, not the loop bound or wall-clock time, is what stops it: a
+    // Fuel, not wall-clock time, is what stops it: a
     // 1000 x 1000 instance traps on the default budget yet completes with
     // the exact value when the per-call budget is raised a hundredfold.
     assert_eq!(
@@ -792,13 +784,7 @@ fn optional_chain_sequence_payload_is_declined_inside_the_ecmascript_component()
     let mut model = instantiate(&artifacts().ecmascript);
     let event = external("go");
     let script = format!("var a=[];a?.[{}1]", "1,".repeat(32_000));
-    // Within the component's (wasm) script bound: declined for nesting,
-    // not size.
-    assert!(script.len() <= 65_536);
-    assert_eq!(
-        scxml_data_model_ecmascript::MAX_SCRIPT_BYTES,
-        scxml_types::wasm_bound(65_536)
-    );
+    // Declined for nesting, not size.
     assert_eq!(
         model.execute(&script, Some(&event)),
         Err(DataModelFailure::InvalidInput)

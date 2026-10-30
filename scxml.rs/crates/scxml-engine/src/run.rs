@@ -785,8 +785,7 @@ impl Engine {
 
     /// Plans and applies every deferred `<if>`/`<foreach>` continuation
     /// batch of the open transaction, installing each pending decision's
-    /// configuration first. Bounded by the engine's per-command effect limit.
-    /// Returns where the executor suspended a continuation batch, if it
+    /// configuration first. Returns where the executor suspended a continuation batch, if it
     /// did.
     fn apply_continuations<X: EffectExecutor>(
         &mut self,

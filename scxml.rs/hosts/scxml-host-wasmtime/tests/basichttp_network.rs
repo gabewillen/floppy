@@ -1037,7 +1037,7 @@ fn a_delayed_post_is_sent_when_due_and_replays_without_the_network() {
     let pending = live.snapshot(&options).expect("snapshot");
     let document: serde_json::Value = serde_json::from_slice(&pending).expect("JSON document");
     assert_eq!(
-        document["snapshot"]["root"]["pending_sends"][0]["message"]["event"], "notify",
+        document["snapshot"]["sessions"][0]["pending_sends"][0]["message"]["event"], "notify",
         "the pending POST is in the snapshot"
     );
     let mut snapshots = vec![pending];

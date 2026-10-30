@@ -1170,12 +1170,7 @@ fn extension_snapshot_error(
     use scxml_snapshot::SnapshotErrorCode;
     match failure {
         RunFailure::Snapshot(SnapshotFailure::Codec(error))
-            if matches!(
-                error.code,
-                SnapshotErrorCode::BoundsExceeded
-                    | SnapshotErrorCode::TooLarge
-                    | SnapshotErrorCode::DepthExceeded
-            ) =>
+            if matches!(error.code, SnapshotErrorCode::BoundsExceeded) =>
         {
             (
                 ErrorCategory::Validation,

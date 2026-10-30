@@ -127,7 +127,6 @@ export class ScxmlCompileError extends Error {
  * `SnapshotErrorCode` wire values (crates/scxml-snapshot/src/lib.rs).
  */
 export const SNAPSHOT_ERROR_CODES = Object.freeze([
-  'too-large',
   'malformed-json',
   'unsupported-version',
   'schema-violation',
@@ -136,7 +135,6 @@ export const SNAPSHOT_ERROR_CODES = Object.freeze([
   'bounds-exceeded',
   'invalid-name',
   'inconsistent',
-  'depth-exceeded',
   'clock-invariant',
   'not-stable',
   'status-invalid',

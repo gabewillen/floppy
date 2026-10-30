@@ -456,21 +456,6 @@ fn location_expressions_are_classified_statically() {
     }
 }
 
-/// One byte past the wasm expression bound (16 KiB) fails to parse, and the
-/// syntax check spans the whole source.
-#[cfg(target_arch = "wasm32")]
-#[test]
-fn wasm_only_an_expression_over_the_byte_bound_is_declined() {
-    let options = ParseOptions::scxml();
-    let long = "1".repeat(16_385);
-    assert_eq!(
-        Expression::parse(&long, &options),
-        Err(Error::Limit(Limit::ExpressionBytes))
-    );
-    let error = check_syntax(&long, &options).expect_err("over-bound source must fail");
-    assert_eq!((error.start, error.end), (0, long.len()));
-}
-
 #[test]
 fn parser_and_evaluator_bounds_fail_closed() {
     let options = ParseOptions::scxml();

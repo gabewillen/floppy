@@ -173,8 +173,9 @@ fn xml_bounds_fail_closed() {
         store.parse_fragment(&huge),
         Err(Error::Limit(Limit::XmlBytes))
     );
-    let long_name = "n".repeat(limits::MAX_NAME_BYTES + 1);
-    assert!(store.parse_fragment(&format!("<{long_name}/>")).is_err());
+    // XML sets no name length.
+    let long_name = "n".repeat(4_096);
+    assert!(store.parse_fragment(&format!("<{long_name}/>")).is_ok());
 }
 
 #[test]

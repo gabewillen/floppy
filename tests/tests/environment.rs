@@ -931,17 +931,6 @@ fn lamp_input(action: &str, data: &Json) -> Json {
     json!({"observation": {"event": action, "data": data}, "target_device": "lamp"})
 }
 
-/// The session object `id` of a `scxml.session-snapshot/v2` document.
-fn session_in<'a>(session: &'a Json, id: &str) -> Option<&'a Json> {
-    if session["session_id"] == id {
-        return Some(session);
-    }
-    session["invocations"]
-        .as_array()?
-        .iter()
-        .find_map(|invocation| session_in(&invocation["session"], id))
-}
-
 /// The value of the `<data id="name">` of the session `id`, from a
 /// snapshot the run writes now.
 fn data_of(run: &mut Run, id: &str, name: &str) -> Json {
@@ -952,7 +941,9 @@ fn data_of(run: &mut Run, id: &str, name: &str) -> Json {
         Json::String(text) => serde_json::from_str(text).expect("the snapshot is JSON"),
         other => other.clone(),
     };
-    let session = session_in(&document["snapshot"]["root"], id)
+    let session = document["snapshot"]["sessions"]
+        .as_array()
+        .and_then(|sessions| sessions.iter().find(|session| session["session_id"] == id))
         .unwrap_or_else(|| panic!("the snapshot holds {id}: {document}"));
     let value = session["data_model"]
         .as_array()

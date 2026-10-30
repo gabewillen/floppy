@@ -598,8 +598,7 @@ the host's compiler. Lower each child beforehand with
 CLI, return its IR for the exact `(sourceName, source)` the machine asks
 for, and throw `CapabilityError('invalid-input')` for any other document
 (the invocation then fails with error.execution). IR the machine cannot
-decode or validate (a `<raise>` event over the 1024-byte name bound, for
-one) fails the invocation the same way. `invoke: { compile:
+decode or validate fails the invocation the same way. `invoke: { compile:
 'provided' }` turns the host's compiler off.
 
 With either compiler, `createSession` first compiles every core module a
@@ -615,9 +614,7 @@ per level (the same for a cancel):
   names, and its own SCXML I/O processor and clock, advanced with the
   root's (one shared logical clock); `_sessionid` is the invoking
   session's `_sessionid`, `.`, and the child's invoke id
-  (`<parent _sessionid>.<invokeid>`, as under Wasmtime), and an
-  `<invoke>` whose child's id would exceed the 1024-byte name bound raises
-  `error.execution`;
+  (`<parent _sessionid>.<invokeid>`, as under Wasmtime), of any length;
 - every session owns an internal and an external event queue; the SCXML
   Event I/O Processor pushes an event for another session straight onto
   that session's external queue (`#_parent`, `#_<invokeid>`, autoforward,
@@ -905,14 +902,13 @@ const diff = await diffSnapshots(before, after, { includeTraceContext: false });
   runs on its own deterministic fuel budget (`DEFAULT_SNAPSHOT_FUEL`);
   `createSession({ snapshot: 'none' })` never loads it and every snapshot
   answers `codec-unavailable`. The virtualized codec is about 0.9 MB.
-- A document is at most `MAX_SNAPSHOT_BYTES` (32 MiB); a larger one fails
-  with `too-large` and is never truncated.
+- A document has no size, count, or depth bound and is never truncated.
 - For a failed or shut-down session, `snapshot()` throws
   `ScxmlSnapshotError` with code `status-invalid`. While deliveries are
   pending, the session is busy, or the last call did not end stable, it
   throws `not-stable`. Nothing is collected in either case.
 - Errors throw `ScxmlSnapshotError { code }`; the codes are the closed
-  `SNAPSHOT_ERROR_CODES` (`too-large`, `malformed-json`, `non-canonical`,
+  `SNAPSHOT_ERROR_CODES` (`malformed-json`, `non-canonical`,
   `not-stable`, `status-invalid`, `codec-unavailable`, ...). The codec
   reports only the code: no pointer, name, or value crosses its boundary.
 - The `snapshot` and `snapshot-diff` host operations are observed like every
@@ -1017,9 +1013,9 @@ package resolution stays with the CLI and the Wasmtime host
 
 ### Fuel
 
-Browsers expose no Wasm fuel, epoch interruption, or deadline, and Boa's
-loop limit (100 000 iterations) restarts in every call frame, so a loop that
-calls a looping function would run about 1e10 iterations and hang the page.
+Browsers expose no Wasm fuel, epoch interruption, or deadline, and the
+ECMAScript data model sets no loop limit, so a loop that never ends would
+hang the page.
 The build therefore meters every transpiled core module with the
 in-workspace `scxml-wasm-meter` tool: each module gets an exported `i64`
 counter (`FUEL_EXPORT`) that it decrements at every function entry and every
@@ -1242,8 +1238,7 @@ SCXML_BROWSER_IR=../../target/wasm-artifacts/release/packaged/representative-mac
   URL byte bound (no bound on their count or total text). The page's prefetch reaches the
   worker with the synchronous session's answers (a loaded script, a failed
   script fetch as `platform`, an empty script as `payload-too-large`, a
-  script over 64 KiB loaded (its run then `error.execution` under the data
-  model's bound), and a document over 4 MiB loaded),
+  script over 64 KiB loaded and run, and a document over 4 MiB loaded),
   each static URL resolved once. It also covers the `none` fallback (static
   URLs still prefetched, the typed `dynamic-url-unavailable` error for a
   runtime one), and checks that `async: 'off'` is the synchronous session.

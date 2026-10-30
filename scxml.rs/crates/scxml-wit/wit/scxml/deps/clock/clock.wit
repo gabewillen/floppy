@@ -26,17 +26,12 @@ interface types {
 
   /// Closed clock failure.
   variant clock-error {
-    /// A timer id was empty or longer than 256 bytes.
+    /// A timer id was empty.
     invalid-id,
     /// A zero duration was supplied where progress is required.
     invalid-duration,
-    /// One payload exceeded 65536 bytes, or retained payloads would exceed
-    /// 4194304 bytes in aggregate.
-    payload-too-large,
     /// A live timer already uses the id.
     duplicate-id,
-    /// The queue already holds 1024 live timers.
-    capacity-exhausted,
     /// Logical time, a deadline, or the insertion sequence would overflow u64.
     overflow,
     /// A drain limit was 0 or greater than 1024.
@@ -101,11 +96,9 @@ interface clock-api {
   next-deadline: func() -> option<u64>;
   /// Schedules one timer at `now + delay-ms`.
   ///
-  /// Preconditions: `id` is 1..=256 bytes and not live; `delay-ms` > 0;
-  /// `payload` is at most 65536 bytes; fewer than 1024 timers are live; and
-  /// retained payloads stay within 4194304 bytes.
+  /// Preconditions: `id` is non-empty and not live; `delay-ms` > 0.
   /// Errors: `invalid-context`, `invalid-id`, `invalid-duration`,
-  /// `capacity-exhausted`, `payload-too-large`, `duplicate-id`, `overflow`.
+  /// `duplicate-id`, `overflow`.
   schedule: func(id: string, payload: list<u8>, delay-ms: u64, context: option<trace-context>) -> result<scheduled, clock-error>;
   /// Removes a live timer. Returns true when a timer was removed and false,
   /// without mutation, when the id is valid but not live.

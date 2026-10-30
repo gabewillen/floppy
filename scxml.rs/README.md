@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573` | `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34` |
-| canonical artifact SHA-256 | `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d` | `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43` |
+| producer report digest | `2cfec19fc15c8830f42171b5e1a64a7de300637fc870b2095f6f6c8a96d7fabb` | `73042d32b95c5a0071917c1e19e126a861c049f607770e0b3c1d58f0ed72bb42` |
+| canonical artifact SHA-256 | `e8082e669b27a14a1fc658cb1595f72c2e45c4f76fbd21d2c30f3509af55d24f` | `4d7d13628beffed420fdaf1f37cb4959d0121a482510cfc00db367b1c6e2a6a0` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately

@@ -15,8 +15,7 @@ use scxml_xpath::{
 use crate::payload::{Escape, MAX_JSON_DEPTH, escape, scalar_text, space_normalized};
 use crate::{
     DataModelError, DataModelSnapshot, EVALUATION_FUEL, ExecutionHost, MAX_CACHED_EXPRESSIONS,
-    MAX_EXPRESSION_BYTES, MAX_SCRIPT_BYTES, MAX_SOURCE_BYTES, MAX_VALUE_BYTES, MAX_VARIABLES,
-    SystemContext, Variable, VariableMarkup, finish,
+    MAX_VALUE_BYTES, SystemContext, Variable, VariableMarkup, finish,
 };
 
 /// FNV-1a hasher for the variable table: deterministic (no seed, so no
@@ -61,11 +60,6 @@ impl Binding {
         self.item.unwrap_or(self.element)
     }
 }
-
-/// Most `<foreach>` loops tracked at once; starting another forgets the
-/// oldest (a loop an error left unfinished) (wasm builds only; unbounded
-/// natively, see [`scxml_types::wasm_bound`]).
-const MAX_FOREACH_FRAMES: usize = scxml_types::wasm_bound(32);
 
 /// One `<foreach>` in progress (REC 4.6): the nodes of its shallow copy (a
 /// namespace node, which has no tree identity, is `None`), the values
@@ -185,8 +179,8 @@ impl XPathDataModel {
     /// # Errors
     ///
     /// [`DataModelError::InvalidInput`] for malformed or over-bound source or
-    /// system values, invalid, reserved, or duplicate variable names, or more
-    /// than [`crate::MAX_VARIABLES`] variables. Failure preserves prior state.
+    /// system values, or invalid, reserved, or duplicate variable names.
+    /// Failure preserves prior state.
     pub fn initialize(
         &mut self,
         source: &str,
@@ -197,9 +191,6 @@ impl XPathDataModel {
             Operation::XpathDataModelInitialize,
         );
         let result = (|| {
-            if source.len() > MAX_SOURCE_BYTES {
-                return Err(DataModelError::InvalidInput);
-            }
             let mut state = State::new(system)?;
             let nodes = state
                 .store
@@ -421,13 +412,6 @@ impl XPathDataModel {
                 let (nodes, images): (Vec<_>, Vec<_>) = items.into_iter().unzip();
                 if !images.is_empty() {
                     let state = self.state.as_mut().ok_or(DataModelError::NotInitialized)?;
-                    if scxml_types::exceeds_wasm_bound(
-                        state.foreach.len().saturating_add(1),
-                        MAX_FOREACH_FRAMES,
-                    ) {
-                        // Forget the oldest loop (one an error left unfinished).
-                        state.foreach.remove(0);
-                    }
                     state.foreach.push(ForeachFrame {
                         nodes,
                         images: images.clone(),
@@ -645,7 +629,6 @@ impl XPathDataModel {
     ///
     /// # Errors
     ///
-    /// [`DataModelError::InvalidInput`] above [`MAX_SCRIPT_BYTES`] and
     /// [`DataModelError::Execution`] for any non-empty script.
     pub fn execute(&mut self, script: &str) -> Result<(), DataModelError> {
         let span = observe(
@@ -654,9 +637,6 @@ impl XPathDataModel {
         );
         let result = (|| {
             self.state.as_ref().ok_or(DataModelError::NotInitialized)?;
-            if scxml_types::exceeds_wasm_bound(script.len(), MAX_SCRIPT_BYTES) {
-                return Err(DataModelError::InvalidInput);
-            }
             if script.chars().all(scxml_types::is_xml_space) {
                 Ok(())
             } else {
@@ -679,7 +659,7 @@ impl XPathDataModel {
             .ok_or(DataModelError::NotInitialized)
     }
 
-    /// Shared evaluation: bounds and parses `expression` (cached), binds
+    /// Shared evaluation: parses `expression` (cached), binds
     /// `_event`, evaluates against `<datamodel>`, and converts the result
     /// while the store is borrowed.
     fn evaluate_with<H: ExecutionHost + ?Sized, T>(
@@ -689,9 +669,6 @@ impl XPathDataModel {
         host: &mut H,
         convert: impl FnOnce(&Store, Value) -> Result<T, DataModelError>,
     ) -> Result<T, DataModelError> {
-        if scxml_types::exceeds_wasm_bound(expression.len(), MAX_EXPRESSION_BYTES) {
-            return Err(DataModelError::InvalidInput);
-        }
         let state = self.state.as_mut().ok_or(DataModelError::NotInitialized)?;
         state.bind_event(event)?;
         let parsed = self.cache.parsed(expression)?;
@@ -770,7 +747,7 @@ impl State {
     /// Appends `node` under `<datamodel>` as variable `name`.
     fn attach_variable(&mut self, name: &str, node: NodeId) -> Result<(), DataModelError> {
         validate_variable_name(name)?;
-        if self.variables.contains_key(name) || self.variables.len() >= MAX_VARIABLES {
+        if self.variables.contains_key(name) {
             return Err(DataModelError::InvalidInput);
         }
         // Variables precede a bound `<_event>`, which stays last.
@@ -1444,13 +1421,9 @@ fn text_is_whitespace(store: &Store, node: NodeId) -> Result<bool, DataModelErro
         .map_err(|_| DataModelError::InvalidInput)
 }
 
-/// A variable name is a non-reserved `NCName` of at most
-/// [`scxml_types::MAX_NAME_BYTES`] bytes, so every name fits a snapshot.
+/// A variable name is a non-reserved `NCName`.
 fn validate_variable_name(name: &str) -> Result<(), DataModelError> {
-    if name.len() <= scxml_types::MAX_NAME_BYTES
-        && is_ncname(name)
-        && !RESERVED_NAMES.contains(&name)
-    {
+    if is_ncname(name) && !RESERVED_NAMES.contains(&name) {
         Ok(())
     } else {
         Err(DataModelError::InvalidInput)

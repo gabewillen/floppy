@@ -107,8 +107,6 @@ import { SessionNamespaces, isExtensionComponents, prepareExtensions } from './e
 import { ServiceInvocation, isServiceComponents, prepareServices } from './service.js';
 import { canonicalHttpUrl } from './url.js';
 import {
-  MAX_SNAPSHOT_INVOKE_DEPTH,
-  MAX_SNAPSHOT_INVOKED_SESSIONS,
   SNAPSHOT_MODES,
   collection,
   encodeCapture,
@@ -125,8 +123,6 @@ import { isDataValue, isForeachResult, isOptionalDataValue, toWitEvent } from '.
 export const MAX_MACHINE_IR_BYTES = 16 * 1024 * 1024;
 /** Default `_sessionid`, matching the Wasmtime host driver. */
 export const DEFAULT_SESSION_ID = 'machine-session';
-/** Largest `_sessionid` in UTF-8 bytes (`scxml_types::MAX_NAME_BYTES`). */
-const MAX_SESSION_ID_BYTES = 1_024;
 const utf8 = new TextEncoder();
 /**
  * Most deliveries (delayed sends and cross-session messages) one command,
@@ -1101,10 +1097,8 @@ function capabilityResource(links) {
               return { tag: 'undeliverable' };
             default:
               // A scheduling failure goes back to the machine unchanged, as
-              // under Wasmtime: `capacity-exhausted` (the clock has no room)
-              // raises error.execution (SCXML 3.12.2), and `duplicate-id`
-              // (an author send id already pending, SCXML 3.14) ends the
-              // session.
+              // under Wasmtime: `duplicate-id` (an author send id already
+              // pending, SCXML 3.14) ends the session.
               if (request.delayMs > 0n && thrown instanceof ImportFailure) throw thrown;
               throw links.invariant();
           }
@@ -1421,11 +1415,7 @@ export function requestStart(links, request) {
   // The child's `_sessionid` (SCXML 5.10): the invoker's and its invoke
   // id, exactly as under Wasmtime, so the invoker knows the child's address
   // before it starts and a child invoked again under the same id keeps it.
-  // One over the name bound fails the invocation, as the invoke limits do.
   const sessionId = `${links.sessionId}.${request.invokeId}`;
-  if (utf8.encode(sessionId).byteLength > MAX_SESSION_ID_BYTES) {
-    throw componentFailure('invalid-input', 'the invoked session id exceeds the name bound');
-  }
   if (request.machineIr.byteLength > MAX_MACHINE_IR_BYTES) throw rejected();
   const { telemetry, modules: module, fuel, budget } = run;
   let meter;
@@ -1732,22 +1722,6 @@ function disposeInvokedSession(child) {
       // depends on it any more.
     }
   }
-}
-
-/**
- * The run's started invoked sessions in invocation order (`[key, child]`)
- * when one snapshot document can hold them: at most
- * MAX_SNAPSHOT_INVOKED_SESSIONS, none deeper than
- * MAX_SNAPSHOT_INVOKE_DEPTH, with the encoder's codes for them
- * (`bounds-exceeded`, `depth-exceeded`). Reads no session.
- */
-export function withinDocumentBounds(run) {
-  if (run.invokedSessions.size - 1 > MAX_SNAPSHOT_INVOKED_SESSIONS) throw new ScxmlSnapshotError('bounds-exceeded');
-  const order = run.sessions();
-  if (order.some(([key]) => run.invokedSessions.depth(key) > MAX_SNAPSHOT_INVOKE_DEPTH)) {
-    throw new ScxmlSnapshotError('depth-exceeded');
-  }
-  return order;
 }
 
 /** One machine session (with its invoked children) bound to component instances. */
@@ -2659,7 +2633,7 @@ export class MachineSession {
    * is what it would have been without it. Invoked sessions follow the
    * root in invocation order (each after the session that invoked it,
    * siblings by ascending invoke id, at any depth, within the document's
-   * 255-session and depth-32 bounds); excluded sections are never
+   * depth-32 bound); excluded sections are never
    * collected. The optional codec component is loaded on the first call.
    * The document can hold data-model values and (under `preserve`) trace
    * carriers: never log or index it.
@@ -2754,11 +2728,8 @@ export class MachineSession {
     };
     const external = (key) => (gather.queues ? run.invokedSessions.external(key).map(queuedEvent) : []);
     // Invocation order: each invoked session after the session that invoked
-    // it, siblings in ascending invoke-id order, at any depth. The document
-    // format's bounds are checked before any session is read (as the
-    // Wasmtime host does), so a run of any size or depth fails at once and
-    // the read-only snapshot never risks the run.
-    const order = gather.children ? withinDocumentBounds(run) : [];
+    // it, siblings in ascending invoke-id order, at any depth.
+    const order = gather.children ? run.sessions() : [];
     const sessions = [capture(this.#instance, { parent: undefined, finished: false, external: external(ROOT) })];
     const indexes = new Map([[ROOT, 0]]);
     for (const [key, child] of order) {

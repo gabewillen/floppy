@@ -11,7 +11,7 @@
 use std::collections::BTreeSet;
 
 use scxml_data_model_ecmascript::{
-    DataModelError, EcmaScriptDataModel, ExecutionHost, MAX_IN_QUERIES, SystemContext,
+    DataModelError, EcmaScriptDataModel, ExecutionHost, SystemContext,
 };
 use scxml_types::{DataValue, Event, EventName};
 
@@ -142,13 +142,9 @@ fn a_failing_host_fails_the_operation() {
     );
 }
 
-/// `MAX_IN_QUERIES` is a resource bound of wasm builds only: natively one
-/// operation may ask `In()` about any number of distinct state ids. The
-/// shipped component's bound is checked through the Wasmtime host
-/// (`hosts/scxml-host-wasmtime/tests/session_host.rs`).
+/// One operation may ask `In()` about any number of distinct state ids.
 #[test]
-fn distinct_in_queries_per_operation_are_unbounded_natively() {
-    assert_eq!(MAX_IN_QUERIES, usize::MAX);
+fn distinct_in_queries_per_operation_are_unbounded() {
     let model = model();
     let host = &mut Configuration::of(&["s1999"]);
     let many = "(function () { for (var i = 0; i < 2000; i++) if (In('s' + i)) return i; return -1; })() === 1999";

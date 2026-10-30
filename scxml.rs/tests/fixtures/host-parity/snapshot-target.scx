@@ -48,16 +48,16 @@
     <state id="reading">
       <onentry>
         <example:snapshot location="doc" target="#_kid" exclude="system pending_sends"/>
-        <log label="kid" expr="JSON.stringify(JSON.parse(doc).options) + JSON.stringify(JSON.parse(doc).snapshot.root)"/>
+        <log label="kid" expr="JSON.stringify(JSON.parse(doc).options) + JSON.stringify(JSON.parse(doc).snapshot.sessions[0])"/>
         <example:snapshot location="doc" target="#_scxml_session.kid" exclude="system pending_sends"/>
-        <log label="kid-by-address" expr="JSON.stringify(JSON.parse(doc).snapshot.root.configuration)"/>
+        <log label="kid-by-address" expr="JSON.stringify(JSON.parse(doc).snapshot.sessions[0].configuration)"/>
         <example:snapshot location="doc" target="#_scxml_session.nobody"/>
         <log label="nobody" expr="doc"/>
         <send event="read" target="#_a"/>
       </onentry>
       <transition event="read" target="done">
-        <log label="parent" expr="JSON.stringify(JSON.parse(_event.data.up).options) + JSON.stringify(JSON.parse(_event.data.up).snapshot.root)"/>
-        <log label="sibling" expr="JSON.stringify(JSON.parse(_event.data.sib).options) + JSON.stringify(JSON.parse(_event.data.sib).snapshot.root)"/>
+        <log label="parent" expr="JSON.stringify(JSON.parse(_event.data.up).options) + JSON.stringify(JSON.parse(_event.data.up).snapshot.sessions[0])"/>
+        <log label="sibling" expr="JSON.stringify(JSON.parse(_event.data.sib).options) + JSON.stringify(JSON.parse(_event.data.sib).snapshot.sessions[0])"/>
       </transition>
     </state>
   </state>

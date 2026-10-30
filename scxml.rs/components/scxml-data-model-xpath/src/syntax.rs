@@ -3,7 +3,7 @@
 use scxml_telemetry::{Module, Operation, observe};
 use scxml_xpath::{Expression, ParseOptions};
 
-use crate::{DataModelError, MAX_EXPRESSION_BYTES, MAX_SCRIPT_BYTES, finish};
+use crate::{DataModelError, finish};
 
 /// Maximum bytes of one issue message (WIT contract bound).
 pub const MAX_SYNTAX_MESSAGE_BYTES: usize = 512;
@@ -43,8 +43,7 @@ pub struct SyntaxIssue {
 ///
 /// # Errors
 ///
-/// [`DataModelError::InvalidInput`] when `source` exceeds its byte bound or
-/// its parse exceeds an `XPath` parser bound (nesting or size); the data
+/// [`DataModelError::InvalidInput`] when its parse exceeds an `XPath` parser bound (nesting or size); the data
 /// model applies the same bound at evaluation, so a validator reports the
 /// decline as `LIMIT003` rather than as a syntax error.
 pub fn check_syntax(kind: SyntaxKind, source: &str) -> Result<Vec<SyntaxIssue>, DataModelError> {
@@ -53,14 +52,6 @@ pub fn check_syntax(kind: SyntaxKind, source: &str) -> Result<Vec<SyntaxIssue>, 
         Operation::XpathDataModelCheckSyntax,
     );
     let result = (|| {
-        let limit = if kind == SyntaxKind::Script {
-            MAX_SCRIPT_BYTES
-        } else {
-            MAX_EXPRESSION_BYTES
-        };
-        if source.len() > limit {
-            return Err(DataModelError::InvalidInput);
-        }
         let whole = |message: &str| SyntaxIssue {
             start: 0,
             end: source.len(),

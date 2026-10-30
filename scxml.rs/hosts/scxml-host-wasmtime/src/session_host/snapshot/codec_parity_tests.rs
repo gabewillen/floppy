@@ -181,8 +181,7 @@ impl Codec {
 }
 
 /// Every snapshot error code, for decoding the codec's static detail.
-const ALL_CODES: [SnapshotErrorCode; 14] = [
-    SnapshotErrorCode::TooLarge,
+const ALL_CODES: [SnapshotErrorCode; 12] = [
     SnapshotErrorCode::MalformedJson,
     SnapshotErrorCode::UnsupportedVersion,
     SnapshotErrorCode::SchemaViolation,
@@ -191,7 +190,6 @@ const ALL_CODES: [SnapshotErrorCode; 14] = [
     SnapshotErrorCode::BoundsExceeded,
     SnapshotErrorCode::InvalidName,
     SnapshotErrorCode::Inconsistent,
-    SnapshotErrorCode::DepthExceeded,
     SnapshotErrorCode::ClockInvariant,
     SnapshotErrorCode::NotStable,
     SnapshotErrorCode::StatusInvalid,
@@ -199,8 +197,7 @@ const ALL_CODES: [SnapshotErrorCode; 14] = [
 ];
 
 /// The exact snapshot code a codec failure carries: its static detail is
-/// `snapshot-<code>`, and its WIT code is `payload-too-large` for
-/// `too-large` and `invalid-input` for every other code. Anything else is
+/// `snapshot-<code>`, and its WIT code is `invalid-input`. Anything else is
 /// a broken codec contract and fails the proof.
 fn codec_code(error: &wit::ComponentError) -> SnapshotErrorCode {
     let detail = error.detail.as_deref().unwrap_or_default();
@@ -208,11 +205,7 @@ fn codec_code(error: &wit::ComponentError) -> SnapshotErrorCode {
         .strip_prefix("snapshot-")
         .and_then(|label| ALL_CODES.into_iter().find(|code| code.as_str() == label))
         .unwrap_or_else(|| panic!("the codec failed with a snapshot detail, got {detail:?}"));
-    let expected = if code == SnapshotErrorCode::TooLarge {
-        wit::ErrorCode::PayloadTooLarge
-    } else {
-        wit::ErrorCode::InvalidInput
-    };
+    let expected = wit::ErrorCode::InvalidInput;
     assert_eq!(
         error.code, expected,
         "the codec's WIT code for {detail} is {expected:?}"

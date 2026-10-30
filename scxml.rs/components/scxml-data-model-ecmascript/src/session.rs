@@ -60,9 +60,8 @@ use scxml_types::{DataValue, Event, FiniteNumber};
 
 use crate::{
     Answerer, BOOTSTRAP, BUILTIN_GUARD, BoundedHostHooks, DataModelError, ExecutionHost, HostQuery,
-    HostReply, LOG_TEXT, MAX_FOREACH_FRAMES, MAX_FOREACH_ITEMS, MAX_IN_QUERIES,
-    MAX_LOOP_ITERATIONS, MAX_NESTING_DEPTH, MAX_RECURSION_DEPTH, MAX_STACK_SIZE, SystemContext,
-    classify_js_error, dom, event_to_source, to_source, validate_event, validate_value,
+    HostReply, LOG_TEXT, MAX_NESTING_DEPTH, MAX_RECURSION_DEPTH, SystemContext, classify_js_error,
+    dom, event_to_source, to_source, validate_event, validate_value,
 };
 
 /// Most parsed programs one realm caches.
@@ -221,10 +220,7 @@ fn random(_this: &JsValue, _arguments: &[JsValue], _context: &mut Context) -> Js
 /// that evaluates to true if the state machine is in the state"): the
 /// argument's ECMAScript `ToString` names the state, answered by the
 /// operation's host (once per id per operation: the configuration does not
-/// change while an operation runs). An id longer than
-/// [`scxml_types::MAX_NAME_BYTES`] names no state. More than
-/// [`crate::MAX_IN_QUERIES`] distinct ids (a wasm build's bound), or a host
-/// failure, fails the operation.
+/// change while an operation runs). A host failure fails the operation.
 fn in_state(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let id = arguments
         .first()
@@ -232,23 +228,10 @@ fn in_state(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> Js
         .unwrap_or_default()
         .to_string(context)?
         .to_std_string_escaped();
-    if id.len() > scxml_types::MAX_NAME_BYTES {
-        return Ok(JsValue::from(false));
-    }
     let known = OPERATION.with(|operation| {
         let mut operation = operation.borrow_mut();
         let operation = operation.as_mut()?;
-        if let Some(answer) = operation.answers.get(&id) {
-            return Some(Ok(*answer));
-        }
-        if scxml_types::exceeds_wasm_bound(
-            operation.answers.len().saturating_add(1),
-            MAX_IN_QUERIES,
-        ) {
-            operation.failed.get_or_insert(DataModelError::InvalidInput);
-            return Some(Err(()));
-        }
-        None
+        operation.answers.get(&id).map(|answer| Ok(*answer))
     });
     let answer = match known {
         Some(Ok(answer)) => Some(answer),
@@ -418,7 +401,7 @@ fn helpers_source() -> String {
     deepFreeze,
     (value) => logText(value, xmlOfAny),
     (value) => {{ const held = guard(value); return () => held; }},
-    (value, max) => {{
+    (value) => {{
       if (xmlOfAny(value) !== undefined) return ["illegal"];
       let prototype = value;
       let array = false;
@@ -428,7 +411,6 @@ fn helpers_source() -> String {
       }}
       if (!array) return ["illegal"];
       const length = toLength(value.length);
-      if (length > max) return ["large"];
       const copy = [];
       for (let index = 0; index < length; index += 1) apply(push, copy, [value[index]]);
       return ["array", copy];
@@ -710,8 +692,6 @@ struct ForeachFrame {
 pub(crate) enum Copied {
     /// An object that satisfies `instanceof(Array)`: its items.
     Items(Vec<DataValue>),
-    /// An array of more than [`MAX_FOREACH_ITEMS`] items.
-    Large,
     /// Any other value.
     Illegal,
 }
@@ -744,8 +724,10 @@ pub(crate) struct Session {
     xml_text: JsObject,
     pristine: Pristine,
     /// The event `_event` was last bound to, by its source, so an event
-    /// bound again is the same object.
-    event: Option<(String, JsValue)>,
+    /// bound again is the same object; with the event itself, so an equal
+    /// event is known to have that source without validating and writing
+    /// it again.
+    event: Option<(Event, String, JsValue)>,
     random: RandomPosition,
     foreach: Vec<ForeachFrame>,
     context: Context,
@@ -768,13 +750,15 @@ impl Session {
             .map_err(|_| DataModelError::Execution)?;
         context
             .runtime_limits_mut()
-            .set_loop_iteration_limit(MAX_LOOP_ITERATIONS);
-        context
-            .runtime_limits_mut()
             .set_recursion_limit(MAX_RECURSION_DEPTH);
+        // A program's loops and value stack are bounded only by the host's
+        // fuel and memory.
         context
             .runtime_limits_mut()
-            .set_stack_size_limit(MAX_STACK_SIZE);
+            .set_loop_iteration_limit(u64::MAX);
+        context
+            .runtime_limits_mut()
+            .set_stack_size_limit(usize::MAX);
         context
             .eval(Source::from_bytes(BOOTSTRAP))
             .map_err(|_| DataModelError::Execution)?;
@@ -840,24 +824,44 @@ impl Session {
     /// event.
     fn bind_event(&mut self, event: Option<&Event>) -> Result<(), DataModelError> {
         let value = match event {
-            Some(event) => {
-                validate_event(event)?;
-                let source = event_to_source(event)?;
-                match &self.event {
-                    Some((bound, value)) if *bound == source => value.clone(),
-                    _ => {
-                        let value = if let Some(value) = self.event_value(event) {
+            Some(event) => match &mut self.event {
+                // The same source (`event_to_source` writes every field
+                // but the trace context), without writing it.
+                Some((bound, _, value))
+                    if bound.name == event.name
+                        && bound.event_type == event.event_type
+                        && bound.send_id == event.send_id
+                        && bound.origin == event.origin
+                        && bound.origin_type == event.origin_type
+                        && bound.invoke_id == event.invoke_id
+                        && bound.data == event.data
+                        && bound.raw == event.raw =>
+                {
+                    value.clone()
+                }
+                _ => {
+                    validate_event(event)?;
+                    let source = event_to_source(event)?;
+                    match &mut self.event {
+                        Some((bound, bound_source, value)) if *bound_source == source => {
+                            let value = value.clone();
+                            *bound = event.clone();
                             value
-                        } else {
-                            let builder = self.dom_build_open.clone();
-                            self.eval_adapter_with(&source, &builder)?
-                        };
-                        let value = self.guard_fresh(value)?;
-                        self.event = Some((source, value.clone()));
-                        value
+                        }
+                        _ => {
+                            let value = if let Some(value) = self.event_value(event) {
+                                value
+                            } else {
+                                let builder = self.dom_build_open.clone();
+                                self.eval_adapter_with(&source, &builder)?
+                            };
+                            let value = self.guard_fresh(value)?;
+                            self.event = Some((event.clone(), source, value.clone()));
+                            value
+                        }
                     }
                 }
-            }
+            },
             None => JsValue::undefined(),
         };
         self.call(&self.helpers.set_event.clone(), &[value])
@@ -1540,15 +1544,13 @@ impl Session {
     /// Evaluates a `<foreach array>` value and starts its loop over a
     /// shallow copy (see [`crate::EcmaScriptDataModel::foreach_items`]).
     pub(crate) fn start_foreach(&mut self, value: &JsValue) -> Result<Copied, DataModelError> {
-        let max =
-            JsValue::from(u32::try_from(MAX_FOREACH_ITEMS).map_err(|_| DataModelError::Execution)?);
         let result = self
             .helpers
             .array_copy
             .clone()
             .call(
                 &JsValue::undefined(),
-                &[value.clone(), max],
+                std::slice::from_ref(value),
                 &mut self.context,
             )
             .map_err(|error| classify_js_error(&error))?
@@ -1566,7 +1568,6 @@ impl Session {
                 .ok()
                 .and_then(|copy| copy.as_object())
                 .ok_or(DataModelError::Execution)?,
-            "large" => return Ok(Copied::Large),
             _ => return Ok(Copied::Illegal),
         };
         let length = JsArray::from_object(copy.clone())
@@ -1587,13 +1588,6 @@ impl Session {
             images.push(image);
         }
         if !images.is_empty() {
-            if scxml_types::exceeds_wasm_bound(
-                self.foreach.len().saturating_add(1),
-                MAX_FOREACH_FRAMES,
-            ) {
-                // Forget the oldest loop (one an error left unfinished).
-                self.foreach.remove(0);
-            }
             self.foreach.push(ForeachFrame {
                 copy,
                 images: images.clone(),

@@ -8,8 +8,8 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use scxml_types::{
     BaggagePolicy, DataValue, DelayError, DelayedSend, Event, EventName, EventType,
-    MAX_DELAY_BYTES, MAX_DELAYED_SEND_BYTES, NamedValue, ProcessorSend, SendId, SendRequest,
-    TraceContext, decode_delayed_send, encode_delayed_send, parse_delay_ms,
+    MAX_DELAY_BYTES, NamedValue, ProcessorSend, SendCodecError, SendId, SendRequest, TraceContext,
+    decode_delayed_send, encode_delayed_send, parse_delay_ms,
 };
 
 fn config() -> Config {
@@ -160,7 +160,17 @@ proptest! {
 }
 
 #[test]
-fn oversized_send_requests_are_rejected_before_decoding() {
-    let bytes = vec![0_u8; MAX_DELAYED_SEND_BYTES + 1];
-    assert!(decode_delayed_send(&bytes).is_err());
+fn a_field_count_past_the_input_fails_without_allocating_it() {
+    let mut bytes = encode_delayed_send(&valid_request(1, Processor::BasicHttp))
+        .expect("fixture request encodes");
+    // The one field: a `u32` count of 1, then its name "k" (length 1).
+    let field = [1, 0, 0, 0, 1, 0, 0, 0, b'k'];
+    let at = bytes
+        .windows(field.len())
+        .position(|window| window == field)
+        .expect("the fixture encodes one field named k");
+    // Claim `u32::MAX` fields and end the input there.
+    bytes.truncate(at);
+    bytes.extend_from_slice(&u32::MAX.to_le_bytes());
+    assert_eq!(decode_delayed_send(&bytes), Err(SendCodecError::Invalid));
 }

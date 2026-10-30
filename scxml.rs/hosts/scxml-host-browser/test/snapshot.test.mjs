@@ -15,7 +15,6 @@ import * as hostTelemetry from '../src/telemetry.js';
 import { recordingTelemetry } from './recording-telemetry.js';
 import {
   DEFAULT_SNAPSHOT_FUEL,
-  MAX_SNAPSHOT_BYTES,
   SNAPSHOT_ERROR_CODES,
   SNAPSHOT_MODES,
   SNAPSHOT_SECTIONS,
@@ -30,9 +29,7 @@ import {
   diffSnapshots,
 } from '../src/index.js';
 import { isFuel as isFuelBudget } from '../src/fuel.js';
-import { MAX_SNAPSHOT_INVOKED_SESSIONS, MAX_SNAPSHOT_INVOKE_DEPTH, isDataModelSnapshot } from '../src/snapshot.js';
-import { InvokedSessions, ROOT } from '../src/invoked-sessions.js';
-import { withinDocumentBounds } from '../src/machine.js';
+import { isDataModelSnapshot } from '../src/snapshot.js';
 import { isDataValue } from '../src/values.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -106,9 +103,7 @@ test('snapshot vocabularies and bounds match the WIT and the scxml-snapshot crat
   const codes = crate.match(/pub const fn as_str\(self\) -> &'static str \{\s*match self \{([^}]*)\}/);
   assert.ok(codes, 'SnapshotErrorCode::as_str exists');
   assert.deepEqual([...SNAPSHOT_ERROR_CODES], [...codes[1].matchAll(/=> "([a-z-]+)"/g)].map((m) => m[1]));
-  assert.ok(crate.includes(`pub const MAX_DOCUMENT_BYTES: usize = ${MAX_SNAPSHOT_BYTES.toLocaleString('en-US').replaceAll(',', '_')};`));
-  assert.ok(crate.includes(`pub const MAX_INVOKED_SESSIONS: usize = ${MAX_SNAPSHOT_INVOKED_SESSIONS};`));
-  assert.ok(crate.includes(`pub const MAX_INVOKE_DEPTH: usize = ${MAX_SNAPSHOT_INVOKE_DEPTH};`));
+  assert.ok(!crate.includes('MAX_INVOKE_DEPTH'));
   assert.deepEqual([...SNAPSHOT_MODES], ['lazy', 'none']);
   assert.ok(isFuelBudget(DEFAULT_SNAPSHOT_FUEL));
   assert.ok(hostTelemetry.HOST_OPERATIONS.includes('snapshot'));
@@ -120,41 +115,11 @@ test('snapshot vocabularies and bounds match the WIT and the scxml-snapshot crat
   assert.ok(row.trim().endsWith(`| ${hostTelemetry.HOST_OPERATIONS.length} |`));
 });
 
-test('the document bounds are checked before any session is read, at any depth or count, as under Wasmtime', () => {
-  // A run's sessions as the capture sees them: no instance is ever read,
-  // so a session whose read would throw proves the check reads none.
-  const runOf = (invokedSessions) => ({
-    invokedSessions,
-    sessions: () =>
-      invokedSessions
-        .keys()
-        .slice(1)
-        .map((key) => [key, new Proxy({}, { get: () => assert.fail(`session ${key} was read`) })]),
-  });
-  // A chain 10,000 sessions deep (no invokeLimits): the codec's count
-  // bound, at once, as the Wasmtime host reports it.
-  const deep = new InvokedSessions();
-  for (let level = 0, parent = ROOT; level < 10_000; level += 1) parent = deep.register(parent, `k${level}`);
-  assert.throws(() => withinDocumentBounds(runOf(deep)), snapshotError('bounds-exceeded'));
-  // One invoked session past the count bound, none deep.
-  const wide = new InvokedSessions();
-  for (let n = 0; n <= MAX_SNAPSHOT_INVOKED_SESSIONS; n += 1) wide.register(ROOT, `s${n}`);
-  assert.throws(() => withinDocumentBounds(runOf(wide)), snapshotError('bounds-exceeded'));
-  // Within the count, one level past the depth bound.
-  const tall = new InvokedSessions();
-  for (let level = 0, parent = ROOT; level <= MAX_SNAPSHOT_INVOKE_DEPTH; level += 1) parent = tall.register(parent, `k${level}`);
-  assert.throws(() => withinDocumentBounds(runOf(tall)), snapshotError('depth-exceeded'));
-  // Within both bounds, the sessions come back in invocation order.
-  const fits = new InvokedSessions();
-  for (let level = 0, parent = ROOT; level < MAX_SNAPSHOT_INVOKE_DEPTH; level += 1) parent = fits.register(parent, `k${level}`);
-  assert.equal(withinDocumentBounds({ invokedSessions: fits, sessions: () => fits.keys().slice(1).map((key) => [key, {}]) }).length, MAX_SNAPSHOT_INVOKE_DEPTH);
-});
-
-test('a snapshot of a chain deeper than the document holds fails with depth-exceeded and the run goes on', async () => {
+test('a snapshot holds a chain of any depth, one flat session list in invocation order, and the run goes on', async () => {
   const NS = 'http://www.w3.org/2005/07/scxml';
   const child = `<scxml xmlns="${NS}" version="1.0" datamodel="null" initial="c0"><state id="c0"><invoke src="file:child.scxml"/></state></scxml>`;
   const root = `<scxml xmlns="${NS}" version="1.0" datamodel="null" initial="r0"><state id="r0"><invoke src="file:child.scxml"/><transition event="stop" target="done"/></state><final id="done"/></scxml>`;
-  const depth = MAX_SNAPSHOT_INVOKE_DEPTH + 8;
+  const depth = 40;
   const deep = await createSession({
     ir: await compileIr(root),
     dataModel: await createNullDataModel({ loadCoreModule }),
@@ -164,7 +129,12 @@ test('a snapshot of a chain deeper than the document holds fails with depth-exce
     capabilities: { loadDocument: () => child },
   });
   deep.start();
-  await assert.rejects(deep.snapshot(), snapshotError('depth-exceeded'));
+  const { snapshot } = JSON.parse(new TextDecoder().decode(await deep.snapshot()));
+  assert.equal(snapshot.sessions.length, depth + 1);
+  assert.equal(snapshot.sessions[0].invoked_by, undefined);
+  for (let level = 1; level <= depth; level += 1) {
+    assert.equal(snapshot.sessions[level].invoked_by.parent_session_id, snapshot.sessions[level - 1].session_id);
+  }
   // The read-only snapshot changed nothing: the run continues.
   assert.equal(deep.status(), 'running');
   deep.send({ name: 'stop' });
@@ -209,10 +179,6 @@ test('malformed snapshot and diff arguments are invalid-argument', async () => {
   ]) {
     await assert.rejects(diffSnapshots(before, after, options), hostError('invalid-argument'));
   }
-  await assert.rejects(
-    diffSnapshots(new Uint8Array(MAX_SNAPSHOT_BYTES + 1), bytes, { loadCoreModule }),
-    snapshotError('too-large'),
-  );
   machine.dispose();
 });
 
@@ -383,7 +349,7 @@ test('snapshots at every checkpoint are documents that change nothing', async ()
   for (const document of snapshotted.documents) {
     assert.equal(document.version, 'scxml.session-snapshot/v2');
     assert.match(document.sha256, /^[0-9a-f]{64}$/);
-    assert.equal(document.snapshot.root.session_id, 'machine-session');
+    assert.equal(document.snapshot.sessions[0].session_id, 'machine-session');
   }
   // A linked data model that has never been initialized is reported as not
   // linked (docs/session-snapshot.md, "Session object"): the `ready`
@@ -395,12 +361,12 @@ test('snapshots at every checkpoint are documents that change nothing', async ()
     ready.snapshot.components.map((component) => component.role),
     ['clock', 'io-processor-scxml', 'machine'],
   );
-  assert.equal(ready.snapshot.root.datamodel_name, undefined);
+  assert.equal(ready.snapshot.sessions[0].datamodel_name, undefined);
   assert.deepEqual(
     excluded.snapshot.components.map((component) => component.role),
     ['clock', 'data-model-ecmascript', 'io-processor-scxml', 'machine'],
   );
-  assert.equal(excluded.snapshot.root.datamodel_name, 'ecmascript');
+  assert.equal(excluded.snapshot.sessions[0].datamodel_name, 'ecmascript');
   for (const document of snapshotted.documents.slice(3)) {
     assert.deepEqual(
       document.snapshot.components.map((component) => component.role),
@@ -411,8 +377,8 @@ test('snapshots at every checkpoint are documents that change nothing', async ()
     started.snapshot.components.map((component) => component.role),
     ['clock', 'data-model-ecmascript', 'io-processor-scxml', 'machine'],
   );
-  assert.equal(ready.snapshot.root.status, 'ready');
-  assert.equal(started.snapshot.root.status, 'running');
+  assert.equal(ready.snapshot.sessions[0].status, 'ready');
+  assert.equal(started.snapshot.sessions[0].status, 'running');
   assert.deepEqual(started.options, { exclude: [], trace_context: 'strip' });
   // `options.exclude` is canonicalized to the WIT `section` declaration
   // order (docs/session-snapshot.md, "`options`": sorted and unique; the
@@ -427,7 +393,7 @@ test('snapshots at every checkpoint are documents that change nothing', async ()
     'invocations',
   ]);
   for (const section of ['system', 'data_model', 'queues', 'pending_sends', 'transitions', 'invocations']) {
-    assert.equal(excluded.snapshot.root[section], undefined, section);
+    assert.equal(excluded.snapshot.sessions[0][section], undefined, section);
   }
 });
 
@@ -469,7 +435,7 @@ test('a named page data model snapshots like the bundled one', async () => {
   assert.deepEqual(produced, expected);
   for (const text of produced) {
     const { snapshot } = JSON.parse(text);
-    assert.equal(snapshot.root.datamodel_name, 'ecmascript');
+    assert.equal(snapshot.sessions[0].datamodel_name, 'ecmascript');
     assert.ok(snapshot.components.some((component) => component.role === 'data-model-ecmascript'));
   }
 });
@@ -493,7 +459,7 @@ test('a page data model name outside the closed set is invalid-argument; the nam
   const machine = await createSession({ ir, dataModel: counted, timers: 'manual', loadCoreModule });
   machine.start();
   const { snapshot } = JSON.parse(new TextDecoder().decode(await machine.snapshot()));
-  assert.equal(snapshot.root.datamodel_name, 'ecmascript');
+  assert.equal(snapshot.sessions[0].datamodel_name, 'ecmascript');
   assert.equal(reads, 1);
   machine.dispose();
 });

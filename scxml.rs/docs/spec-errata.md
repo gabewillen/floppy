@@ -375,7 +375,7 @@ matrix marks the requirements concerned as partial, not covered.
 - **This implementation** (wasm builds, which every session runs in) ends
   the session, with no error event, when its internal event queue reaches
   10,000 events (the error event itself would have to join that queue),
-  when one engine command produces more than 10,000 effects, when a host's fuel budget
+  when a host's fuel budget
   is exhausted (a macrostep that never ends; Appendix D: "A macrostep that
   does not terminate ... This is currently allowed"), when one host call's
   linear memory growth copies exceed its copy allowance (under Wasmtime,
@@ -395,10 +395,8 @@ matrix marks the requirements concerned as partial, not covered.
   defined in Section 14 of [ECMASCRIPT-262] as the content of a <script>
   element."
 - **This implementation** runs every program in the session's one realm,
-  but a program that reaches a bound runs differently from ECMA-262: on
-  wasm builds, a loop past 100,000 iterations in one call frame, a value
-  stack past 16,384 entries, or `In()` asked about more than 128 distinct
-  state IDs in one operation ends the operation, the guarded built-ins throw
+  but a program that reaches a bound runs differently from ECMA-262: the
+  guarded built-ins throw
   a catchable `RangeError` before passing a bound, and `eval` and
   `Function` refuse source beyond the parse bounds with a `TypeError`; on
   every build, the native stack guards (128 parse nesting units, recursion
@@ -450,24 +448,8 @@ matrix marks the requirements concerned as partial, not covered.
     depth or count of its own: an invoked session never starts inside the
     call of the session that invokes it, and a chain of any depth runs,
     given fuel for every level (the command that starts the chain spends
-    one fuel budget on all of them, see L.4). The
-    host names an invoked session `<parent _sessionid>.<invokeid>`, so a
-    chain whose child id would exceed the 1024-byte name bound stops there
-    (that `<invoke>` raises `error.execution`);
-  - the 1024-byte name bound, on every build: a `<state>`, `<parallel>`,
-    `<final>`, or `<history>` ID longer than that (`LIMIT006`), which no
-    configuration, snapshot, or `In()` could name once the state is
-    entered, or the ID of a state that can complete longer than 1,013
-    bytes, whose `done.state.<ID>` event (REC 3.7) the bound cannot hold
-    (`LIMIT006`); a literal `<raise event>`, `<send event>`, `<send id>`,
-    or `<invoke id>` longer than the bound, or an `<invoke id>` longer
-    than 1,012 bytes, whose `done.invoke.<ID>` event (REC 6.4) it cannot
-    hold (`LIMIT007`); and, for names known only at run time, a generated
-    invoke id (`<state ID>.<_sessionid>.<n>`, REC 6.4.1, so a state ID
-    within a few bytes of the bound) longer than that or longer than
-    1,012 bytes, whose `done.invoke.<ID>` event the bound cannot hold,
-    which fails its `<invoke>` with `error.execution`, and a `<send
-    eventexpr>` value that is not a name, which fails its `<send>` with
+    one fuel budget on all of them, see L.4);
+  - a `<send eventexpr>` value that is not a name, which fails its `<send>` with
     `error.execution` (REC 3.12.2: "it MUST signal any errors that occur
     by raising SCXML events whose names begin with 'error.'"); none of
     these ends the session;

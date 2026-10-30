@@ -371,37 +371,16 @@ mod tests {
             "scxml.wit invoke-request",
         );
 
-        let ecmascript = include_str!("../../../components/scxml-data-model-ecmascript/src/lib.rs");
-        let xpath = include_str!("../../../components/scxml-data-model-xpath/src/lib.rs");
-        let null = include_str!("../../../components/scxml-data-model-null/src/lib.rs");
-        for name in ["MAX_SOURCE_BYTES", "MAX_EXPRESSION_BYTES"] {
-            let null_value = literal_usize_const(null, name);
-            assert_eq!(literal_usize_const(ecmascript, name), null_value, "{name}");
-            assert_eq!(literal_usize_const(xpath, name), null_value, "{name}");
-        }
-        assert_eq!(
-            literal_usize_const(ecmascript, "MAX_SCRIPT_BYTES"),
-            literal_usize_const(xpath, "MAX_SCRIPT_BYTES")
-        );
         assert_documented(
             &docs,
             &[
-                format!(
-                    "Bundled-provider bounds: the `initialize` declarations' placeholder encoding at most {} bytes, each expression, location, or `add-attribute` name at most {} bytes, each script at most {} bytes; no text/JSON/XML value has a byte bound; the ECMAScript provider also bounds its data locations (portable values, functions, and opaque values together) to {} and each location name to {} bytes: a call that would commit more fails and changes no data.",
-                    scxml_data_model_null::MAX_SOURCE_BYTES,
-                    literal_usize_const(null, "MAX_EXPRESSION_BYTES"),
-                    literal_usize_const(ecmascript, "MAX_SCRIPT_BYTES"),
-                    literal_usize_const(ecmascript, "MAX_VARIABLES"),
-                    scxml_types::MAX_NAME_BYTES,
-                ),
+                "Bundled-provider bounds: no text/JSON/XML value or location name has a byte bound.".to_owned(),
                 format!(
                     "A variable whose rendered text is longer than {} bytes is `oversized` instead, in every provider.",
                     scxml_snapshot::MAX_VALUE_BYTES,
                 ),
                 format!(
-                    "The XPath provider bounds declared variables to {}, and gives each expression evaluation {} fuel units; running out of fuel, like any other evaluator limit, fails that call with `execution` (SCXML `error.execution`) and changes no data.",
-                    scxml_data_model_xpath::MAX_VARIABLES,
-                    DOCUMENTED_XPATH_FUEL,
+                    "The XPath provider gives each expression evaluation {DOCUMENTED_XPATH_FUEL} fuel units; running out of fuel, like any other evaluator limit, fails that call with `execution` (SCXML `error.execution`) and changes no data."
                 ),
             ],
             "scxml.wit data-model-api",
@@ -411,23 +390,9 @@ mod tests {
     #[test]
     fn bundled_data_model_bounds_fit_the_snapshot_document_bounds() {
         // Every state a bundled provider commits must encode as a session
-        // snapshot: its location count and name bounds are within the
-        // document's, and each provider reports a variable as `oversized`
-        // exactly when its text exceeds the document's per-value bound.
+        // snapshot: each provider reports a variable as `oversized` exactly when its
+        // text exceeds the document's per-value bound.
         let ecmascript = include_str!("../../../components/scxml-data-model-ecmascript/src/lib.rs");
-        for (provider, variables) in [
-            (
-                "ecmascript",
-                literal_usize_const(ecmascript, "MAX_VARIABLES"),
-            ),
-            ("xpath", scxml_data_model_xpath::MAX_VARIABLES),
-        ] {
-            assert!(
-                variables <= scxml_snapshot::MAX_VARIABLES,
-                "{provider} locations"
-            );
-        }
-        const { assert!(scxml_types::MAX_NAME_BYTES <= scxml_snapshot::MAX_SESSION_ID_BYTES) };
         let xpath = include_str!("../../../components/scxml-data-model-xpath/src/lib.rs");
         for (provider, source) in [("ecmascript", ecmascript), ("xpath", xpath)] {
             assert_eq!(

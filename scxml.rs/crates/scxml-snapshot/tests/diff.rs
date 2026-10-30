@@ -524,18 +524,12 @@ fn session_id_and_invoked_by_are_reported() {
 
     // `invoked_by` follows the parent's session id; the edit is typed.
     let mut after = before.clone();
-    let invocations = after
-        .snapshot
-        .root
-        .invocations
-        .as_mut()
-        .expect("invocations");
-    invocations[0].session.invoked_by = Some(InvokedBy {
+    after.snapshot.sessions[1].invoked_by = Some(InvokedBy {
         parent_session_id: "root2".into(),
         invoke_id: "i1".into(),
     });
-    after.snapshot.root.session_id = "root2".into();
-    if let Some(system) = &mut after.snapshot.root.system {
+    after.snapshot.sessions[0].session_id = "root2".into();
+    if let Some(system) = &mut after.snapshot.sessions[0].system {
         system.sessionid = "root2".into();
     }
     let after = rehash(&mut after);
@@ -595,7 +589,7 @@ fn atomic_configuration_is_reported() {
     // A state that stays active but becomes atomic (as across an IR
     // change) is reported under `atomic` alone.
     let mut after = before.clone();
-    after.snapshot.root.configuration.atomic = vec!["s0".into(), "s0.a".into()];
+    after.snapshot.sessions[0].configuration.atomic = vec!["s0".into(), "s0.a".into()];
     let after = rehash(&mut after);
     let diff = changed(&before, &after);
     let configuration = root(&diff).configuration.as_ref().expect("configuration");
@@ -827,10 +821,10 @@ fn merge(before: &Knobs, other: &Knobs, mask: &[bool]) -> Knobs {
 fn a_name_that_appears_or_disappears_is_an_optional_change() {
     let before = document(&base_knobs());
     let mut after = before.clone();
-    let named = before.snapshot.root.name.clone();
+    let named = before.snapshot.sessions[0].name.clone();
     assert!(named.is_some(), "the base fixture is named");
-    after.snapshot.root.name = None;
-    if let Some(system) = after.snapshot.root.system.as_mut() {
+    after.snapshot.sessions[0].name = None;
+    if let Some(system) = after.snapshot.sessions[0].system.as_mut() {
         system.name = None;
     }
     let after = rehash(&mut after);

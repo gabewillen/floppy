@@ -220,7 +220,7 @@ fn document() -> String {
       <log label="tick" expr="_event.invokeid + ' ' + _event.data + ' ' + finalized"/>
     </transition>
     <transition event="ping"><send event="ping" target="#_echo"/></transition>
-    <transition event="long"><send eventexpr="'x'.repeat(1020)" target="#_echo"/></transition>
+    <transition event="unconnected"><send event="message" target="#_echo"/></transition>
     <transition event="echo.ping">
       <log label="echo.ping" expr="_event.invokeid + ' ' + _event.origintype + ' ' + finalized"/>
     </transition>
@@ -373,11 +373,11 @@ fn leaving_the_invoking_state_cancels_the_service() {
 fn a_service_whose_future_resolves_err_raises_error_communication() {
     let host = host();
     let mut session = open(&host);
-    // The service cannot echo a name `echo.` would push past the event-name
-    // bound: its future resolves `err`.
+    // The service takes `message` only on an open connection: its future
+    // resolves `err`.
     session
-        .send(&ScriptedEvent::named("long"))
-        .expect("the long event is processed");
+        .send(&ScriptedEvent::named("unconnected"))
+        .expect("the event is processed");
     assert_eq!(
         logs(&mut session),
         ["failed: error.communication.echo echo platform"]

@@ -35,8 +35,8 @@ use scxml_types::{
 };
 
 use super::{
-    DATA_MODEL_NAME, DataModelError, ExecutionHost, ForeachItems, MAX_EXPRESSION_BYTES,
-    MAX_SCRIPT_BYTES, MAX_SOURCE_BYTES, SyntaxKind, SystemContext, VariableMarkup, XPathDataModel,
+    DATA_MODEL_NAME, DataModelError, ExecutionHost, ForeachItems, SyntaxKind, SystemContext,
+    VariableMarkup, XPathDataModel,
 };
 
 /// Most fragments one `check-effects` request may carry (WIT contract bound).
@@ -46,10 +46,6 @@ const MAX_EFFECT_FRAGMENTS: usize = 16_384;
 const MAX_EFFECT_SOURCE_BYTES: usize = 4 * 1024 * 1024;
 /// Maximum issues returned by one `check-syntax` call (WIT contract bound).
 const MAX_WIT_SYNTAX_ISSUES: usize = 4;
-/// Maximum items in one `foreach-result` (WIT contract bound).
-const MAX_FOREACH_ITEMS: usize = 10_000;
-/// Maximum entries in one `named-value` list (WIT contract bound).
-const MAX_NAMED_VALUES: usize = 1_024;
 
 thread_local! {
     // The one data model of this component instance. The Component Model
@@ -87,18 +83,7 @@ impl Guest for Component {
             WitSyntaxKind::Location => SyntaxKind::Location,
             WitSyntaxKind::Script => SyntaxKind::Script,
         };
-        let limit = if kind == SyntaxKind::Script {
-            MAX_SCRIPT_BYTES
-        } else {
-            MAX_EXPRESSION_BYTES
-        };
-        let result = if source.len() > limit {
-            Err(ComponentError {
-                version: ErrorVersion::V1,
-                code: ErrorCode::PayloadTooLarge,
-                detail: Some("syntax-check source exceeds its byte bound".into()),
-            })
-        } else {
+        let result = {
             super::check_syntax(kind, &source)
                 .map_err(to_component_error)
                 .and_then(|issues| {
@@ -157,13 +142,6 @@ impl Guest for Component {
 
     fn initialize(declarations: Vec<String>, context: SystemValues) -> Result<(), ComponentError> {
         observed(telemetry::Operation::Initialize, None, || {
-            let declared_bytes = declarations
-                .iter()
-                .try_fold(0_usize, |total, id| total.checked_add(id.len()))
-                .ok_or(DataModelError::InvalidInput)?;
-            if declared_bytes > MAX_SOURCE_BYTES {
-                return Err(DataModelError::InvalidInput);
-            }
             let system = SystemContext {
                 session_id: context.session_id,
                 machine_name: context.machine_name,
@@ -178,17 +156,14 @@ impl Guest for Component {
 
     fn declare(id: String) -> Result<(), ComponentError> {
         observed(telemetry::Operation::Assign, None, || {
-            bounded(&id, MAX_EXPRESSION_BYTES)?;
             MODEL.with_borrow_mut(|model| model.declare(&id))
         })
     }
 
     fn initialize_data(id: String, initializer: WitDataInitializer) -> Result<(), ComponentError> {
         observed(telemetry::Operation::Assign, None, || {
-            bounded(&id, MAX_EXPRESSION_BYTES)?;
             let initializer = match initializer {
                 WitDataInitializer::Expression(expression) => {
-                    bounded(&expression, MAX_EXPRESSION_BYTES)?;
                     DataInitializer::Expression(expression)
                 }
                 WitDataInitializer::Value(value) => DataInitializer::Value(from_wit_value(value)?),
@@ -199,7 +174,6 @@ impl Guest for Component {
 
     fn set_parameter(name: String, value: WitValue) -> Result<bool, ComponentError> {
         observed(telemetry::Operation::Assign, None, || {
-            bounded(&name, MAX_EXPRESSION_BYTES)?;
             let value = from_wit_value(value)?;
             MODEL.with_borrow_mut(|model| model.set_parameter(&name, &value))
         })
@@ -215,7 +189,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateValue,
             context.as_ref(),
             || {
-                bounded(&location, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 MODEL
                     .with_borrow_mut(|model| {
@@ -236,7 +209,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateValue,
             context.as_ref(),
             || {
-                bounded(&expression, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 MODEL.with_borrow_mut(|model| {
                     model.evaluate_text(&expression, event.as_ref(), &mut Host)
@@ -252,7 +224,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateValue,
             context.as_ref(),
             || {
-                bounded(&expression, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 // SCXML 4.7 with the XPath data model: `string()` of the
                 // value, the text the checked-in IRP baselines record.
@@ -274,7 +245,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateValue,
             context.as_ref(),
             || {
-                bounded(&source, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 // The WIT `location` flag is the wire form of the source kind.
                 let kind = if location {
@@ -303,14 +273,13 @@ impl Guest for Component {
         let event = event.map(from_wit_event).transpose();
         let context = trace_of(&event);
         let result = (|| {
-            bounded(&expression, MAX_EXPRESSION_BYTES)?;
             let event = event?;
             MODEL.with_borrow_mut(|model| {
                 model.foreach_items(&expression, event.as_ref(), &mut Host)
             })
         })()
         .map_err(to_component_error)
-        .and_then(to_wit_foreach);
+        .map(to_wit_foreach);
         record(
             telemetry::Operation::EvaluateValue,
             outcome_of(&result),
@@ -323,9 +292,6 @@ impl Guest for Component {
     // closed: the caller raises `error.execution` rather than using a
     // fabricated value.
     fn namelist_key(location: String) -> Option<String> {
-        if location.len() > MAX_EXPRESSION_BYTES {
-            return None;
-        }
         super::namelist_key(&location).map(str::to_owned)
     }
 
@@ -366,7 +332,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateCondition,
             context.as_ref(),
             || {
-                bounded(&expression, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 MODEL.with_borrow_mut(|model| {
                     model.evaluate_condition(&expression, event.as_ref(), &mut Host)
@@ -385,7 +350,6 @@ impl Guest for Component {
             telemetry::Operation::EvaluateValue,
             context.as_ref(),
             || {
-                bounded(&expression, MAX_EXPRESSION_BYTES)?;
                 let event = event?;
                 MODEL
                     .with_borrow_mut(|model| {
@@ -407,7 +371,6 @@ impl Guest for Component {
         let trace = context.as_ref().ok().cloned().flatten();
         observed(telemetry::Operation::Assign, trace.as_ref(), || {
             context?;
-            bounded(&location, MAX_EXPRESSION_BYTES)?;
             let event = event.map(from_wit_event).transpose()?;
             let placement = match placement {
                 WitAssignPlacement::ReplaceChildren => AssignPlacement::ReplaceChildren,
@@ -417,16 +380,10 @@ impl Guest for Component {
                 WitAssignPlacement::NextSibling => AssignPlacement::NextSibling,
                 WitAssignPlacement::Replace => AssignPlacement::Replace,
                 WitAssignPlacement::Delete => AssignPlacement::Delete,
-                WitAssignPlacement::AddAttribute(name) => {
-                    bounded(&name, MAX_EXPRESSION_BYTES)?;
-                    AssignPlacement::AddAttribute(name)
-                }
+                WitAssignPlacement::AddAttribute(name) => AssignPlacement::AddAttribute(name),
             };
             let source = match source {
-                WitAssignSource::Expression(expression) => {
-                    bounded(&expression, MAX_EXPRESSION_BYTES)?;
-                    AssignSource::Expression(expression)
-                }
+                WitAssignSource::Expression(expression) => AssignSource::Expression(expression),
                 WitAssignSource::Value(value) => AssignSource::Value(from_wit_value(value)?),
                 WitAssignSource::ForeachValue(value) => {
                     AssignSource::ForeachValue(from_wit_value(value)?)
@@ -492,32 +449,23 @@ impl Guest for Component {
     }
 }
 
-/// The WIT `foreach-result` of one node snapshot; more than
-/// [`MAX_FOREACH_ITEMS`] nodes is `payload-too-large`.
-fn to_wit_foreach(items: ForeachItems) -> Result<ForeachResult, ComponentError> {
+/// The WIT `foreach-result` of one node snapshot.
+fn to_wit_foreach(items: ForeachItems) -> ForeachResult {
     match items {
-        ForeachItems::Items(items) if items.len() > MAX_FOREACH_ITEMS => Err(ComponentError {
-            version: ErrorVersion::V1,
-            code: ErrorCode::PayloadTooLarge,
-            detail: Some("foreach collection exceeds 10000 items".into()),
-        }),
-        ForeachItems::Items(items) => Ok(ForeachResult::Items(
-            items.into_iter().map(to_wit_value).collect(),
-        )),
-        ForeachItems::Illegal => Ok(ForeachResult::Illegal),
+        ForeachItems::Items(items) => {
+            ForeachResult::Items(items.into_iter().map(to_wit_value).collect())
+        }
+        ForeachItems::Illegal => ForeachResult::Illegal,
     }
 }
 
-/// Converts the entries of one `event-payload` call; `None` when the list
-/// or an entry breaks the WIT `named-value` bounds.
+/// Converts the entries of one `event-payload` call; `None` when an entry
+/// breaks the WIT `named-value` bounds.
 fn from_wit_entries(entries: Vec<NamedValue>) -> Option<Vec<(String, DataValue)>> {
-    if entries.len() > MAX_NAMED_VALUES {
-        return None;
-    }
     entries
         .into_iter()
         .map(|entry| {
-            if entry.name.is_empty() || entry.name.len() > scxml_types::MAX_NAME_BYTES {
+            if entry.name.is_empty() {
                 return None;
             }
             Some((entry.name, from_wit_value(entry.value).ok()?))
@@ -584,14 +532,6 @@ fn to_component_error(error: DataModelError) -> ComponentError {
         version: ErrorVersion::V1,
         code,
         detail: Some(detail.into()),
-    }
-}
-
-fn bounded(value: &str, maximum: usize) -> Result<(), DataModelError> {
-    if value.len() <= maximum {
-        Ok(())
-    } else {
-        Err(DataModelError::InvalidInput)
     }
 }
 

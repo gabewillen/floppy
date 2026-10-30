@@ -131,9 +131,6 @@ pub use parser::{Expression, ParseOptions, check_syntax};
 pub mod limits {
     use scxml_types::wasm_bound;
 
-    /// Maximum source bytes accepted by [`crate::Expression::parse`]
-    /// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
-    pub const MAX_EXPRESSION_BYTES: usize = wasm_bound(16_384);
     /// Maximum nesting depth of a parsed expression tree (binary operator
     /// chains count one level per operator), on every build.
     pub const MAX_AST_DEPTH: usize = 128;
@@ -156,8 +153,6 @@ pub mod limits {
     pub const MAX_XML_BYTES: usize = 1_048_576;
     /// Maximum attributes on one element.
     pub const MAX_ATTRIBUTES: usize = 256;
-    /// Maximum bytes of one name (element, attribute, prefix, target).
-    pub const MAX_NAME_BYTES: usize = 1_024;
     /// Maximum nodes in one node-set value (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
     pub const MAX_NODE_SET: usize = wasm_bound(65_536);
     /// Maximum bytes of one string produced by evaluation or serialization.
@@ -211,8 +206,6 @@ impl core::error::Error for SyntaxError {}
 /// The bound an operation exceeded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Limit {
-    /// [`limits::MAX_EXPRESSION_BYTES`].
-    ExpressionBytes,
     /// [`limits::MAX_AST_DEPTH`] or [`limits::MAX_PARSE_NESTING`].
     AstDepth,
     /// [`limits::MAX_AST_NODES`].
@@ -227,8 +220,6 @@ pub enum Limit {
     XmlBytes,
     /// [`limits::MAX_ATTRIBUTES`].
     Attributes,
-    /// [`limits::MAX_NAME_BYTES`].
-    NameBytes,
     /// [`limits::MAX_NODE_SET`].
     NodeSet,
     /// [`limits::MAX_STRING_BYTES`].
@@ -309,14 +300,11 @@ impl From<XmlError> for Error {
     }
 }
 
-/// Whether `name` is an XML `NCName` (no colon) within
-/// [`limits::MAX_NAME_BYTES`].
+/// Whether `name` is an XML `NCName` (no colon).
 #[must_use]
 pub fn is_ncname(name: &str) -> bool {
     let mut characters = name.chars();
-    name.len() <= limits::MAX_NAME_BYTES
-        && characters.next().is_some_and(is_name_start)
-        && characters.all(is_name_char)
+    characters.next().is_some_and(is_name_start) && characters.all(is_name_char)
 }
 
 /// XML 1.0 (fifth edition) `NameStartChar` without `:`.

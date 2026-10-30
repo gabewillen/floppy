@@ -655,7 +655,6 @@ export interface SnapshotOptions {
  * (docs/session-snapshot.md, "Error codes").
  */
 export type SnapshotErrorCode =
-  | 'too-large'
   | 'malformed-json'
   | 'unsupported-version'
   | 'schema-violation'
@@ -664,7 +663,6 @@ export type SnapshotErrorCode =
   | 'bounds-exceeded'
   | 'invalid-name'
   | 'inconsistent'
-  | 'depth-exceeded'
   | 'clock-invariant'
   | 'not-stable'
   | 'status-invalid'
@@ -770,8 +768,6 @@ export const SNAPSHOT_SECTIONS: readonly SnapshotSection[];
 export const SNAPSHOT_MODES: readonly SnapshotMode[];
 /** Closed `snapshot({traceContext})` values. */
 export const TRACE_CONTEXT_POLICIES: readonly TraceContextPolicy[];
-/** Largest snapshot or diff document, in bytes (32 MiB; the crate's bound). */
-export const MAX_SNAPSHOT_BYTES: number;
 /** Per-call fuel budget of the codec component. */
 export const DEFAULT_SNAPSHOT_FUEL: number;
 /** Closed session snapshot failure codes (the crate's wire values). */
@@ -916,11 +912,8 @@ export class MachineSession {
    * operation, after a call that did not end stable, or while deliveries are pending;
    * 'codec-unavailable' when the codec component is missing, the session
    * was created with `snapshot: 'none'`, or the codec answers `unavailable`;
-   * 'clock-invariant' when a child's clock differs from the root's;
-   * 'bounds-exceeded' with children requested and more than 255 invoked
-   * sessions, else 'depth-exceeded' with one deeper than 32 (checked
-   * before any session is read, at any depth); 'too-large' when the
-   * document is over 32 MiB; or another encoder code.
+   * 'clock-invariant' when a child's clock differs from the root's; or
+   * another encoder code.
    * Throws ScxmlSessionError when a component's read-only `snapshot` export
    * rejects (for example a page data model without `snapshot()` while
    * `system` or `datamodel` is requested); the session is unaffected.
@@ -939,8 +932,7 @@ export class MachineSession {
  * valid snapshot documents, byte-identical to `scxml snapshot diff --format
  * json`.
  *
- * Throws ScxmlSnapshotError: 'too-large' when either input (checked
- * before any codec call) or the diff is over 32 MiB; 'codec-unavailable'
+ * Throws ScxmlSnapshotError: 'codec-unavailable'
  * when the codec component is missing or answers `unavailable`; or the
  * decoder's code for an invalid input document (see SNAPSHOT_ERROR_CODES).
  * Throws ScxmlHostError:
