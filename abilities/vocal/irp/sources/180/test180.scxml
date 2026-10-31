@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- vocal-9: a streamed answer of 1.25 s is sent on as three chunks, two of half a second and the rest, before its output. -->
+<!-- vocal-9: a streamed answer of 1.25 s is sent on as six chunks, 0.1 s and each half again as long (in whole twentieths of a second), and the rest, before its output. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
@@ -18,18 +18,27 @@
     <onentry>
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "Hello there."}]}'/></send>
     </onentry>
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.0.pcm\",\"channels\":1,\"duration\":0.5,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step2"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.0.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.1.pcm\",\"channels\":1,\"duration\":0.5,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":1}"' target="step3"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.1.pcm\",\"channels\":1,\"duration\":0.15,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":1}"' target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.2.pcm\",\"channels\":1,\"duration\":0.25,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":2}"' target="step4"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.2.pcm\",\"channels\":1,\"duration\":0.2,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":2}"' target="step4"/>
   </state>
   <state id="step4">
-    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.pcm\",\"channels\":1,\"duration\":1.25,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step5"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.3.pcm\",\"channels\":1,\"duration\":0.3,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":3}"' target="step5"/>
   </state>
   <state id="step5">
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.4.pcm\",\"channels\":1,\"duration\":0.45,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":4}"' target="step6"/>
+  </state>
+  <state id="step6">
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.5.pcm\",\"channels\":1,\"duration\":0.05,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":5}"' target="step7"/>
+  </state>
+  <state id="step7">
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.pcm\",\"channels\":1,\"duration\":1.25,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step8"/>
+  </state>
+  <state id="step8">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

@@ -896,15 +896,31 @@ impl Arguments {
 /// (0.1 s): a model writes a token every few milliseconds, and each draft
 /// the invoking session takes costs it a macrostep or more, so the drafts
 /// of one interval are returned together, each field's continuing text
-/// joined into one draft ([`Draft::absorb`]).
+/// joined into one draft ([`Draft::absorb`]). The call's first phrase is
+/// not held for it ([`Pending::due`]).
 pub const DRAFT_INTERVAL_NS: u64 = 100_000_000;
 
-/// The drafts read and not yet returned, and when drafts were last
-/// returned.
+/// The drafts read and not yet returned, when drafts were last returned,
+/// and whether a returned draft ended a phrase.
 #[derive(Debug, Default)]
 pub struct Pending {
     drafts: Vec<Draft>,
     last: Option<u64>,
+    phrased: bool,
+}
+
+/// Whether `text` ends a phrase: a `.`, `!`, `?`, `,`, `;`, `:` or `—`
+/// followed by white space.
+fn ends_phrase(text: &str) -> bool {
+    let mut chars = text.chars().peekable();
+    while let Some(character) = chars.next() {
+        if matches!(character, '.' | '!' | '?' | ',' | ';' | ':' | '—')
+            && chars.peek().is_some_and(|next| next.is_whitespace())
+        {
+            return true;
+        }
+    }
+    false
 }
 
 impl Pending {
@@ -924,19 +940,24 @@ impl Pending {
 
     /// The drafts to return at the logical time `now` (nanoseconds): all
     /// that are held once [`DRAFT_INTERVAL_NS`] passed since the last
-    /// return (the first return is due at once), or when the reply `ended`;
+    /// return (the first return is due at once), once the held text ends
+    /// the call's first phrase (so the invoking session can act on it, say
+    /// it, without waiting out the interval), or when the reply `ended`;
     /// none otherwise.
     pub fn due(&mut self, now: u64, ended: bool) -> Vec<Draft> {
         if self.drafts.is_empty() {
             return Vec::new();
         }
+        let phrase = !self.phrased && self.drafts.iter().any(|draft| ends_phrase(&draft.text));
         let due = ended
+            || phrase
             || self
                 .last
                 .is_none_or(|last| now.saturating_sub(last) >= DRAFT_INTERVAL_NS);
         if !due {
             return Vec::new();
         }
+        self.phrased |= phrase;
         self.last = Some(now);
         std::mem::take(&mut self.drafts)
     }
@@ -1219,6 +1240,29 @@ mod tests {
             )
         );
     }
+    #[test]
+    fn the_first_phrase_is_returned_as_it_ends_and_later_ones_wait_out_the_interval() {
+        let markers = lines();
+        let arguments = r#"{"events": [{"event": "tests.processing.lines", "data": {"parts": [{"words": "Hi there, you. And more."}]}}]}"#;
+        let mut pending = Pending::default();
+        let mut parser = DraftParser::new(markers);
+        let mut returns = Vec::new();
+        for character in arguments.chars() {
+            pending.extend(parser.feed(&character.to_string()));
+            // Every read at one logical millisecond: only the first return
+            // and the first phrase's end are due before the interval.
+            let due = pending.due(1_000_000, false);
+            if !due.is_empty() {
+                returns.push(
+                    due.iter()
+                        .map(|draft| draft.text.as_str())
+                        .collect::<String>(),
+                );
+            }
+        }
+        assert_eq!(returns, ["H", "i there, "]);
+    }
+
     fn dispatch(branches: &[(&str, &[&str])]) -> Json {
         let branches: Vec<Json> = branches
             .iter()

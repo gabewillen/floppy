@@ -27,12 +27,15 @@
     <onentry>
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "second"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.0.pcm\",\"channels\":1,\"duration\":0.2,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step4"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.0.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step4"/>
   </state>
   <state id="step4">
-    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.pcm\",\"channels\":1,\"duration\":0.2,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step5"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.1.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":1}"' target="step5"/>
   </state>
   <state id="step5">
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-2.pcm\",\"channels\":1,\"duration\":0.2,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step6"/>
+  </state>
+  <state id="step6">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

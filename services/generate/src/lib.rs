@@ -196,6 +196,7 @@
 //! call's drafts, and `L` the marker's leading fields on a field's first
 //! draft. The drafts are returned at most once every [`drafts::DRAFT_INTERVAL_NS`]
 //! of the session's logical clock (what one interval wrote is one draft),
+//! except the call's first phrase, returned as it ends (decision D282),
 //! and only for the call's first marked item. They are never checked: the
 //! result is the selection of record. A reply that is not streamed, or not
 //! a success, returns none.

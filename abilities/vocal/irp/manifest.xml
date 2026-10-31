@@ -87,7 +87,7 @@
     </test>
   </assert>
   <assert id="vocal-9" specnum="9" specid="#vocal-9">
-    <![CDATA[The service streams its encoding (decision D203): each `bot.ability.vocal.speech.encoding.chunk` `{audio, sequence, media_type, sample_rate_hz, channels, duration}` it returns while `applying` is sent to the parent at once, as it arrives, before the output: its audio is chunk `sequence`'s own file (the `output` reference with `.<sequence>` before its extension), a streamed answer is cut every 24000 bytes (half a second of 24 kHz mono PCM), Gemini's answer is one chunk per stretch, and a pause is a chunk of its silence.]]>
+    <![CDATA[The service streams its encoding (decision D203): each `bot.ability.vocal.speech.encoding.chunk` `{audio, sequence, media_type, sample_rate_hz, channels, duration}` it returns while `applying` is sent to the parent at once, as it arrives, before the output: its audio is chunk `sequence`'s own file (the `output` reference with `.<sequence>` before its extension), a streamed answer is cut into 4800 bytes (a tenth of a second of 24 kHz mono PCM) first and each chunk after it half again as long, in whole twentieths of a second, up to 24000 bytes (half a second; decision D280), Gemini's answer is one chunk per stretch, and a pause is a chunk of its silence.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>

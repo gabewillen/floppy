@@ -55,7 +55,7 @@ S.statement(6, "An input that arrives while `applying` is dropped: only the inpu
 S.statement(7, "Each input is a new encoding: after an answer or a failure, the next input in `idle` is encoded again.")
 S.statement(8, "The service says the parts (decision D178): walking them in order, a part with a pause opens a new stretch, each stretch whose words are not blank is one backend request saying its words joined as written, one at a time in order, and no other cue (a sound, an emotion) is applied. With a pause the answers are joined as 16-bit PCM with each pause's silence at its place (0.4 s short, 1 s long), written raw for `audio/pcm` or in a WAV container for `audio/wav`; a pause with another `media_type` rejects the service's start, answered as in statement 5.")
 S.statement(10, "It is long-lived: `bot.ability.processing.cancel` `{}` while `applying` cancels the utterance in hand (the service call with it) and answers nothing; in `idle` it is dropped. The cancelled call's late events are not the next utterance's, which is encoded and answered as any.")
-S.statement(9, "The service streams its encoding (decision D203): each `bot.ability.vocal.speech.encoding.chunk` `{audio, sequence, media_type, sample_rate_hz, channels, duration}` it returns while `applying` is sent to the parent at once, as it arrives, before the output: its audio is chunk `sequence`'s own file (the `output` reference with `.<sequence>` before its extension), a streamed answer is cut every 24000 bytes (half a second of 24 kHz mono PCM), Gemini's answer is one chunk per stretch, and a pause is a chunk of its silence.")
+S.statement(9, "The service streams its encoding (decision D203): each `bot.ability.vocal.speech.encoding.chunk` `{audio, sequence, media_type, sample_rate_hz, channels, duration}` it returns while `applying` is sent to the parent at once, as it arrives, before the output: its audio is chunk `sequence`'s own file (the `output` reference with `.<sequence>` before its extension), a streamed answer is cut into 4800 bytes (a tenth of a second of 24 kHz mono PCM) first and each chunk after it half again as long, in whole twentieths of a second, up to 24000 bytes (half a second; decision D280), Gemini's answer is one chunk per stretch, and a pause is a chunk of its silence.")
 
 # 1: readiness.
 S.case(100, 1, "the vocal is ready on start.", [READY], params=PARAMS)
@@ -107,7 +107,8 @@ S.case(150, 6, "a second input sent while the first is encoding is dropped: one 
 
 # 7: one encoding per input.
 S.case(160, 7, "after an answer the next input is encoded again.",
-       [READY, say("first"), chunk(0), encoded(duration=0.1), say("second"), chunk(0, 0.2, "media/reply-2.{}.pcm"), encoded("media/reply-2.pcm", duration=0.2)],
+       [READY, say("first"), chunk(0), encoded(duration=0.1), say("second"), chunk(0, 0.1, "media/reply-2.{}.pcm"), chunk(1, 0.1, "media/reply-2.{}.pcm"),
+        encoded("media/reply-2.pcm", duration=0.2)],
        params=PARAMS, backend=[{"path": SPEECH, "body": PCM}, {"path": SPEECH, "body": PCM * 2}])
 S.case(161, 7, "after a failure the next input is encoded again.",
        [READY, say("first"), failed("Speech encoding failed: the backend answered an error status."),
@@ -136,8 +137,8 @@ S.case(174, 8, "a pause with audio/mpeg cannot be encoded: the service rejects i
        backend=[{"path": SPEECH, "body": "ID3 not really mp3"}])
 
 # 9: the streamed encoding's chunks.
-S.case(180, 9, "a streamed answer of 1.25 s is sent on as three chunks, two of half a second and the rest, before its output.",
-       [READY, say(), chunk(0, 0.5), chunk(1, 0.5), chunk(2, 0.25), encoded(duration=1.25)],
+S.case(180, 9, "a streamed answer of 1.25 s is sent on as six chunks, 0.1 s and each half again as long (in whole twentieths of a second), and the rest, before its output.",
+       [READY, say(), chunk(0, 0.1), chunk(1, 0.15), chunk(2, 0.2), chunk(3, 0.3), chunk(4, 0.45), chunk(5, 0.05), encoded(duration=1.25)],
        params=PARAMS, backend=[{"path": SPEECH, "body": "A" * 60000}])
 S.case(181, 9, "a WAV answer's chunks are WAV files of their own, named after the output.",
        [READY, say(), chunk(0, 0.125, "media/reply-1.{}.wav", "audio/wav", 12336, 1),
