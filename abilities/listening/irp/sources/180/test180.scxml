@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- listening-9: a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words, without decoding. -->
+<!-- listening-9: a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words and its one voice, without decoding or diarization. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="listening" type="scxml" src="../../../listening.scx">
@@ -16,7 +16,7 @@
     <onentry>
       <send event="environment.sound" target="#_listening"><content expr='{"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}'/></send>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.listening.speech.output' &amp;&amp; _event.data.stimulus.data.content === 'what is the weather' &amp;&amp; _event.data.stimulus.data.confidence === 0.9" target="step2"/>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.listening.speech.output' &amp;&amp; _event.data.stimulus.data.content === 'what is the weather' &amp;&amp; _event.data.stimulus.data.confidence === 0.9 &amp;&amp; _event.data.stimulus.data.source_ids.length === 1 &amp;&amp; /^voice:[0-9a-f]{32}$/.test(_event.data.stimulus.data.source_ids[0])" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

@@ -64,7 +64,7 @@ S.statement(5, "`bot.ability.speaking.efference` goes to the sensitivity from wh
 S.statement(6, "Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.")
 S.statement(7, "Scoring is bounded by `sensitivity_timeout_ms` (30 s): its timer answers `bot.ability.listening.failed` `{stage: \"sensitivity\", message: \"Listening sensitivity timed out.\"}` and returns to `Listening`.")
 S.statement(8, "A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.")
-S.statement(9, "While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.")
+S.statement(9, "While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked; while it knows at most one voice besides the bot's own, the turn is not diarized either, decision D283) and hands on the speech product.")
 
 S.case(100, 1, "the listening is ready once its children are ready.", [READY])
 
@@ -130,11 +130,12 @@ S.case(170, 8, "a sound without an audio reference is refused at the send; the n
         expect(COGNITION, "_event.data.stimulus.event === 'environment.sound' && _event.data.stimulus.data.kind === 'knock'")],
        params=PATIENT, backend=[SILENT])
 
-S.case(180, 9, "a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words, without decoding.",
+S.case(180, 9, "a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words and its one voice, without decoding or diarization.",
        [READY, hear("voiced.wav"),
         expect(COGNITION, "_event.data.stimulus.event === 'bot.ability.listening.speech.output'"
-                          " && _event.data.stimulus.data.content === 'what is the weather' && _event.data.stimulus.data.confidence === 0.9")],
-       params=PATIENT, backend=[DIARIZED, EMBEDDED],
+                          " && _event.data.stimulus.data.content === 'what is the weather' && _event.data.stimulus.data.confidence === 0.9"
+                          " && _event.data.stimulus.data.source_ids.length === 1 && /^voice:[0-9a-f]{32}$/.test(_event.data.stimulus.data.source_ids[0])")],
+       params=PATIENT, backend=[EMBEDDED],
        websocket=[[[{"type": "ready"}],
                    [{"type": "speech_start", "t": 0.0}, {"type": "speech_end", "t": 0.1},
                     {"type": "final", "text": "what is the weather", "confidence": 0.9, "words": [], "t": 0.1},
