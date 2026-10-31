@@ -79,8 +79,9 @@ RESPONDING = offers("offers.length === 2 && offers.map(function (c) { return c.e
 # OpenAI-compatible speech backend answers it.
 AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 4800}
 # Two seconds of the same (96000 bytes), one answer the fake backend sends
-# whole: the speech service cuts it at fixed offsets into four 0.5 s chunks,
-# which playout plays as four pieces (decision D203).
+# whole: the speech service cuts it at fixed offsets into seven chunks
+# (0.1, 0.15, 0.2, 0.3, 0.45, 0.5 and 0.3 s, decisions D203 and D280),
+# which playout plays piece by piece.
 LONG_AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 96000}
 BOOM = {"path": SPEECH, "status": 500, "body": {"error": {"message": "boom"}}}
 
@@ -279,7 +280,7 @@ S.case(210, 12, "past held_responses_bound a respond is refused; the held one is
        params=SPEECH_BOUNDS + [("held_responses_bound", "1")], backend=[AUDIO], clock="wall")
 
 S.case(220, 13, "a stop while a response is said stops speaking: nothing was played, so nothing is said or recorded.",
-       [READY, send(RESPOND, respond("one two three four")), efference("0.5"), RESPONDING, send(STOP, js({})),
+       [READY, send(RESPOND, respond("one two three four")), efference("0.1"), RESPONDING, send(STOP, js({})),
         efference("0"),
         expect(SPOKEN, "_event.data.text === 'one two three four' && _event.data.spoken === ''"
                        " && _event.data.unspoken === 'one two three four' && _event.data.outcome === 'stopped'"), OFFERED],

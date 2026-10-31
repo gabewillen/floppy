@@ -46,7 +46,7 @@ PATIENT = [("encoding_timeout_ms", "600000")]
 # Two seconds of the same (96000 bytes): four pieces of half the 1 s
 # lookahead. Gemini's Interactions API answers it whole, one chunk, so the
 # playout's pieces are not also chunk boundaries (the OpenAI-compatible
-# answer is cut every 0.5 s, decision D203). Its path and base64 `data` are
+# answer is cut into chunks of at most 0.5 s, decisions D203 and D280). Its path and base64 `data` are
 # Gemini's, so it answers only a case that also passes GEMINI.
 LONG_PCM = {"path": "/interactions", "status": 200,
             "body": {"steps": [{"type": "model_output", "content": [{"type": "audio", "data": "A" * 128000}]}]}}
@@ -247,19 +247,20 @@ S.case(197, 11, "a stop with nothing in hand does nothing; the next utterance is
 
 # 12: streamed playout.
 # The OpenAI-compatible speech API's answer: 2 s of 24 kHz mono 16-bit PCM,
-# which the service cuts into four chunks of half a second.
+# which the service cuts into seven chunks (decision D280): 0.1, 0.15, 0.2,
+# 0.3, 0.45, 0.5 and the rest, 0.3 s.
 STREAMED_PCM = {"path": "/audio/speech", "status": 200, "body": "A" * 96000}
 OPENAI_PCM = [("encoding_timeout_ms", "600000"), ("provider", "null"), ("model", "'tts-1'"), ("voice", "'alloy'")]
 S.case(200, 12, "a streamed reply plays chunk by chunk: the first copy is its first chunk's, each chunk sounds in turn, and the copy of nothing left follows the last.",
-       [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
+       [READY, say("one two three four"), efference("0.1")] + [sound(1, chunk=n) for n in range(7)] + [
         efference("0"), appended("one two three four", 1), output("one two three four")],
        ignore=[EFFERENCE, PROGRESS], params=OPENAI_PCM, backend=[STREAMED_PCM])
 S.case(201, 12, "the progress counts the seconds played across the chunks, up to the whole reply.",
-       [READY, say("one two three four"), progress("0"), progress("0.5"), progress("1"), progress("1.5"), progress("2"),
+       [READY, say("one two three four")] + [progress(p) for p in ("0", "0.1", "0.25", "0.45", "0.75", "1.2", "1.7", "2")] + [
         output("one two three four")],
        ignore=[EFFERENCE, SOUND, APPEND], params=OPENAI_PCM, backend=[STREAMED_PCM])
 S.case(202, 12, "the default encoder (provider null, the lab's voice) streams the same chunks: each sounds in turn, then the copy of nothing left.",
-       [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
+       [READY, say("one two three four"), efference("0.1")] + [sound(1, chunk=n) for n in range(7)] + [
         efference("0"), appended("one two three four", 1), output("one two three four")],
        ignore=[EFFERENCE, PROGRESS], params=PATIENT, backend=[STREAMED_PCM])
 

@@ -22,21 +22,30 @@
     <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.5" target="step3"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.1" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 1" target="step4"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.25" target="step4"/>
   </state>
   <state id="step4">
-    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 1.5" target="step5"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.45" target="step5"/>
   </state>
   <state id="step5">
-    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 2" target="step6"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.75" target="step6"/>
   </state>
   <state id="step6">
-    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;one two three four&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot;one two three four&quot; &amp;&amp; _event.data.unspoken === &quot;&quot; &amp;&amp; _event.data.outcome === 'completed' &amp;&amp; _event.data.voice_id === null" target="step7"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 1.2" target="step7"/>
   </state>
   <state id="step7">
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 1.7" target="step8"/>
+  </state>
+  <state id="step8">
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 2" target="step9"/>
+  </state>
+  <state id="step9">
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;one two three four&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot;one two three four&quot; &amp;&amp; _event.data.unspoken === &quot;&quot; &amp;&amp; _event.data.outcome === 'completed' &amp;&amp; _event.data.voice_id === null" target="step10"/>
+  </state>
+  <state id="step10">
     <transition target="pass"/>
   </state>
   <transition event="bot.ability.speaking.efference"/>

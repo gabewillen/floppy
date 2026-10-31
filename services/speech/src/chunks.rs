@@ -4,8 +4,9 @@
 //!
 //! An encoding's answers are read as they arrive (`outbound-http.send`),
 //! one stretch at a time, and each [`Chunker::read`] of an answer's bytes
-//! yields the chunks that are complete: [`CHUNK_BYTES`] at a time, cut at
-//! fixed offsets of the answer (never where a read happened to end, so the
+//! yields the chunks that are complete: [`CHUNK_BYTES`] at a time after
+//! shorter first ones ([`Chunker::cut`], decision D280), cut at fixed
+//! offsets of the answer (never where a read happened to end, so the
 //! same answer is always the same chunks), and the rest of the stretch
 //! when its answer ends ([`Chunker::end`]). How an answer is cut depends on
 //! its format:
@@ -240,17 +241,32 @@ impl Chunker {
     }
 
     /// The whole chunks of the pending bytes: [`CHUNK_BYTES`], whole frames
-    /// of PCM.
+    /// of PCM, but the encoding's first chunk a fifth of that (0.1 s of
+    /// 24 kHz PCM) and each after it half again as long as the one before,
+    /// down to a whole twentieth of a second, up to [`CHUNK_BYTES`]
+    /// (0.1, 0.15, 0.2, 0.3, 0.45, then 0.5 s; decision D280): the first sound plays without
+    /// waiting for half a second of audio, and while a chunk plays, the
+    /// next arrives from any encoder at least one and a half times real
+    /// time.
     fn cut(&mut self, chunks: &mut Vec<Chunk>) {
-        let size = match (self.cut, self.shape) {
-            (Cut::Opaque, _) => CHUNK_BYTES,
-            (_, Some((_, channels))) => {
-                let frame = 2 * usize::from(channels);
-                CHUNK_BYTES - CHUNK_BYTES % frame
-            }
+        let frame = match (self.cut, self.shape) {
+            (Cut::Opaque, _) => 1,
+            (_, Some((_, channels))) => 2 * usize::from(channels),
             (_, None) => return,
         };
-        while self.pending.len() >= size {
+        loop {
+            let step = CHUNK_BYTES / 10;
+            let mut bytes = CHUNK_BYTES / 5;
+            for _ in 0..self.next {
+                if bytes >= CHUNK_BYTES {
+                    break;
+                }
+                bytes = (bytes * 3 / 2 / step * step).min(CHUNK_BYTES);
+            }
+            let size = bytes - bytes % frame;
+            if self.pending.len() < size {
+                break;
+            }
             let rest = self.pending.split_off(size);
             let piece = std::mem::replace(&mut self.pending, rest);
             let chunk = if self.cut == Cut::Opaque {

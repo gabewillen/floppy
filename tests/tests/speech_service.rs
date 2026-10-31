@@ -84,7 +84,8 @@ const STREAM_PIECE: usize = 10_000;
 const STALLED_BYTES: usize = 30_000;
 
 /// What `/stream/v1/audio/speech` answers, in pieces: 1.25 s of 24 kHz
-/// mono 16-bit PCM, two whole chunks and a quarter-second rest.
+/// mono 16-bit PCM: chunks of 0.1, 0.15, 0.2, 0.3 and 0.45 s and a
+/// twentieth-of-a-second rest (decision D280).
 fn streamed_pcm() -> Vec<u8> {
     (0..60_000_u32)
         .map(|at| u8::try_from(at % 199).expect("below 199"))
@@ -463,7 +464,8 @@ fn a_wav_encoding_names_the_rate_and_channels_its_header_declares() {
 }
 
 /// A streamed answer is returned chunk by chunk as it arrives, cut at
-/// fixed offsets (decision D203), then its output (the whole answer).
+/// fixed offsets (decision D203: 0.1 s first, each half again as long,
+/// decision D280), then its output (the whole answer).
 #[test]
 fn a_streamed_answer_is_returned_chunk_by_chunk_before_its_output() {
     let mock = Mock::start();
@@ -481,15 +483,27 @@ fn a_streamed_answer_is_returned_chunk_by_chunk_before_its_output() {
         labelled(&[
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.1,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
             ),
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.1.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":1}"#
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.1.pcm","channels":1,"duration":0.15,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":1}"#
             ),
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.2.pcm","channels":1,"duration":0.25,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":2}"#
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.2.pcm","channels":1,"duration":0.2,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":2}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.3.pcm","channels":1,"duration":0.3,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":3}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.4.pcm","channels":1,"duration":0.45,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":4}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.5.pcm","channels":1,"duration":0.05,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":5}"#
             ),
             (
                 "event",
@@ -505,7 +519,7 @@ fn a_streamed_answer_is_returned_chunk_by_chunk_before_its_output() {
         std::fs::read(media.join("said.pcm")).expect("the audio is written"),
         pcm
     );
-    let chunks: Vec<u8> = (0..3)
+    let chunks: Vec<u8> = (0..6)
         .flat_map(|at| {
             std::fs::read(media.join(format!("said.{at}.pcm"))).expect("the chunk is written")
         })
@@ -554,7 +568,7 @@ fn the_first_chunk_arrives_before_its_answer_ends() {
         labelled(&[
             (
                 "event",
-                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.1,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
             ),
             ("final", "stopped"),
         ]),

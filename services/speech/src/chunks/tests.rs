@@ -100,8 +100,10 @@ fn raw_pcm_is_cut_at_fixed_offsets_however_it_arrives() {
         );
     }
     let lengths: Vec<usize> = at_once.iter().map(|chunk| chunk.audio.len()).collect();
-    assert_eq!(lengths, [CHUNK_BYTES, CHUNK_BYTES, 12_000]);
-    assert_eq!(sequences(&at_once), [0, 1, 2]);
+    // A fifth of a chunk first, each half again as long (down to a whole
+    // twentieth of a second), up to a chunk (decision D280).
+    assert_eq!(lengths, [4_800, 7_200, 9_600, 14_400, 21_600, 2_400]);
+    assert_eq!(sequences(&at_once), [0, 1, 2, 3, 4, 5]);
     assert_eq!(
         at_once
             .iter()
@@ -119,7 +121,7 @@ fn a_chunk_is_returned_as_soon_as_its_bytes_arrive() {
     assert!(chunker.open(None).is_empty());
     assert!(
         chunker
-            .read(&ramp(CHUNK_BYTES - 1))
+            .read(&ramp(CHUNK_BYTES / 5 - 1))
             .expect("read")
             .is_empty()
     );
@@ -129,7 +131,7 @@ fn a_chunk_is_returned_as_soon_as_its_bytes_arrive() {
         [0],
         "the first chunk before the answer ends"
     );
-    assert_eq!(first[0].audio.len(), CHUNK_BYTES);
+    assert_eq!(first[0].audio.len(), CHUNK_BYTES / 5);
     let last = chunker.end();
     assert_eq!(last.len(), 1, "the rest when it ends");
     assert_eq!(last[0].audio, [0, 0]);
@@ -155,7 +157,7 @@ fn a_wav_stream_is_chunked_after_its_header_in_wav_containers() {
             joined.extend(piece);
         }
         assert_eq!(joined, pcm, "the chunks' PCM is the answer's");
-        assert_eq!(sequences(&chunks), [0, 1, 2, 3]);
+        assert_eq!(sequences(&chunks), [0, 1, 2, 3, 4, 5, 6]);
     }
     // Bytes after a declared size are not audio.
     let mut answer = wav(&pcm, 22_050, 2, 400);
@@ -204,7 +206,7 @@ fn opaque_audio_is_cut_at_fixed_offsets() {
         let answer = ramp(CHUNK_BYTES + 5);
         let chunks = streamed(&encoding, &[reads(&answer, &[3, 9])]).expect("chunks");
         let lengths: Vec<usize> = chunks.iter().map(|chunk| chunk.audio.len()).collect();
-        assert_eq!(lengths, [CHUNK_BYTES, 5]);
+        assert_eq!(lengths, [4_800, 7_200, 9_600, 2_405]);
         assert_eq!(chunks.concat_audio(), answer);
     }
 }

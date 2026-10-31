@@ -15,10 +15,10 @@
             "description": "How to say this part, written before its words; omit it to say the words naturally.",
             "properties": {
               "instructions": {
-                "maxLength": 300,
+                "maxLength": 60,
                 "minLength": 1,
                 "type": "string",
-                "description": "Natural-language acting direction for this part."
+                "description": "A few words of acting direction for this part."
               },
               "emotion": {
                 "maxLength": 64,
