@@ -160,7 +160,10 @@
     and its participants the active ones. SpeechEnded joins it as any
     utterance, and DecodingSpeech hears its voices and tone with its words
     given (no decoding is asked), so it is handed off as decoded speech
-    is, with the turn's confidence. Turns that arrive while Working are
+    is, with the turn's confidence. While at most one voice besides the
+    bot's own is known, a turn is not diarized (decision D283): it is
+    joined as raw PCM and Diarizing hands Identifying one segment, the
+    utterance from its first voice span to its last. Turns that arrive while Working are
     held by <event:defer/> as sounds are.
   * DecodingSpeech asks abilities/speech_decoding/speech_decoding.scx (the speech
     service) to decode the utterance: decoding rewrites the observation into
@@ -872,16 +875,29 @@
           <state id="Diarizing">
             <onentry>
               <assign location="stage" expr="'voice_diarization'"/>
-              <send id="speech-voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
-                <content expr="stageTimeout()"/>
-              </send>
-              <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization">
-                <content expr="diarizationInput()"/>
-              </send>
+              <if cond="!identifiesTurnWhole()">
+                <send id="speech-voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
+                  <content expr="stageTimeout()"/>
+                </send>
+                <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization">
+                  <content expr="diarizationInput()"/>
+                </send>
+              </if>
             </onentry>
             <onexit>
               <cancel sendid="speech-voice-diarization-timer"/>
             </onexit>
+            <!-- A transcribed turn while at most one voice besides the
+                 bot's own is known is one voice: its voiced span is
+                 identified without diarizing (decision D283). -->
+            <transition cond="identifiesTurnWhole() &amp;&amp; hasTurnVoice()" target="Identifying">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="turnSegments()"/>
+            </transition>
+            <transition cond="identifiesTurnWhole()" target="Detected">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="[]"/>
+            </transition>
             <transition event="bot.ability.hearing.voice.diarization.output"
                         event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
                         cond="isReply(_event, 'voice_diarization') &amp;&amp; identifiesSegments(_event)" target="Identifying">

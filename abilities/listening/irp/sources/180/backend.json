@@ -2,19 +2,6 @@
   "clock": "wall",
   "answers": [
     {
-      "path": "/audio/diarization",
-      "status": 200,
-      "body": {
-        "segments": [
-          {
-            "speaker": "SPEAKER_00",
-            "start": 0.0,
-            "end": 0.1
-          }
-        ]
-      }
-    },
-    {
       "path": "/voice/embed",
       "status": 200,
       "body": {

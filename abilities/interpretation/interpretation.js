@@ -238,8 +238,30 @@ function openSpeechStage() {
   return diarizer ? 'voice_diarization' : 'speech_decoding';
 }
 
+// A turn identified whole is joined as raw PCM: its voice is embedded
+// from the utterance itself.
 function opensWav() {
-  return hasSampleRate(open_sensed.sound);
+  return hasSampleRate(open_sensed.sound) && !identifiesTurnWhole();
+}
+
+// A transcribed turn while at most one voice besides the bot's own is
+// known (decision D283): one voice spoke it, so it is not diarized.
+function identifiesTurnWhole() {
+  return isTurn() && diarizer && voice_classifier &&
+    registry.filter(function (entry) { return !entry.own; }).length <= 1;
+}
+
+function hasTurnVoice() {
+  return utterance.media_type === 'audio/pcm' && hasSampleRate(utterance) && turn.voice_detection.segments.length > 0;
+}
+
+// The turn's one voice: the utterance from its first voice span's start
+// to its last one's end.
+function turnSegments() {
+  var spans = turn.voice_detection.segments;
+  return [({audio: utterance.audio, media_type: 'audio/pcm', sample_rate_hz: utterance.sample_rate_hz,
+    channels: soundChannels(utterance), start_seconds: spans[0].start_seconds,
+    end_seconds: spans[spans.length - 1].end_seconds})];
 }
 
 function readsNoUtterance() {

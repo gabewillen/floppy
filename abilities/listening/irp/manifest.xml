@@ -63,7 +63,7 @@
     </test>
   </assert>
   <assert id="listening-9" specnum="9" specid="#listening-9">
-    <![CDATA[While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.]]>
+    <![CDATA[While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked; while it knows at most one voice besides the bot's own, the turn is not diarized either, decision D283) and hands on the speech product.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>
