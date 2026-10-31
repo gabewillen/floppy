@@ -15,7 +15,7 @@
             "description": "How to say this part, written before its words; omit it to say the words naturally.",
             "properties": {
               "instructions": {
-                "maxLength": 60,
+                "maxLength": 300,
                 "minLength": 1,
                 "type": "string",
                 "description": "A few words of acting direction for this part."
