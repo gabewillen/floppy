@@ -1,0 +1,17 @@
+[package]
+name = "floppy-guest"
+description = "The Wasm guest plumbing floppy's extension namespace components share: the element types and host trait, attribute parsing and JSON conversion, the `i8:` quantized-vector codec, and the guest glue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+scxml-types.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

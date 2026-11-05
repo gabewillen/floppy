@@ -114,8 +114,35 @@ function isFirmwareStarted() {
   return firmware_snapshot !== null;
 }
 
+// The delay before the next check that the firmware's session answers a
+// snapshot: exponential backoff from firmware_check_ms (at least 25 ms),
+// doubling with each check spent, capped at firmware_check_max_ms.
+function firmwareCheckDelay() {
+  var base = Math.max(25, firmware_check_ms);
+  return delay(Math.min(firmware_check_max_ms, base * Math.pow(2, firmware_checks - 1)));
+}
+
+// One more check spent.
+function nextFirmwareCheck() {
+  return firmware_checks + 1;
+}
+
+// Whether attempts remain after this one.
+function firmwareChecksRemain() {
+  return firmware_checks < firmware_max_checks;
+}
+
+// Whether the checks are used up and the firmware still has not started.
+function firmwareChecksExhausted() {
+  return firmware_checks >= firmware_max_checks && firmware_snapshot === null;
+}
+
 function firmwareTimeoutDiagnostic() {
   return 'the firmware did not start within ' + firmware_timeout_ms + ' ms';
+}
+
+function firmwareChecksExhaustedDiagnostic() {
+  return 'the firmware did not start after ' + firmware_max_checks + ' checks';
 }
 
 // active
@@ -157,10 +184,24 @@ function isLastTurnRead() {
   return turn_reads === 1;
 }
 
-// The register's answer to a read it could not serve (stm.scx's failure
-// message for the request), which answers that read.
+// Whether a bot.ability.failed is the register's answer to the
+// recent_turns read the turn waits on (decision D266: the memory tags
+// every request with an id the register matches with isMemoryReply
+// (stm.js), but the register's answer to the body names no read, so the
+// body correlates it by what it can see: the answering child's invoke id
+// and the read that is outstanding, exactly as the success path
+// correlates its output by order). The register applies one operation at
+// a time and answers in arrival order, so while a read is outstanding
+// its failure is that read's answer.
 function isTurnReadFailure(_event) {
-  return _event.data.message.indexOf('short-term memory bot.ability.memory.stm.recent_turns failed') === 0;
+  return _event.invokeid === 'stm' && turn_reads > 0;
+}
+
+// The record of a read of the recent turns that failed, taken in
+// reading_turns as the read's answer.
+function turnReadFailureDiagnostic(_event) {
+  var reason = Object(_event.data).message;
+  return 'the recent turns were not read: ' + (typeof reason === 'string' ? reason : _event.name);
 }
 
 // The short-term register's record of an admitted stimulus: its name, its

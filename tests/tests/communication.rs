@@ -903,6 +903,11 @@ fn a_communication_whose_speaking_cannot_start_fails_the_activation() {
         texts(&records, "floppy.diagnostic"),
         strings(&["the ability communication ended while activating"])
     );
+    // The supervision restarts the bot within its budget and then gives
+    // up: the run is read to the end of that sequence before the input
+    // ends, so the pinned trace holds the whole sequence and not
+    // whichever prefix the close raced to.
+    run.until(WAIT, label_is("supervision.exhausted"));
     close(
         run,
         "a_communication_whose_speaking_cannot_start_fails_the_activation",

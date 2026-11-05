@@ -1,13 +1,14 @@
 //! The `memory` extension namespace: `<memory:to_json>`,
-//! `<memory:contents>`, `<memory:cut_at_word>` and
-//! `<memory:stm_projection>` as a
+//! `<memory:contents>`, `<memory:cut_at_word>`,
+//! `<memory:stm_projection>` and `<memory:scored_candidates>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! The JSON text a conversation memory row holds, the contents of one
-//! statement's result of a memory select, each content cell parsed, and
-//! the two pure helpers of the short-term register: a turn's words bounded
-//! and cut at a whole word, and a stimulus's bounded scalar projection.
-//! The memory ability applies the statements through the sql
+//! statement's result of a memory select, each content cell parsed, the
+//! two pure helpers of the short-term register: a turn's words bounded
+//! and cut at a whole word, and a stimulus's bounded scalar projection,
+//! and the associative recall scores of memory select's candidates. The
+//! memory ability applies the statements through the sql
 //! service; these elements only build and read what it stores, so they
 //! are synchronous executable content. Documents bind [`NAMESPACE_URI`]
 //! (conventionally with the prefix `memory`):
@@ -17,6 +18,7 @@
 //! <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
 //! <memory:cut_at_word location="heard" words="transcript"/>
 //! <memory:stm_projection location="stm_payload" data="_event.data"/>
+//! <memory:scored_candidates location="scored" output="found" cue="cue" weights="weights"/>
 //! ```
 //!
 //! Every attribute but `location` is an expression of the document's data
@@ -76,6 +78,28 @@
 //! null, longer strings) is dropped, never truncated. A bare boolean,
 //! number or bounded string is `{"value": D}`; anything else is `{}`.
 //!
+//! # `<memory:scored_candidates location="L" output="O" cue="C" weights="W"/>`
+//!
+//! The associative recall scores of one candidates output (decision D256,
+//! mosfet.py's Associative). `output` (required) evaluates to the
+//! `bot.ability.memory.output` whose first statement's rows are the
+//! candidates, each row's values the id, the `created_at` text, the
+//! content length, and the stored vector (the `i8:` compact text
+//! [`floppy_guest::quantized::decode`] reads, or `null` for an episode
+//! without one). `cue` (required) evaluates to the cue's vector, an array
+//! of finite numbers. `weights` (required) evaluates to the scores'
+//! weights, an object with the numbers `similarity`, `recency` and
+//! `recency_half_life_ms` (positive). `location` (required) receives the
+//! scored candidates as a JSON array, best first, ties in their row
+//! order, each `{"id":I,"length":N,"order":K,"similarity":S,"score":T}`:
+//! `S` is the cosine of the cue with the stored vector, `0` for an
+//! episode without one, one of another length than the cue, or a zero
+//! vector, and `T` is `weights.similarity * S + weights.recency *
+//! 0.5^((newest - age) / weights.recency_half_life_ms)`, the age the
+//! candidate's `created_at` gives (its milliseconds, UTC; a `created_at`
+//! of another form or a missing cell is 0) before the newest candidate's.
+//! Candidates past [`MAX_CANDIDATES`] raise `error.execution` instead.
+//!
 //! # Failures
 //!
 //! A malformed element (a missing, empty, unknown or repeated attribute,
@@ -87,7 +111,9 @@
 //!
 //! # Bounds
 //!
-//! The data model bounds the values it hands this component.
+//! The data model bounds the values it hands this component, and
+//! `scored_candidates` refuses more candidates than [`MAX_CANDIDATES`]
+//! (wasm builds).
 //!
 //! # Telemetry
 //!
@@ -107,7 +133,7 @@
     )
 )]
 
-use scxml_types::DataValue as Data;
+use scxml_types::{DataValue as Data, exceeds_wasm_bound, wasm_bound};
 use serde_json::{Map, Value as Json};
 
 /// The namespace's name: the last path segment of its repository namespace
@@ -133,70 +159,15 @@ pub const MAX_PROJECTION_TEXT_LENGTH: usize = 40;
 /// Most fields one stimulus projection keeps.
 pub const MAX_PROJECTION_FIELDS: usize = 16;
 
+/// Most candidates one `scored_candidates` output may score (wasm builds;
+/// the memory select asks for 64, so this only refuses a runaway input).
+pub const MAX_CANDIDATES: usize = wasm_bound(4096);
+
 /// The largest integer ECMAScript calls safe (`Number.MAX_SAFE_INTEGER`).
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
-}
-
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
-
-/// The host capabilities one `execute` call uses.
-pub trait MemoryHost {
-    /// A non-recoverable host failure.
-    type Error;
-
-    /// Evaluates one value expression in the current data model;
-    /// `Ok(Err(()))` is a recoverable evaluation failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, Self::Error>;
-
-    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
-    /// recoverable assignment failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
-}
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure, Host};
+use floppy_guest::element::{assign_to, attribute_values, evaluate, no_content, number};
 
 /// Executes one element with the given local name, attributes, and
 /// flattened content.
@@ -205,7 +176,7 @@ pub trait MemoryHost {
 ///
 /// [`Failure::Execution`] for every malformed element, value, or
 /// assignment; [`Failure::Host`] for a non-recoverable host failure.
-pub fn execute<H: MemoryHost>(
+pub fn execute<H: Host>(
     local_name: &str,
     attributes: &[Attribute],
     content: &[Content],
@@ -216,72 +187,13 @@ pub fn execute<H: MemoryHost>(
         "contents" => contents_element(attributes, content, host),
         "cut_at_word" => cut_at_word_element(attributes, content, host),
         "stm_projection" => stm_projection_element(attributes, content, host),
+        "scored_candidates" => scored_candidates_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
 
-/// The values of an element's unqualified attributes named in `names`, in
-/// that order, each trimmed and non-empty; any other attribute is `refused`,
-/// a repeated one `repeated`, an empty one `empty`.
-fn attribute_values<'a, E, const N: usize>(
-    attributes: &'a [Attribute],
-    names: [&str; N],
-    [refused, repeated, empty]: [&'static str; 3],
-) -> Result<[Option<&'a str>; N], Failure<E>> {
-    let mut values = [None; N];
-    for attribute in attributes {
-        let index = match attribute.namespace_uri {
-            None => names.iter().position(|name| *name == attribute.local_name),
-            Some(_) => None,
-        }
-        .ok_or(Failure::Execution(refused))?;
-        let value = attribute.value.trim();
-        if value.is_empty() {
-            return Err(Failure::Execution(empty));
-        }
-        if values[index].replace(value).is_some() {
-            return Err(Failure::Execution(repeated));
-        }
-    }
-    Ok(values)
-}
-
-/// Refuses any content but white space with `detail`.
-fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
-    if content
-        .iter()
-        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
-    {
-        return Err(Failure::Execution(detail));
-    }
-    Ok(())
-}
-
-/// Evaluates `expression`, else `failed`.
-fn evaluate<H: MemoryHost>(
-    host: &mut H,
-    expression: &str,
-    failed: &'static str,
-) -> Result<Data, Failure<H::Error>> {
-    host.read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// Assigns `value` to `location`, else `failed`.
-fn assign_to<H: MemoryHost>(
-    host: &mut H,
-    location: &str,
-    value: &Data,
-    failed: &'static str,
-) -> Result<(), Failure<H::Error>> {
-    host.assign(location, value)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
 /// Evaluates `expression` to a JSON object, else `malformed`.
-fn read_object<H: MemoryHost>(
+fn read_object<H: Host>(
     host: &mut H,
     expression: &str,
     failed: &'static str,
@@ -297,7 +209,7 @@ fn read_object<H: MemoryHost>(
 }
 
 /// Executes `<memory:to_json>`.
-fn to_json_element<H: MemoryHost>(
+fn to_json_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -461,7 +373,7 @@ fn push_unit(out: &mut String, unit: u16) {
 }
 
 /// Executes `<memory:contents>`.
-fn contents_element<H: MemoryHost>(
+fn contents_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -521,7 +433,7 @@ pub fn contents(result: &Map<String, Json>) -> Result<Vec<Json>, &'static str> {
 }
 
 /// Executes `<memory:cut_at_word>`.
-fn cut_at_word_element<H: MemoryHost>(
+fn cut_at_word_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -599,7 +511,7 @@ fn before_last_word(text: &str) -> Option<&str> {
 }
 
 /// Executes `<memory:stm_projection>`.
-fn stm_projection_element<H: MemoryHost>(
+fn stm_projection_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -725,209 +637,320 @@ fn finite_number(value: f64) -> Json {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
-
-    use std::cell::Cell;
-
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::data_model_host;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-
-    use super::{Attribute, Content, Data, Executed, Failure, MemoryHost};
-
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
-
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
-
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl MemoryHost for Host {
-        type Error = ComponentError;
-
-        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(expression) {
-                Ok(value) => Ok(match value {
-                    DataValue::Absent => Ok(Data::Absent),
-                    DataValue::Undefined => Ok(Data::Undefined),
-                    DataValue::Null => Ok(Data::Null),
-                    DataValue::Boolean(value) => Ok(Data::Bool(value)),
-                    DataValue::Number(value) => scxml_types::FiniteNumber::new(value)
-                        .map(Data::Number)
-                        .map_err(|_| ()),
-                    DataValue::Text(text) => Ok(Data::String(text)),
-                    DataValue::JsonArray(text) => Ok(Data::JsonArray(text)),
-                    DataValue::JsonObject(text) => Ok(Data::JsonObject(text)),
-                    DataValue::Xml(text) => Ok(Data::Xml(text)),
-                }),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let value = match value {
-                Data::Null => DataValue::Null,
-                Data::Bool(value) => DataValue::Boolean(*value),
-                Data::Number(value) => DataValue::Number(value.get()),
-                Data::String(text) => DataValue::Text(text.clone()),
-                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
-                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
-                Data::Absent | Data::Undefined | Data::Xml(_) => return Ok(Err(())),
-            };
-            match data_model_host::assign(location, &value) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
-                    })
-                    .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
-                }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
-        }
-    }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
+/// Executes `<memory:scored_candidates>`.
+fn scored_candidates_element<H: Host>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, output, cue, weights] = attribute_values(
+        attributes,
+        ["location", "output", "cue", "weights"],
+        [
+            "memory:scored_candidates takes only the location, output, cue and weights attributes",
+            "memory:scored_candidates repeats an attribute",
+            "memory:scored_candidates has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "memory:scored_candidates requires a location",
+    ))?;
+    let output = output.ok_or(Failure::Execution(
+        "memory:scored_candidates requires an output",
+    ))?;
+    let cue = cue.ok_or(Failure::Execution(
+        "memory:scored_candidates requires a cue",
+    ))?;
+    let weights = weights.ok_or(Failure::Execution(
+        "memory:scored_candidates requires weights",
+    ))?;
+    no_content(content, "memory:scored_candidates holds no content")?;
+    let output = read_object(
+        host,
+        output,
+        "memory:scored_candidates output did not evaluate",
+        "memory:scored_candidates output is not an object",
+    )?;
+    let cue = read_vector(host, cue, "memory:scored_candidates cue did not evaluate")?;
+    let weights = read_object(
+        host,
+        weights,
+        "memory:scored_candidates weights did not evaluate",
+        "memory:scored_candidates weights are not an object",
+    )?;
+    let weights = RecallWeights::of(&weights).map_err(Failure::Execution)?;
+    let scored = scored_candidates(&output, &cue, &weights).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(Json::Array(scored).to_string()),
+        "memory:scored_candidates could not assign the scores",
+    )?;
+    Ok(Executed::Handled)
 }
+
+/// The cue's vector: an array of finite numbers, else `error.execution`.
+fn read_vector<H: Host>(
+    host: &mut H,
+    expression: &str,
+    failed: &'static str,
+) -> Result<Vec<f64>, Failure<H::Error>> {
+    const MALFORMED: &str = "memory:scored_candidates cue is not an array of finite numbers";
+    let Data::JsonArray(text) = evaluate(host, expression, failed)? else {
+        return Err(Failure::Execution(MALFORMED));
+    };
+    let Json::Array(values) =
+        serde_json::from_str(&text).map_err(|_| Failure::Execution(MALFORMED))?
+    else {
+        return Err(Failure::Execution(MALFORMED));
+    };
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .as_f64()
+                .filter(|value| value.is_finite())
+                .ok_or(Failure::Execution(MALFORMED))
+        })
+        .collect()
+}
+
+/// The weights of the associative recall scores (decision D256,
+/// mosfet.py's Weights): how much a candidate's cosine and its recency
+/// each count, and the recency's half-life.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RecallWeights {
+    /// How much a candidate's cosine with the cue counts.
+    pub similarity: f64,
+    /// How much a candidate's recency counts.
+    pub recency: f64,
+    /// The half-life of the recency, in milliseconds.
+    pub recency_half_life_ms: f64,
+}
+
+impl RecallWeights {
+    /// The weights of a weights object: `{similarity, recency,
+    /// recency_half_life_ms}`, each a finite number, the half-life positive.
+    ///
+    /// # Errors
+    ///
+    /// A static detail when a weight is missing, is not a finite number, or
+    /// the half-life is not positive.
+    pub fn of(weights: &Map<String, Json>) -> Result<Self, &'static str> {
+        const MALFORMED: &str =
+            "memory:scored_candidates weights are not numbers with a positive half-life";
+        let number = |name: &str| {
+            weights
+                .get(name)
+                .and_then(Json::as_f64)
+                .filter(|value| value.is_finite())
+        };
+        let weights = Self {
+            similarity: number("similarity").ok_or(MALFORMED)?,
+            recency: number("recency").ok_or(MALFORMED)?,
+            recency_half_life_ms: number("recency_half_life_ms").ok_or(MALFORMED)?,
+        };
+        (weights.recency_half_life_ms > 0.0)
+            .then_some(weights)
+            .ok_or(MALFORMED)
+    }
+}
+
+/// The candidates of one candidates output scored (see the crate
+/// documentation, `<memory:scored_candidates>`): `{id, length, order,
+/// similarity, score}` each, best first, ties in their row order.
+///
+/// # Errors
+///
+/// A static detail when the output has no first result, no rows array, a
+/// row without a values array, or more candidates than
+/// [`MAX_CANDIDATES`].
+pub fn scored_candidates(
+    output: &Map<String, Json>,
+    cue: &[f64],
+    weights: &RecallWeights,
+) -> Result<Vec<Json>, &'static str> {
+    const NO_RESULTS: &str = "memory:scored_candidates output has no first result";
+    const NO_VALUES: &str = "memory:scored_candidates output has a row without a values array";
+    const TOO_MANY: &str = "memory:scored_candidates output has too many candidates";
+    let rows = output
+        .get("results")
+        .and_then(Json::as_array)
+        .and_then(|results| results.first())
+        .and_then(Json::as_object)
+        .and_then(|result| result.get("rows"))
+        .and_then(Json::as_array)
+        .ok_or(NO_RESULTS)?;
+    if exceeds_wasm_bound(rows.len(), MAX_CANDIDATES) {
+        return Err(TOO_MANY);
+    }
+    let rows: Vec<Candidate> = rows
+        .iter()
+        .map(|row| {
+            let values = row
+                .get("values")
+                .and_then(Json::as_array)
+                .ok_or(NO_VALUES)?;
+            Ok(Candidate {
+                id: values.first().cloned().unwrap_or(Json::Null),
+                created_at_ms: created_at_ms(values.get(1)),
+                length: as_number(values.get(2)),
+                similarity: values
+                    .get(3)
+                    .and_then(Json::as_str)
+                    .and_then(floppy_guest::quantized::decode)
+                    .map_or(0.0, |stored| similarity(cue, &stored)),
+            })
+        })
+        .collect::<Result<Vec<Candidate>, &'static str>>()?;
+    let newest = rows.iter().map(|row| row.created_at_ms).fold(0.0, f64::max);
+    let mut scored: Vec<(f64, usize, Candidate)> = rows
+        .into_iter()
+        .zip(0..)
+        .map(|(row, order)| {
+            let score = score(&row, newest, weights);
+            (score, order, row)
+        })
+        .collect();
+    scored.sort_by(
+        |(left_score, left_order, _), (right_score, right_order, _)| {
+            right_score
+                .partial_cmp(left_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left_order.cmp(right_order))
+        },
+    );
+    Ok(scored
+        .into_iter()
+        .enumerate()
+        .map(|(order, (score, _, row))| {
+            let mut candidate = Map::with_capacity(5);
+            candidate.insert("id".into(), row.id);
+            candidate.insert("length".into(), number(row.length));
+            candidate.insert("order".into(), Json::from(order));
+            candidate.insert("similarity".into(), number(row.similarity));
+            candidate.insert("score".into(), number(score));
+            Json::Object(candidate)
+        })
+        .collect())
+}
+
+/// One candidate's score (see the crate documentation,
+/// `<memory:scored_candidates>`): its similarity times the similarity
+/// weight, plus its recency times the recency weight.
+fn score(row: &Candidate, newest: f64, weights: &RecallWeights) -> f64 {
+    let recency = 0.5_f64.powf((newest - row.created_at_ms) / weights.recency_half_life_ms);
+    weights.similarity * row.similarity + weights.recency * recency
+}
+
+/// One candidate of a candidates output, before its score.
+struct Candidate {
+    /// Its `memory_id`, as the row holds it.
+    id: Json,
+    /// Its `created_at`'s milliseconds (`0` for text of another form).
+    created_at_ms: f64,
+    /// Its content length, as ECMAScript's `Number` reads the cell.
+    length: f64,
+    /// Its cosine with the cue (`0` without a vector, one of another
+    /// length, or a zero vector).
+    similarity: f64,
+}
+
+/// A cell as ECMAScript's `Number` reads it: `null` is 0, a boolean its 0/1,
+/// a string its leading number, a missing cell `NaN`.
+fn as_number(value: Option<&Json>) -> f64 {
+    match value {
+        Some(Json::Number(number)) => number.as_f64().unwrap_or(f64::NAN),
+        Some(Json::String(text)) => text.parse().unwrap_or(f64::NAN),
+        Some(Json::Bool(true)) => 1.0,
+        Some(Json::Bool(false) | Json::Null) => 0.0,
+        None | Some(Json::Array(_) | Json::Object(_)) => f64::NAN,
+    }
+}
+
+/// The cosine of the cue with a stored vector, 0 for another space or a
+/// zero vector (the cue is the unit vector the Embedding ability answers).
+fn similarity(cue: &[f64], stored: &[f64]) -> f64 {
+    if stored.len() != cue.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0;
+    let mut norm = 0.0;
+    for (stored, cue) in stored.iter().zip(cue) {
+        dot += stored * cue;
+        norm += stored * stored;
+    }
+    if norm > 0.0 { dot / norm.sqrt() } else { 0.0 }
+}
+
+/// A `created_at`'s milliseconds (SQLite's and Postgres's text, UTC:
+/// `YYYY-MM-DD[ T]HH:MM:SS` with an optional fraction), `0` for text of
+/// another form.
+fn created_at_ms(value: Option<&Json>) -> f64 {
+    let Some(Json::String(text)) = value else {
+        return 0.0;
+    };
+    parse_created_at(text).unwrap_or(0.0)
+}
+
+/// The milliseconds of `YYYY-MM-DD[ T]HH:MM:SS` with its optional fraction
+/// of seconds (SQLite's and Postgres's UTC text), `None` for another form.
+fn parse_created_at(text: &str) -> Option<f64> {
+    let bytes = text.as_bytes();
+    let digit = |index: usize| -> Option<u32> {
+        let byte = *bytes.get(index)?;
+        byte.is_ascii_digit().then_some(u32::from(byte - b'0'))
+    };
+    let pair = |index: usize| -> Option<u32> { Some(digit(index)? * 10 + digit(index + 1)?) };
+    let year = i64::from(digit(0)?) * 1000
+        + i64::from(digit(1)?) * 100
+        + i64::from(digit(2)?) * 10
+        + i64::from(digit(3)?);
+    let months = pair(5)?;
+    let days = pair(8)?;
+    let hours = pair(11)?;
+    let minutes = pair(14)?;
+    if bytes.get(4) != Some(&b'-')
+        || bytes.get(7) != Some(&b'-')
+        || !matches!(bytes.get(10), Some(b' ' | b'T'))
+        || bytes.get(13) != Some(&b':')
+        || bytes.get(16) != Some(&b':')
+    {
+        return None;
+    }
+    // The seconds with their optional fraction, as `parseFloat` reads the
+    // captured run: two digits, then `.` and its digits.
+    let seconds = match (bytes.get(19), bytes.get(20)) {
+        (Some(b'.'), Some(byte)) if byte.is_ascii_digit() => {
+            let end = bytes[20..]
+                .iter()
+                .position(|byte| !byte.is_ascii_digit())
+                .map_or(text.len(), |rest| 20 + rest);
+            text[17..end].parse().ok()?
+        }
+        _ => f64::from(pair(17)?),
+    };
+    let days = days_from_civil(year, months, days);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a whole second count since 1970 (about 1.8e9) is exact in f64"
+    )]
+    let base_ms = (days * 86_400 + i64::from(hours) * 3_600 + i64::from(minutes) * 60) as f64;
+    Some(base_ms * 1000.0 + seconds * 1000.0)
+}
+
+/// The days since 1970-01-01 of a UTC civil date (Hinnant's algorithm).
+fn days_from_civil(year: i64, months: u32, days: u32) -> i64 {
+    let year = year - i64::from(months <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month_pattern = (months + 9) % 12;
+    let day_of_year = i64::from(153 * month_pattern + 2) / 5 + i64::from(days) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+floppy_guest::extension_guest!();
 
 #[cfg(test)]
 mod tests;

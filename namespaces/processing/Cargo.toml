@@ -13,6 +13,9 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The guest plumbing the namespace components share (the element types and
+# host trait, attribute parsing, and the guest glue).
+floppy-guest.workspace = true
 # Canonical JSON (the choices and the dispatch tool schema), the same bytes
 # the decision namespace and service write; no schema is compiled here, so
 # no randomness.

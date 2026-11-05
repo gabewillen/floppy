@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the data the specification refers to (an object, which the design and author prompts carry beside it; reflection sends the change input, decision D201), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `gemma-4-26b-a4b`; a revision that has a reflection model sends it, decision D260), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets, choices?, handled?}`: the turn, the behavior input as autonomy builds it, the sessions that turn's output names, at most 32, and the turn's choices `[{event, schema, target?}]`, which each selection must be one of with data its schema admits, as the dispatch is checked, decision D221, and `handled`, false for a turn that taught the behavior, whose run may leave it unhandled, decision D222; and `decline`, a second input the behavior must decline, run as `declined turn` after the live run, decision D229; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and the author call's first token bound (1024 to 65536, default 16384; a truncated author generation doubles it for the next author call, up to 65536, decision D135) |
-| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `attempts-exhausted` (the failure cap, decision D133), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the reflection stores the rejected source as a draft) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`: the specification, the name the draft's documents are staged and promoted under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the data the specification refers to (an object, which the design and author prompts carry beside it; reflection sends the change input, decision D201), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `gemma-4-26b-a4b`; a revision that has a reflection model sends it, decision D260), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets, choices?, handled?}`: the turn, the behavior input as autonomy builds it, the sessions that turn's output names, at most 32, and the turn's choices `[{event, schema, target?}]`, which each selection must be one of with data its schema admits, as the dispatch is checked, decision D221, and `handled`, false for a turn that taught the behavior, whose run may leave it unhandled, decision D222; and `decline`, a second input the behavior must decline, run as `declined turn` after the live run, decision D229; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and the author call's first token bound (1024 to 65536, default 16384; a truncated author generation doubles it for the next author call, up to 65536, decision D135) |
+| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were promoted to (`../../behaviors/<name>/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `attempts-exhausted` (the failure cap, decision D133), `abandoned`, or `promote-failed` (the failure it ends on was a promotion whose move or removal failed, whether the cap ended the build on it or triage abandoned it), with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, the staging directory it was written at, both absent when no draft was rejected (the reflection stores the rejected source as a draft). A failed build wrote nothing live: every draft attempt was staged at `<name>.draft/` and discarded on the failure, so the live documents and their IRP are exactly what the invoker read |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -71,33 +71,42 @@ A draft is three documents beside each other, so the model never escapes
 one inside another (decision D121): the `author` tool call returns
 `scxml` (structure only), `schemas` (a JSON object, `$defs` keyed by input
 event) and `script` (plain ECMAScript, or empty), and `writing` writes
-them as `<name>/<name>.scx`, `<name>/<name>.json` and `<name>/<name>.js`
-through the files
+them to the draft's staging directory, `<name>.draft/` —
+`<name>.draft/<name>.scx`, `<name>.draft/<name>.json` and
+`<name>.draft/<name>.js` — through the files
 service ([`services/files`](../../services/files/README.md)) into the
-directory the run grants it, each behavior in its own directory as every
-bot and ability is, `behaviors/` beside `bots/` and `abilities/`
+directory the run grants it, `behaviors/` beside `bots/` and `abilities/`
 (`--dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors"`;
 create `behaviors/` first; it is ignored by git). The chart references
 them by relative URI: `event:schema="<name>.json#/$defs/<event>"` on the
 transitions that take an input event and, when there is a script, one
-root `<script src="<name>.js"/>`. The simulation, and every later invoker
-of a learned behavior, loads it by `<invoke srcexpr>` on its path,
-`../../behaviors/<name>/<name>.scx`, which resolves the same from this document
-and from every document that invokes a learned behavior (each two levels
-below the layout root); scxml.rs loads its schema file and script against
-its own base URI, as they are when it is invoked.
+root `<script src="<name>.js"/>`. The simulation loads the staged draft
+by `<invoke srcexpr>` on its staging path,
+`../../behaviors/<name>.draft/<name>.scx`. Only the build's `done`
+promotes the documents, moving them to the behavior's own directory
+`<name>/` (each behavior in its own directory as every bot and ability
+is), whose `.scx` path, `../../behaviors/<name>/<name>.scx`, is the
+stored row's source, and every later invoker of a learned behavior loads
+it by `<invoke srcexpr>` on that path, which resolves the same from this
+document and from every document that invokes a learned behavior (each
+two levels below the layout root); scxml.rs loads its schema file and
+script against its own base URI, as they are when it is invoked. A build
+that does not end in `done` promotes nothing and discards the staging
+directory, so a live behavior and its IRP never hold unvalidated bytes.
 
 ## Its IRP
 
-`writing` then writes the draft's implementation report plan beside it,
-as floppy keeps its own documents' (`tests/irp/harness.py`'s layout and
-cases): `<name>/irp/README.md` with one numbered statement, `<name>-1`,
-the specification; `<name>/irp/manifest.xml`, the W3C SCXML IRP's
-`assertions` manifest with that one assertion and one mandatory,
-unattended test per test script, ids from 100; and each test script as
-the case `<name>/irp/sources/<id>/test<id>.scxml`. A case invokes the
-draft as its child by its literal relative path (`../../../<name>.scx`),
-sends itself `harness.go` so the child has started, sends the test's
+`writing` then writes the draft's implementation report plan beside it in
+its staging directory, as floppy keeps its own documents'
+(`tests/irp/harness.py`'s layout and cases): `<name>.draft/irp/README.md`
+with one numbered statement, `<name>-1`, the specification;
+`<name>.draft/irp/manifest.xml`, the W3C SCXML IRP's `assertions` manifest
+with that one assertion and one mandatory, unattended test per test
+script, ids from 100; and each test script as the case
+`<name>.draft/irp/sources/<id>/test<id>.scxml`. A case invokes the draft
+as its child by its literal relative path (`../../../<name>.scx`, the
+case's own depth below the staging directory, the same three steps its
+live copy sits below the live directory), sends itself `harness.go` so the child has started, sends the test's
 events with their delays and `harness.waited` after its settle time, and
 expects the test's outputs in order (the child's other events may come
 between); a test that expects `done` then expects `done.invoke.<name>`,
@@ -115,19 +124,27 @@ or the live turn, passed, each case runs as an invoked child by
 case's `pass` or `fail`, `error` the `error.*` that ended its invocation,
 without the invoke id); a case that did not end in `pass` is a
 `simulate` `test-failed` diagnostic naming the case and its test. So a
-built behavior is done only when its written IRP passes, and the IRP stays
-beside it, for anyone to run again.
+built behavior is done only when its written IRP passes, and the promotion
+moves the IRP to `<name>/irp/`, where it stays beside the behavior, for
+anyone to run again.
 
 ## Topology
 
 ```
-intake -> design -> author -> writing -> validate -> simulate -> done
-                       ^          ^          |           |
-                       |          +-- apply_fixes        |
-                       |                     v           v
-                       +--------- triage <- retry_gate -> failed
-                                  fallback
+intake -> design -> author -> writing -> validate -> simulate -> promoting -> done
+                       ^          ^          |           |            |
+                       |          +-- apply_fixes        v            |
+                       +--------- triage <- retry_gate <--------------+
+                                  fallback        |
+                                                  v
+                                            discarding -> failed
 ```
+
+Every failure — a generation, a write, a validation, a simulation, a
+promotion, a timeout — goes through `retry_gate` (below), which hands the
+build to `triage` to repair or redesign, or, at the cap or on
+`triage.abandon`, to `discarding`, which removes the staging directory and
+fails: nothing but `done` promotes a draft.
 
 Each generation's prompt is its request as model-facing XML
 (`<cognition:model_facing_data>`, decision D201): a `<request task>`
@@ -170,8 +187,9 @@ text.
   so its tests expect no outputs), and ask for exactly one call of
   `scxml_draft`.
 * `writing`: three invocations of the files service write the three
-  documents; one that fails (no grant, a name the service refuses) is a
-  `draft` diagnostic, `write-failed`.
+  documents to the draft's staging directory, `<name>.draft/`; one that
+  fails (no grant, a name the service refuses) is a `draft` diagnostic,
+  `write-failed`.
 * `validate`: `scx:validate` with
   `applyfixes="machine-applicable"`, waiving `EVENT004` (it is given no
   schema file: `<scx:eventschema uri>` names a literal file, and the name
@@ -215,9 +233,17 @@ text.
   type holds nothing worth keeping may restart whenever its state is
   entered again. No check enforces it: whether a restart is right is the
   service's, not the document's.
-* `simulate`: each test script runs the draft as a fresh invoked child
+* `simulate`: first, for a change of a row that has an IRP suite, the
+  regression gate: the existing behavior's `<name>/irp/` cases run against
+  the staged candidate before any promotion, each copied into the staging
+  tree at `<name>.draft/regression/sources/<id>/`, the depth its relative
+  path to the draft it invokes expects, and a case that does not end in
+  `pass` is a `simulate` `regression-failed` diagnostic (a manifest or
+  case that cannot be read skips the gate or the case). Then each test
+  script runs the draft as a fresh invoked child
   (`<invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>`,
-  loaded from its path with its schema file and script,
+  the staged draft, loaded from its staging path with its schema file and
+  script,
   so each test has its own generated invoke id and nothing a cancelled
   earlier child left on the queue counts), sends the script's events through
   `#_<candidate_id>` with their delays, collects every event that child
@@ -234,7 +260,8 @@ text.
   failed to start) is dropped. With the lifetime bounds, a persistent
   routine also runs one more test, `first tick` (the forced tick, which
   stands in for waiting on the schedule's clock): a fresh child runs the
-  draft's forced tick copy, `<name>/<name>.tick.scx` beside it (each schedule's
+  draft's forced tick copy, `<name>.draft/<name>.tick.scx` in its staging
+  directory (each schedule's
   `delay` or `delayexpr` replaced by a `delay` of 1500 ms, from
   `<behavior:lifetime_errors ticklocation>`), and is sent nothing, so its
   own schedule send must arm and fire (decision D153: a schedule that
@@ -260,6 +287,15 @@ text.
   `apply.targets` and data whose members agree with the string, number and
   boolean members of `input` of the same names; otherwise the diagnostics
   are kind `apply`, code `E0008`, as for the forced tick.
+* `promoting`: the staged documents moved to their live paths `<name>/`
+  through the files service, the IRP replaced first (the old one removed,
+  the staged one moved in) and the program moved last, so the documents a
+  promotion that fails leaves mixed hold the previous program for as long
+  as possible; a routine's forced-tick copy moves with the documents and a
+  turn behavior's stale one is removed. Any failure of a move or a removal
+  is a `draft` diagnostic, `promote-failed`, repaired like any other, the
+  staging directory keeping whatever did not move; the build's reason ends
+  `promote-failed` when such a failure is the one it ends on (below).
 * `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it. It counts the failure and takes its
@@ -268,9 +304,11 @@ text.
   of the build in `fingerprints`), and the failure's diagnostics an earlier failure already had,
   consecutive or not, go to the next author call as `repeated`, which
   the author rules say to fix another way. The build ends in `failed`
-  with `attempts-exhausted` only at `max_attempts` failures, 8 unless the
-  request sets it (decision D133, which replaces D124's end at the first
-  repeat: the maintainer chose to retry to a cap). A
+  only at `max_attempts` failures, 8 unless the request sets it
+  (decision D133, which replaces D124's end at the first
+  repeat: the maintainer chose to retry to a cap), its reason
+  `attempts-exhausted`, or `promote-failed` when the failure the cap ends
+  the build on was a promotion failure. A
   diagnostic's identity is its kind and code and, taken from the canonical
   report rather than prose, for a validator diagnostic its primary label
   (not the source line it marks: the same mistake moves around between
@@ -283,6 +321,9 @@ text.
   any other diagnostic (a generation failure, a timeout, a write failure,
   a draft check, `E0009`, `E0008`) is identified by the message the
   builder or its namespace writes.
+* `discarding`: the staging directory removed — a failed build leaves
+  draft bytes nowhere — then `failed` with the failure already recorded;
+  the live documents are untouched either way.
 * `triage`: `decision:choice` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical choices:
   `triage.repair` (guarded by `plan !== null`, so it is among the choices only
@@ -423,11 +464,12 @@ Chat Completions and `system_one` backend on 127.0.0.1: an invalid first
 draft (`SCXML005`) goes back to `author` through `triage.repair`, the second
 draft's only error is fixed by its machine-applicable fix, and the fixed
 draft runs its two test scripts as two invoked children (distinct invoke
-ids), loaded from the path it was written to, before the builder ends in
-`done`; the repair request carries the failed draft, its schemas, its
+ids), loaded from the staged path it was written to, before the builder ends in
+`done` and promotes it; the repair request carries the failed draft, its schemas,
+its
 script and its tests. Each case runs the builder in a scratch layout of
 its own (`bots/builder/` and `behaviors/`), so the documents it writes are
-never shared; one case checks the three files written under the
+never shared; one case checks the three files promoted under the
 request's name, a draft with a script. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, a design generation that fails at
 once keeping its cause (`status`) in its `retry_gate` log and in the

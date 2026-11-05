@@ -1,6 +1,10 @@
 [workspace]
 members = [
     "tests",
+    # The internal library crate the namespace components share (no
+    # component: no manifest, no WIT world, no entry in
+    # scripts/build-components.sh's component lists).
+    "internal/guest",
     "namespaces/decision",
     "namespaces/conversation",
     "namespaces/migration",
@@ -67,6 +71,10 @@ rusqlite = { version = "0.37.0", default-features = false, features = ["bundled"
 # pins (decision D185).
 png = { version = "0.18.0", default-features = false }
 image-webp = { version = "0.2.4", default-features = false }
+
+# The guest plumbing the namespace components share (floppy only; scxml.rs
+# has no copy of it in its subtree).
+floppy-guest = { path = "internal/guest" }
 
 scxml-compiler-core = { path = "scxml.rs/crates/scxml-compiler-core" }
 scxml-event-schema = { path = "scxml.rs/crates/scxml-event-schema" }

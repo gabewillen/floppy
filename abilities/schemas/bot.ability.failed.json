@@ -12,6 +12,17 @@
           ],
           "title": "Message",
           "type": "string"
+        },
+        "category": {
+          "description": "Why the operation failed, coarsely, when its caller derives one: the revision's answer carries the builder failure's category (validation, simulation, timeout, unbuildable or unconfigured), which the learning passes on to the lesson's result; left out when no category applies [floppy field].",
+          "enum": [
+            "validation",
+            "simulation",
+            "timeout",
+            "unbuildable",
+            "unconfigured"
+          ],
+          "title": "Category"
         }
       },
       "required": [

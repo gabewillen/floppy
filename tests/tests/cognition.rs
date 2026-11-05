@@ -1312,7 +1312,11 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = until_turn_ended(&run, 1);
-    let message = "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)";
+    // The selection names an event no choice of the turn offers (decision
+    // D288): its send cannot resolve a recipient, so it fails before it is
+    // made, as error.execution, and the failure carries what it selected.
+    let message =
+        "Autonomy behavior dispatch failed: error.execution (selected bot.ability.reasoning.input)";
     assert_eq!(
         texts(&records, "autonomy.service.failed"),
         strings(&[&format!("Unoffered ({message})")])
@@ -3007,6 +3011,11 @@ const COMMUNICATION_INPUT: &str = "bot.ability.communication.input";
 
 /// A scratch `abilities/` with every ability document, seed and schema,
 /// and the harness beside them, its `<data id="database">` set to `database`.
+/// The harness copy also carries the offered targets: the turn's choices
+/// ride the cognition's input, and the harness (the cognition's stand-in)
+/// builds the `{event: session}` map from them (the cognition's
+/// offeredTargets, decision D288) into the autonomy input's `targets`,
+/// which autonomy resolves a learned service's selections against.
 fn autonomy_harness(database: &str) -> PathBuf {
     let dir = unique_scratch("autonomy");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
@@ -3016,6 +3025,38 @@ fn autonomy_harness(database: &str) -> PathBuf {
         &harness,
     )
     .expect("the harness is copyable");
+    let text = std::fs::read_to_string(&harness)
+        .expect("the harness is readable")
+        .replacen(
+            r#"<data id="request" expr="null"/>"#,
+            r#"<data id="request" expr="null"/>
+    <data id="targets" expr="({})"/>"#,
+            1,
+        )
+        .replacen(
+            r##"    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy">
+        <param name="turn" expr="request.turn"/>
+        <param name="input" expr="({focus: request.focus, focus_candidates: request.focus_candidates})"/>
+        <param name="stimulus" expr="request.stimulus"/>
+      </send>
+    </onentry>"##,
+            r##"    <onentry>
+      <assign location="targets" expr="({})"/>
+      <foreach array="request.choices" item="choice">
+        <if cond="typeof choice.event === 'string' &amp;&amp; typeof choice.target === 'string' &amp;&amp; targets[choice.event] === undefined">
+          <assign location="targets" expr="(targets[choice.event] = choice.target, targets)"/>
+        </if>
+      </foreach>
+      <send event="bot.ability.autonomy.input" target="#_autonomy">
+        <param name="turn" expr="request.turn"/>
+        <param name="input" expr="({focus: request.focus, focus_candidates: request.focus_candidates, targets: targets})"/>
+        <param name="stimulus" expr="request.stimulus"/>
+      </send>
+    </onentry>"##,
+            1,
+        );
+    std::fs::write(&harness, text).expect("the harness copy is writable");
     rewrite(&harness, &[("database", database)]);
     harness
 }
@@ -3035,8 +3076,9 @@ fn speech(source_ids: &Json) -> Json {
 }
 
 /// One turn of autonomy over `stimulus` (event, data): the cognition's
-/// input, then its answer.
-fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
+/// input, with the turn's `choices` (the offered {event: session} map the
+/// real flow's choices carry, decision D242), then its answer.
+fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json, choices: &Json) -> Json {
     run.event(
         "bot.ability.cognition.input",
         &json!({
@@ -3044,6 +3086,7 @@ fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
             "stimulus": {"event": event, "data": data, "source": "listening"},
             "focus": null,
             "focus_candidates": [],
+            "choices": choices,
         }),
     );
     let records = run.until(WAIT, label_is("harness.output"));
@@ -3096,11 +3139,11 @@ fn admits(event: &str, data: &Json) -> bool {
 fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     let harness = autonomy_harness("null");
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let first = autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"])));
+    let first = autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"])), &json!([]));
     assert_eq!(first, admitted(1));
     assert!(admits(COMMUNICATION_INPUT, &first["selected"][0]["data"]));
     assert_eq!(
-        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([])), &json!([])),
         json!({"turn": 2, "handled": false, "services": ["SpeechHeard"], "reason": "unhandled"})
     );
     assert_eq!(
@@ -3108,7 +3151,8 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
             &mut run,
             3,
             "bot.input",
-            &json!({"observation": {"event": "text", "data": "hello"}})
+            &json!({"observation": {"event": "text", "data": "hello"}}),
+            &json!([])
         ),
         json!({"turn": 3, "handled": false, "services": [], "reason": "no-behaviors"})
     );
@@ -3156,12 +3200,23 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     let mut args = grant.clone();
     args.push(harness.display().to_string());
     let mut run = Run::start(&args, &[]);
+    // Turn 1: the seed handles the turn, so the learned behavior never
+    // runs. Turn 2: the seed declines; the turn's choices offer the
+    // cognition's ignore to the harness's own session (session), so the
+    // learned behavior's selection of it resolves and is dispatched there,
+    // as the real flow's offered map does (decision D288).
     assert_eq!(
-        autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"]))),
+        autonomy_turn(&mut run, 1, SPEECH, &speech(&json!(["caller"])), &json!([])),
         admitted(1)
     );
     assert_eq!(
-        autonomy_turn(&mut run, 2, SPEECH, &speech(&json!([]))),
+        autonomy_turn(
+            &mut run,
+            2,
+            SPEECH,
+            &speech(&json!([])),
+            &json!([{"event": IGNORE, "schema": {}, "target": "session"}])
+        ),
         json!({
             "turn": 2,
             "handled": true,

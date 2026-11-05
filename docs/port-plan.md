@@ -171,40 +171,59 @@ D33 to D43.
   Nothing pushes offers: each turn the body reads what each ability offers
   from its live session with `<decision:offers>` (its enabled `event:schema`
   transitions without a cond that its `offerable` data declares), made
-  model-facing with `<processing:model_facing_schema>` and dropped for the
-  turn when over 32 KiB (decisions D113, D242).
+  model-facing with `<processing:model_facing_schema>`; nothing is dropped
+  for size: the element bounds nothing without a `bound` the document
+  names, and the body names none, so an offer past 32 KiB reaches the turn
+  whole (decision D271, superseding the 32768 bound D242 gave it).
 - **Choices as data.** On each `processing` entry the body collects the
   turn's choices with `<processing:collect_offered_events>` (its own
   `bot.focus_device`, which its guard takes only for one of the turn's focus candidates (there is no
   `bot.clear_focus`: focus stays on a device until the bot focuses
   another, D155), plus what each ability offers and the focused
   device's events, each tagged with its offerer's session id as
-  `target`), holds them to 32 KiB, and sends them as
-  `bot.ability.cognition.input.choices` [floppy field]. Each stage that
+  `target`), and sends them as
+  `bot.ability.cognition.input.choices` [floppy field]; the choices carry
+  no size bound (decision D271). Each stage that
   selects (autonomy, intuition, reasoning) sends its own
   selections to their targets with a visible `<foreach>`/`<send
   targetexpr="'#_scxml_' + s.target">` (decision D113); the body logs
   `bot.processing.completed` and sends itself only the selections that
   name no target (the trusted seed's).
-- **Per-turn stage children.** The cognition invokes each stage (autonomy,
-  intuition, reasoning) per turn with `<param>`s named after its input
-  event's fields and takes its result as `done.invoke.<stage>`
-  `<donedata>`; leaving the stage cancels it. State a stage keeps across turns (the intuition's
-  `confidence_tuner`) is passed in by `<param>` and returned in `<donedata>`.
+- **Long-lived stage children.** The cognition invokes each stage once, in
+  `turns`, and holds it for the cognition's lifetime (decisions D268, D269,
+  D272): autonomy as `<invoke id="autonomy">` with the `<param>` `memory`
+  (D272), the decision layer (`abilities/intuition/intuition.scx`) as
+  `<invoke id="decision">` (D268), and the deliberative tiers
+  (`abilities/reasoning/reasoning.scx`) twice, as `intuition` (with `tier`
+  `intuition`) and as `reasoning`, with the `<param>`s `tier` (the intuition
+  tier only), `model`, `memory` and `embedding` (D269). Each turn is an
+  event (`bot.ability.autonomy.input`, `bot.ability.intuition.input`,
+  `bot.ability.processing.input`) and the stage's answer is its output
+  event (`bot.ability.autonomy.output`, `bot.ability.intuition.output`,
+  `bot.ability.processing.output`), taken for the turn in hand from that
+  invoke's id rather than `done.invoke.<stage>` `<donedata>`. A stage is
+  not cancelled or re-invoked per turn; leaving a running substate sends
+  the stage `bot.ability.processing.cancel`, which ends only the turn still
+  in flight there. State a stage keeps across turns (the decision layer's
+  `confidence_tuner`) and each tier's `bytes_per_token` travel in each
+  input event and are kept from its output (D268).
 - **Effort ceilings.** Each tier is offered only the choices within its
   effort ceiling (D196, built by D206): an offerer declares an action's
-  effort on its `<decision:choice effort>` (0 without one), the cognition
-  frames each stage's choices with `<cognition:within_ceiling>` against the
+  effort in its `offerable` data, which `<decision:offers>` reads (0
+  without one; `<decision:choice>` takes no `effort`, decision D242
+  amending D206), the cognition frames each stage's choices with
+  `<cognition:within_ceiling>` against the
   tier's ceiling (`decision_effort_ceiling` 0, `intuition_effort_ceiling` 1,
   which the bounds override; reasoning's is the whole frame), and the
-  heavier actions are the stage's `held` `<param>`, rendered as the
-  `<held>` block of its model-facing content, so it can only hand them on.
+  heavier actions are the stage's `held` field of its per-turn input,
+  rendered as the `<held>` block of its model-facing content, so it can
+  only hand them on.
 - **Partial selections.** A stage that leaves the turn unhandled may still
   act: on `low_confidence` or `deliberative_input` intuition sends the
   environment actions itself before the turn escalates, never the ignore
-  or the handoff, and its donedata carries `acted`, what it sent (D113,
-  D150). The turn's output is the handling stage's selections, which the
-  reflection gets.
+  or the handoff, and its `bot.ability.intuition.output` carries `acted`,
+  what it sent (D113, D150, D268). The turn's output is the handling
+  stage's selections, which the reflection gets.
 - **Deferral.** A deferring state holds the event with a targetless
   transition whose content is `<event:defer/>` (and any `<log>`); the
   state that handles it takes it by the same transition as on arrival, in
@@ -247,7 +266,7 @@ D33 to D43.
 | The turn's attention bias (the interrupt and the target device) | `<cognition:attention_bias_for_turn>` (D114) | `namespaces/cognition` element |
 | stimulus envelope | assigned member by member with `<assign>` before its `<send>` (was `<bot:stimulus>`, D116) | plain SCXML |
 | Removing the ignore, checking the focus | the ignore sent to the cognition and the body's guards (D113, D243) | plain SCXML |
-| The model-facing event schema and the 32 KiB bound | `<processing:model_facing_schema>` | `namespaces/processing` element |
+| The model-facing event schema | `<processing:model_facing_schema>` | `namespaces/processing` element |
 | Collecting the turn's offered events | `<processing:collect_offered_events>` | `namespaces/processing` element |
 | Sending selections to their targets | each stage's `<foreach>`/`<send targetexpr="'#_scxml_' + s.target">`, every choice tagged with its offerer's session id (D113) | plain SCXML |
 | The dispatch tool's schema | `<processing:send>` | `namespaces/processing` element |

@@ -281,8 +281,13 @@ fn a_missing_cognition_fails_the_activation() {
         "the invoke's start error fails the activation: {diagnostic:?}"
     );
     assert!(only(&records, &["bot.activated"]).is_empty(), "{records:?}");
-    // The session ended in inactive: the bot left its environment.
+    // The session ended in inactive: the bot left its environment. The
+    // supervision restarts it within its budget and then gives up: the
+    // run is read to the end of that sequence before the input ends, so
+    // the pinned trace holds the whole sequence and not whichever prefix
+    // the close raced to.
     run.until(WAIT, label_is("done.invoke"));
+    run.until(WAIT, label_is("supervision.exhausted"));
     close(run, "a_missing_cognition_fails_the_activation");
 }
 
@@ -844,7 +849,11 @@ fn a_firmware_that_cannot_start_fails_the_activation() {
         "the firmware's start error fails the activation: {diagnostic:?}"
     );
     assert!(only(&records, &["bot.activated"]).is_empty(), "{records:?}");
+    // As a_missing_cognition: the run is read to the end of the
+    // supervision's restart sequence before the input ends, so the pinned
+    // trace holds the whole sequence.
     run.until(WAIT, label_is("done.invoke"));
+    run.until(WAIT, label_is("supervision.exhausted"));
     close(run, "a_firmware_that_cannot_start_fails_the_activation");
 }
 

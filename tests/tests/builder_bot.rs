@@ -655,7 +655,12 @@ fn live_request() -> Json {
         "turn_after_bound_ms": 1000,
         "apply": {
             "turn": 3,
-            "input": {"label": "knock", "focus": "door", "focus_candidates": ["door"]},
+            "input": {
+                "label": "knock",
+                "focus": "door",
+                "focus_candidates": ["door"],
+                "targets": {"bot.ability.communication.respond": "communication"}
+            },
             "targets": ["communication"],
         },
     })
@@ -663,8 +668,14 @@ fn live_request() -> Json {
 
 /// A selection that answers the knock: it reads `label` from the param
 /// `input` (none without it), so it agrees with the live turn only when the
-/// run was given that turn's input.
-const RESPOND: &str = "{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}], label: input === null ? 'none' : input.label}}";
+/// run was given that turn's input. It names no target: the stage that runs
+/// the behavior resolves the recipient from the turn's offered targets
+/// (decision D288).
+const RESPOND: &str = "{event: 'bot.ability.communication.respond', data: {parts: [{words: 'Who is there?'}], label: input === null ? 'none' : input.label}}";
+
+/// A selection that still names its target, as programs before D288 wrote
+/// one: refused, because no session id belongs in a program.
+const RESPOND_WITH_TARGET: &str = "{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}], label: input === null ? 'none' : input.label}}";
 
 /// A turn behavior that declares the params `turn` and `input`, holds
 /// `deciding` in its state `deciding`, and ends in `decided` with
@@ -745,13 +756,14 @@ fn live_route_draft(path: &str, authors: usize) -> String {
         "livenoevent" => {
             deciding_draft("({turn: turn, handled: true, selected: [{target: 'communication'}]})")
         }
-        "livenotarget" => deciding_draft(&format!(
-            "({{turn: turn, handled: true, selected: [{}]}})",
-            RESPOND.replace(" target: 'communication',", "")
+        // Names a target, as programs before D288 wrote one: refused.
+        "livetarget" => deciding_draft(&format!(
+            "({{turn: turn, handled: true, selected: [{RESPOND_WITH_TARGET}]}})"
         )),
+        // Names no target (the D288 form), but the turn's offered map
+        // resolves its event to a session the turn did not name.
         "liveforeign" => deciding_draft(&format!(
-            "({{turn: turn, handled: true, selected: [{}]}})",
-            RESPOND.replace("target: 'communication'", "target: 'speaking'")
+            "({{turn: turn, handled: true, selected: [{RESPOND}]}})"
         )),
         "liverepair" if authors > 1 => live_ok_draft(),
         _ => live_binding_draft(),
@@ -1075,8 +1087,9 @@ impl Received {
 /// `/liveok/v1` one that selects on it, `/livestuck/v1` one that never
 /// finishes, `/liverunaway/v1` one that runs away with the param input,
 /// `/liveshape/v1`, `/liveturn/v1`, `/liveunhandled/v1`, `/livenoevent/v1`,
-/// `/livenotarget/v1` and `/liveforeign/v1` one whose donedata breaks the
-/// contract that way, `/livebinding/v1` one that hardcodes an input value,
+/// `/livetarget/v1` one that names a target (refused, D288),
+/// `/liveforeign/v1` one whose selection resolves to a session the turn
+/// did not name, `/livebinding/v1` one that hardcodes an input value,
 /// and `/liverepair/v1` that one first, then the one that selects on it.
 /// Each connection is served on its own thread, so a held
 /// answer delays nothing else. `decision` routes:
@@ -2175,24 +2188,42 @@ fn a_live_turn_that_selects_nothing_is_refused() {
 fn a_live_selection_without_an_event_is_refused() {
     assert_live_refused(
         "livenoevent",
-        "selected[0] has no event: each selection is an object {event, target, data?, reason?}.",
+        "selected[0] has no event: each selection is an object {event, data?, reason?}.",
     );
 }
 
 #[test]
-fn a_live_selection_without_a_target_is_refused() {
+fn a_live_selection_with_a_target_is_refused() {
     assert_live_refused(
-        "livenotarget",
-        r#"selected[0] (bot.ability.communication.respond) names no target: name the session that receives its event, one of ["communication"]."#,
+        "livetarget",
+        "selected[0] (bot.ability.communication.respond) names a target: name no target; the stage that runs you resolves, from the choices the turn offers, the session that receives each event, so no session id is ever written into the program.",
     );
 }
 
+/// The behavior names no target (the D288 form), but the turn's offered
+/// map resolves its event to a session the turn did not name: refused.
 #[test]
 fn a_live_selection_to_a_session_the_turn_did_not_name_is_refused() {
-    assert_live_refused(
+    let mut request = live_request();
+    request["apply"]["input"]["targets"] = json!({"bot.ability.communication.respond": "speaking"});
+    let mock = Mock::start();
+    let records = run(
+        &mock,
         "liveforeign",
-        r#"selected[0] (bot.ability.communication.respond) names the target "speaking", which is not one of this turn's targets ["communication"]: name the session exactly as this turn's cognition_output names it."#,
+        "liveforeign",
+        &ALL,
+        &capped(request, 2),
     );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
+    assert_eq!(
+        failed["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": r#"selected[0] (bot.ability.communication.respond) resolves to the session "speaking", which is not one of this turn's targets ["communication"]."#}]),
+        "{failed}"
+    );
+    assert!(failed["scxml"].is_string(), "{failed}");
 }
 
 #[test]

@@ -11,6 +11,10 @@
                    focus added.
                    stimulus, focus, focus_candidates (required):
                    expressions.
+                   environment, owned_devices, targets (optional):
+                   expressions of the read-only snapshots the turn carries,
+                   copied into the payload when they evaluate to a value
+                   and left out when they evaluate to undefined.
                    It takes no other attribute and no content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -22,6 +26,9 @@
       <xs:attribute name="stimulus" type="xs:string" use="required"/>
       <xs:attribute name="focus" type="xs:string" use="required"/>
       <xs:attribute name="focus_candidates" type="xs:string" use="required"/>
+      <xs:attribute name="environment" type="xs:string"/>
+      <xs:attribute name="owned_devices" type="xs:string"/>
+      <xs:attribute name="targets" type="xs:string"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

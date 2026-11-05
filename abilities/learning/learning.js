@@ -186,10 +186,23 @@ function breakFailedMessage(detail) {
   return 'Learning break failed: ' + detail;
 }
 
-// The lesson's result: whether it took and the behavior it became, never
-// why it failed, with the teaching turn's participants.
+// The lesson's result: whether it took and the behavior it became, with
+// the teaching turn's participants. Why a lesson failed reaches the body
+// as the `category` on the revision's `bot.ability.failed` and on this
+// output, not here.
 function learningOutput(learned) {
   return ({lesson: lesson.content, lesson_turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
+}
+
+// The lesson's failed output: what learningOutput returns for a lesson
+// that did not take, with the failure's coarse category when there is
+// one (left out when there is none, so the send never carries a null).
+function failedLearningOutput() {
+  var output = learningOutput(false);
+  if (typeof failure_category === 'string') {
+    output.category = failure_category;
+  }
+  return output;
 }
 
 // memory

@@ -13,6 +13,9 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The guest plumbing the namespace components share (the element types and
+# host trait, attribute parsing and JSON conversion, and the guest glue).
+floppy-guest.workspace = true
 # The focus candidates and the projected values as JSON (no schema code,
 # so no randomness).
 scxml-types.workspace = true

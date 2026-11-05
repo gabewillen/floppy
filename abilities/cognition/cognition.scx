@@ -62,11 +62,11 @@
   layer takes the turn unless the turn perceives a handed-back failure of
   reflex or intuition, which only a later stage can perceive (decision
   D140). Intuition takes it when composed, unless the decision layer's
-  pass chose reasoning (its donedata's hand_to, decision D150) or the turn
+  pass chose reasoning (its output's hand_to, decision D150) or the turn
   perceives a handed-back failure of intuition. The decision layer is told the tiers
   its pass may name (its hand_ons param: intuition when composed, then
   reasoning), the bounds' max_context_tokens, and the decision model's
-  bytes_per_token, which its donedata teaches and this document keeps
+  bytes_per_token, which its output teaches and this document keeps
   across turns as it keeps reasoning's.
 
   Fanout (decision D275): as running_decision sends the decision layer
@@ -77,15 +77,24 @@
   the tier recalls and asks its model while the decision layer decides.
   The tier withholds everything it would send, and does not answer, until
   running_intuition or running_reasoning sends it the turn with reached
-  true: with the same frame it sends what it withheld, in order, and
-  answers without a second model call; with another (the decision layer
-  acted) it asks again. A turn the decision layer handles, cancels or
+  true: with the same acted, the one frame member the cascade can change
+  mid-turn (the tier deep-compares them) it sends what it withheld, in
+  order, and answers without a second model call; with other acted (the
+  decision layer acted) it asks again over the whole frame. The reach is
+  one of two shapes of bot.ability.processing.input (its schema has no
+  subset): when the decision layer acted nothing (decision_acted false)
+  it is lightweight, the turn, the acted and reached, the frame's other
+  members placeholders the tier never reads on the reached path; when the
+  decision layer acted, or the turn reaches a tier that took no fanout
+  (reasoning after the intuition's handoff, or either tier when the
+  decision layer's pass was skipped), it is the whole frame. A
+  turn the decision layer handles, cancels or
   times out sends that tier bot.ability.processing.cancel, as does
   after_decision when the decision layer's pass skips the intuition that
   took the turn, so nothing it selected is sent.
 
   Failures: a decision layer or an intuition that fails (its failed
-  donedata, or error.communication.<stage>) hands the same turn on to the
+  output, or error.communication.<stage>) hands the same turn on to the
   next stage, logged as cognition.cascaded {stage: "reflex" or
   "intuition", reason} (decision D140). Autonomy or reasoning failing fails the
   turn: failing answers bot.ability.failed, and hands the failure back
@@ -103,7 +112,7 @@
 
   Dispatch: each stage sends its own selections (decision D113): a
   decision layer that escalates for low confidence sends its environment
-  actions before the turn goes on to reasoning, and names them in its donedata's acted, as the chat intuition tier names
+  actions before the turn goes on to reasoning, and names them in its output's acted, as the chat intuition tier names
   what it sent before its handoff (decision D144). The turn's acted is what earlier
   stages dispatched before they passed it on; the turn's output, and the
   reflection's cognition_output, is the acted followed by the handling
@@ -209,7 +218,8 @@
   with <decision:offers>: the events its offerable <data> declares,
   bot.ability.cognition.ignore and
   bot.ability.learning.input (both of no effort), while a transition without
-  a cond takes them. The stages are per-turn children that offer nothing.
+  a cond takes them. The stages are lifetime-held children (held for the
+  cognition's lifetime, decisions D268 and D269) that offer nothing.
 
   Choices: each turn's input carries the body's collected choices (its own
   and every ability's offers, each tagged with the session id of its
@@ -345,6 +355,17 @@
     <!-- The percepts the acted were for, when a stage named them (null:
          the turn's one stimulus). -->
     <data id="acted_percepts" expr="null"/>
+    <!-- Whether the decision layer acted on the turn in hand (its output
+         named selections it sent): its acting is what makes the frame a
+         fanned-out tier holds stale, so the reach carries the frame
+         whole; acted nothing, the reach is lightweight (decision D275). -->
+    <data id="decision_acted" expr="false"/>
+    <!-- Whether the decision layer's pass fanned the turn out to its early
+         tier (decision D275): the reach is lightweight only when the tier
+         in hand holds the frame the fanout sent it, so a turn that reaches
+         a tier without a fanout — the decision layer skipped, after the
+         intuition's handoff — goes whole (decision D291). -->
+    <data id="fanned_out" expr="false"/>
     <!-- Reasoning's context fit (decision D143):
          the request bytes a token, 3 until a reply's usage teaches it
          fewer, kept here across turns and passed to each reasoning. -->
@@ -353,7 +374,7 @@
     <data id="intuition_bytes_per_token" expr="3"/>
     <data id="decision_bytes_per_token" expr="3"/>
     <!-- The tier the decision layer's pass chose for the turn (its
-         donedata's hand_to; null: the next composed one). -->
+         output's hand_to; null: the next composed one). -->
     <data id="hand_to" expr="null"/>
     <data id="selected" expr="[]"/>
     <!-- The failed step: its message, and the stimulus handed back. -->
@@ -508,6 +529,8 @@
     <onentry>
       <assign location="acted" expr="[]"/>
       <assign location="acted_percepts" expr="null"/>
+      <assign location="decision_acted" expr="false"/>
+      <assign location="fanned_out" expr="false"/>
       <assign location="hand_to" expr="null"/>
       <assign location="selected" expr="[]"/>
       <assign location="failure" expr="null"/>
@@ -594,7 +617,8 @@
         <!-- Fanned out: the tier the decision layer would hand the turn to
              takes it now, not yet reached, so it recalls and asks its model
              while the decision layer decides, and withholds what it sends
-             until the turn reaches it with the same frame. -->
+             until the turn reaches it with the same acted (the only frame
+             member the cascade can change mid-turn). -->
         <if cond="isEarlyIntuition()">
           <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
                                     ceiling="intuitionCeiling()"/>
@@ -633,6 +657,9 @@
             <param name="reached" expr="false"/>
           </send>
         </if>
+        <!-- The pass fanned the turn out: the tier it sent it to holds the
+             frame, and its reach may be lightweight (decision D291). -->
+        <assign location="fanned_out" expr="true"/>
         <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
                                   ceiling="decisionCeiling()"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
@@ -685,6 +712,7 @@
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
       <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="isUnhandled(_event)" target="after_decision">
+        <assign location="decision_acted" expr="actsOf(_event).length > 0"/>
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
@@ -695,6 +723,7 @@
       </transition>
       <!-- A failing decision layer hands the same turn on (decision D140). -->
       <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="matchesStageOutput(_event)" target="after_decision">
+        <assign location="decision_acted" expr="actsOf(_event).length > 0"/>
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
@@ -727,30 +756,58 @@
     <state id="running_intuition">
       <onentry>
         <assign location="stage" expr="'intuition'"/>
-        <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
-                                  ceiling="intuitionCeiling()"/>
         <!-- Its inactivity bound starts with its streamed reply, as
              reasoning's does (decision D101). -->
         <assign location="hop_timer" expr="'unarmed'"/>
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
-        <send event="bot.ability.processing.input" target="#_intuition">
-          <param name="turn" expr="turn"/>
-          <param name="stimulus" expr="stimulus"/>
-          <param name="focus" expr="focus"/>
-          <param name="focus_candidates" expr="focus_candidates"/>
-          <param name="choices" expr="intuitionChoices()"/>
-          <param name="held" expr="tier_held"/>
-          <param name="environment" expr="environment"/>
-          <param name="acted" expr="actedFact()"/>
-          <param name="self" expr="selfFact()"/>
-          <param name="recent" expr="recent_turns"/>
-          <param name="max_context_tokens" expr="contextTokens()"/>
-          <param name="completion_reserve_tokens" expr="reserveTokens()"/>
-          <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
-          <param name="reached" expr="true"/>
-        </send>
+        <!-- Reached: the decision layer acted nothing, so the frame the
+             tier holds from the fanout is whole and the reach is
+             lightweight, the turn, the acted and reached, the schema's
+             other members placeholders the tier never reads on the
+             reached path (it deep-compares the acted alone). With acted,
+             the frame changed and goes whole, so the tier asks again; a
+             turn that reached this tier without the fanout (the decision
+             layer skipped) holds no frame and goes whole too (decision
+             D275, D291). -->
+        <if cond="!fanned_out || decision_acted">
+          <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
+                                    ceiling="intuitionCeiling()"/>
+          <send event="bot.ability.processing.input" target="#_intuition">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="stimulus"/>
+            <param name="focus" expr="focus"/>
+            <param name="focus_candidates" expr="focus_candidates"/>
+            <param name="choices" expr="intuitionChoices()"/>
+            <param name="held" expr="tier_held"/>
+            <param name="environment" expr="environment"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="selfFact()"/>
+            <param name="recent" expr="recent_turns"/>
+            <param name="max_context_tokens" expr="contextTokens()"/>
+            <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+            <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
+            <param name="reached" expr="true"/>
+          </send>
+        <else/>
+          <send event="bot.ability.processing.input" target="#_intuition">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="null"/>
+            <param name="focus" expr="null"/>
+            <param name="focus_candidates" expr="[]"/>
+            <param name="choices" expr="[]"/>
+            <param name="held" expr="[]"/>
+            <param name="environment" expr="null"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="null"/>
+            <param name="recent" expr="[]"/>
+            <param name="max_context_tokens" expr="null"/>
+            <param name="completion_reserve_tokens" expr="0"/>
+            <param name="bytes_per_token" expr="1"/>
+            <param name="reached" expr="true"/>
+          </send>
+        </if>
       </onentry>
       <!-- Leaving the turn's intuition unanswered (cancelled or timed out)
            ends it; once answered, the intuition is idle and drops this. -->
@@ -797,8 +854,6 @@
     <state id="running_reasoning">
       <onentry>
         <assign location="stage" expr="'reasoning'"/>
-        <!-- Reasoning's ceiling is the whole frame: nothing is held. -->
-        <cognition:within_ceiling location="tier_choices" choices="choices"/>
         <!-- Reasoning's inactivity bound starts with its streamed reply's
              first progress (below): until then, and for a reply that is not
              streamed, only the backstop applies (decision D101). -->
@@ -806,22 +861,50 @@
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
-        <send event="bot.ability.processing.input" target="#_reasoning">
-          <param name="turn" expr="turn"/>
-          <param name="stimulus" expr="stimulus"/>
-          <param name="focus" expr="focus"/>
-          <param name="focus_candidates" expr="focus_candidates"/>
-          <param name="choices" expr="tier_choices"/>
-          <param name="held" expr="[]"/>
-          <param name="environment" expr="environment"/>
-          <param name="acted" expr="actedFact()"/>
-          <param name="self" expr="selfFact()"/>
-          <param name="recent" expr="recent_turns"/>
-          <param name="max_context_tokens" expr="contextTokens()"/>
-          <param name="completion_reserve_tokens" expr="reserveTokens()"/>
-          <param name="bytes_per_token" expr="bytes_per_token"/>
-          <param name="reached" expr="true"/>
-        </send>
+        <!-- Reached: lightweight when reasoning took the turn beside the
+             decision layer (the fanout's tier) and the decision layer
+             acted nothing, so the frame reasoning holds is whole; the
+             frame goes whole when the decision layer acted, and whenever
+             the turn arrives here without a fanout — after the
+             intuition's handoff, or with the decision layer skipped
+             (decision D275, D291). -->
+        <if cond="fanned_out &amp;&amp; !isEarlyIntuition() &amp;&amp; !decision_acted">
+          <send event="bot.ability.processing.input" target="#_reasoning">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="null"/>
+            <param name="focus" expr="null"/>
+            <param name="focus_candidates" expr="[]"/>
+            <param name="choices" expr="[]"/>
+            <param name="held" expr="[]"/>
+            <param name="environment" expr="null"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="null"/>
+            <param name="recent" expr="[]"/>
+            <param name="max_context_tokens" expr="null"/>
+            <param name="completion_reserve_tokens" expr="0"/>
+            <param name="bytes_per_token" expr="1"/>
+            <param name="reached" expr="true"/>
+          </send>
+        <else/>
+          <!-- Reasoning's ceiling is the whole frame: nothing is held. -->
+          <cognition:within_ceiling location="tier_choices" choices="choices"/>
+          <send event="bot.ability.processing.input" target="#_reasoning">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="stimulus"/>
+            <param name="focus" expr="focus"/>
+            <param name="focus_candidates" expr="focus_candidates"/>
+            <param name="choices" expr="tier_choices"/>
+            <param name="held" expr="[]"/>
+            <param name="environment" expr="environment"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="selfFact()"/>
+            <param name="recent" expr="recent_turns"/>
+            <param name="max_context_tokens" expr="contextTokens()"/>
+            <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+            <param name="bytes_per_token" expr="bytes_per_token"/>
+            <param name="reached" expr="true"/>
+          </send>
+        </if>
       </onentry>
       <!-- Leaving the turn's reasoning unanswered (cancelled or timed out)
            ends it; once answered, the reasoning is idle and drops this. -->

@@ -156,6 +156,33 @@ function serviceFailedLog(event) {
 
 // dispatching and recorded_failure
 
+// The session id the turn's choices offer for the selection's event
+// (input.targets, the cognition built from the turn's choices): the first
+// choice of the event wins. A selection of an event no offered choice
+// takes cannot be sent, and throws, so the send that would resolve it is
+// never made and the service's failure is recorded instead.
+function serviceTargetId(s) {
+  var target = Object(input.targets)[String(s.event)];
+  if (typeof target !== 'string') {
+    throw new Error('no offered choice takes ' + String(s.event));
+  }
+  return target;
+}
+
+// The send target for a selection: the offered session, as a send names it.
+function serviceTarget(s) {
+  return '#_scxml_' + serviceTargetId(s);
+}
+
+// The dispatched selections as the turn's answer carries them: each with
+// the target its send resolved, so the body (which sends itself only the
+// selections that name no target) does not send the dispatched ones again.
+function stampedSelections() {
+  return answer.map(function (s) {
+    return Object.assign({}, s, {target: serviceTargetId(s)});
+  });
+}
+
 // The data a selection is sent with: its data object, else {} (no data,
 // null, or a non-object).
 function selectionData(s) {
@@ -164,14 +191,13 @@ function selectionData(s) {
 
 // A dispatch that failed, with the error and what the service selected
 // (an error.execution is most often data its target's schema refuses,
-// decision D221).
+// decision D221, or an event no offered choice of this turn takes).
 function dispatchFailure(_event) {
   return 'Autonomy behavior dispatch failed: ' + _event.name + ' (selected ' + (Array.isArray(answer) && answer.length > 0 ? answer.map(selectionText).join(', ') : 'nothing') + ')';
 }
 
 function selectionText(s) {
-  var selection = Object(s);
-  return String(selection.event) + (typeof selection.target === 'string' ? ' to ' + selection.target : ' with no target');
+  return String(Object(s).event);
 }
 
 function isRejected() {

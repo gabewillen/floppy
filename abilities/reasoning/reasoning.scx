@@ -46,7 +46,8 @@
   bytes), as a query with the Embedding ability
   (abilities/embedding/embedding.scx), while it selects the candidates, the
   64 newest prior episodes with their vectors (bot_memory_embedding, kind
-  text, which reflection stores), and scores each as mosfet.py's
+  text, which reflection stores), and <memory:scored_candidates> scores
+  each as mosfet.py's
   Associative does: similarity (1) times its cosine with the cue plus
   recency (0.35) times 0.5 to the power of its age before the newest
   candidate over the half-life (2 days); an episode without a vector
@@ -149,14 +150,22 @@
   Reached: the cognition sends a turn to the tier its decision layer would
   hand it to as the decision layer takes it (reached false), so the tier
   recalls and asks its model while the decision layer decides. Until the
-  turn reaches the tier (an input for the same turn with reached true and
-  the same frame: focus, focus_candidates, choices, held, environment,
-  self, acted and recent), every selection and draft it would send is kept
-  in withheld, in order, and it does not answer; once reached, they are
-  sent in order and the turn goes on as one sent reached. An input for
-  another turn, or the same turn with another frame, while the turn in
-  hand has not reached the tier leaves that turn unanswered and starts the
-  new one; a bot.ability.processing.cancel ends it as any turn.
+  turn reaches the tier (an input for the same turn with reached true,
+  framed the same — the acted are all the cascade can change mid-turn,
+  so the frame is a deep comparison of them, and the acted stand for
+  "the same conclusion, now reached" vs "ask again"; the frame's other
+  members are never read or compared, decision D275), every selection and
+  draft it would send is kept in withheld, in order, and it does not
+  answer; once reached, they are sent in order and the turn goes on as
+  one sent reached. An input for another turn, or the same turn with
+  other acted, while the turn in hand has not reached the tier leaves
+  that turn unanswered and starts the new one; a
+  bot.ability.processing.cancel ends it as any turn. (The reach input is
+  the same bot.ability.processing.input in two shapes, its schema having
+  no subset: when the frame the tier holds is whole, the cognition sends
+  it lightweight, the turn, the acted and reached, the schema's other
+  members placeholders never read on the reached path; when the acted
+  changed, or the turn arrives without a fanout, whole.)
 
   Input: bot.ability.processing.input {turn, stimulus, focus,
   focus_candidates, choices, held, environment, self, acted, recent,
@@ -307,6 +316,11 @@
          null to recall the newest instead. -->
     <data id="cue" expr="null"/>
     <data id="found" expr="null"/>
+    <!-- The scores of one candidates output, computed once by
+         <memory:scored_candidates> on the transition that takes it
+         (decision D256); the id ranking and the recall log both read
+         this. -->
+    <data id="scored" expr="null"/>
     <data id="weights" expr="({similarity: 1, recency: 0.35, recency_half_life_ms: 172800000})"/>
     <data id="episode_ids" expr="null"/>
     <data id="candidate_select" expr="'SELECT m.memory_id, CAST(m.created_at AS TEXT), LENGTH(m.content), e.embedding FROM bot_memory m LEFT JOIN bot_memory_embedding e ON e.memory_id = m.memory_id AND e.kind = \'text\' WHERE m.query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR m.context_ref IS NULL OR m.context_ref = ?2) AND m.content_format = \'application/json\' ORDER BY m.created_at DESC, m.memory_id DESC LIMIT 64'"/>
@@ -356,6 +370,7 @@
       <assign location="statements" expr="[]"/>
       <assign location="cue" expr="null"/>
       <assign location="found" expr="null"/>
+      <assign location="scored" expr="null"/>
       <assign location="episode_ids" expr="null"/>
     </transition>
   </state>
@@ -400,6 +415,7 @@
       <onentry>
         <assign location="cue" expr="null"/>
         <assign location="found" expr="null"/>
+        <assign location="scored" expr="null"/>
         <assign location="episode_ids" expr="null"/>
         <assign location="statements" expr="candidateSelectStatements()"/>
         <if cond="hasCueWords() &amp;&amp; embedding !== null">
@@ -420,8 +436,9 @@
         <assign location="found" expr="_event.data"/>
       </transition>
       <transition cond="cue !== null &amp;&amp; found !== null" target="recalling_memory">
-        <assign location="episode_ids" expr="rankedEpisodeIds(found)"/>
-        <log label="reasoning.recall" expr="recallLog(found)"/>
+        <memory:scored_candidates location="scored" output="found" cue="cue" weights="weights"/>
+        <assign location="episode_ids" expr="rankedEpisodeIds(scored)"/>
+        <log label="reasoning.recall" expr="recallLog(scored)"/>
       </transition>
       <transition event="bot.ability.embedding.failed" cond="isEmbeddingReply('recalling_embedding')" event:schema="../schemas/bot.ability.embedding.failed.json"
                   target="recalling_memory">

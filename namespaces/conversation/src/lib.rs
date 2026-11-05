@@ -242,7 +242,6 @@
     )
 )]
 
-use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
 /// The namespace's name: the last path segment of its repository namespace
@@ -270,67 +269,10 @@ pub const VOICE_SIMILARITY_THRESHOLD: f64 = 0.50;
 /// needs over any other.
 pub const SIMILARITY_MARGIN: f64 = 0.05;
 
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
-}
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure, Host};
+use floppy_guest::element::{assign_to, attribute_values, evaluate, json_of, no_content};
 
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
-
-/// The host capabilities one `execute` call uses.
-pub trait ConversationHost {
-    /// A non-recoverable host failure.
-    type Error;
-
-    /// Evaluates one value expression in the current data model;
-    /// `Ok(Err(()))` is a recoverable evaluation failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, Self::Error>;
-
-    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
-    /// recoverable assignment failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
-}
+use scxml_types::DataValue as Data;
 
 /// The direction of a committed message.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -357,7 +299,7 @@ impl Direction {
 ///
 /// [`Failure::Execution`] for every malformed element, value, or
 /// assignment; [`Failure::Host`] for a non-recoverable host failure.
-pub fn execute<H: ConversationHost>(
+pub fn execute<H: Host>(
     local_name: &str,
     attributes: &[Attribute],
     content: &[Content],
@@ -383,97 +325,8 @@ pub fn execute<H: ConversationHost>(
     }
 }
 
-/// The values of an element's unqualified attributes named in `names`, in
-/// that order, each trimmed and non-empty; any other attribute is `refused`,
-/// a repeated one `repeated`, an empty one `empty`.
-fn attribute_values<'a, E, const N: usize>(
-    attributes: &'a [Attribute],
-    names: [&str; N],
-    refused: &'static str,
-    repeated: &'static str,
-    empty: &'static str,
-) -> Result<[Option<&'a str>; N], Failure<E>> {
-    let mut values = [None; N];
-    for attribute in attributes {
-        let index = match attribute.namespace_uri {
-            None => names.iter().position(|name| *name == attribute.local_name),
-            Some(_) => None,
-        }
-        .ok_or(Failure::Execution(refused))?;
-        let value = attribute.value.trim();
-        if value.is_empty() {
-            return Err(Failure::Execution(empty));
-        }
-        if values[index].replace(value).is_some() {
-            return Err(Failure::Execution(repeated));
-        }
-    }
-    Ok(values)
-}
-
-/// Refuses any content but white space with `detail`.
-fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
-    if content
-        .iter()
-        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
-    {
-        return Err(Failure::Execution(detail));
-    }
-    Ok(())
-}
-
-/// Evaluates `expression`, else `failed`.
-fn evaluate<H: ConversationHost>(
-    host: &mut H,
-    expression: &str,
-    failed: &'static str,
-) -> Result<Data, Failure<H::Error>> {
-    host.read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// Assigns `value` to `location`, else `failed`.
-fn assign_to<H: ConversationHost>(
-    host: &mut H,
-    location: &str,
-    value: &Data,
-    failed: &'static str,
-) -> Result<(), Failure<H::Error>> {
-    host.assign(location, value)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// A data value as JSON; `None` for `undefined`, an absent value, XML, or
-/// a JSON text that does not parse.
-fn json_of(value: &Data) -> Option<Json> {
-    match value {
-        Data::Null => Some(Json::Null),
-        Data::Bool(value) => Some(Json::Bool(*value)),
-        Data::Number(value) => Some(number(value.get())),
-        Data::String(text) => Some(Json::String(text.clone())),
-        Data::JsonArray(text) | Data::JsonObject(text) => serde_json::from_str(text).ok(),
-        Data::Absent | Data::Undefined | Data::Xml(_) => None,
-    }
-}
-
-/// A finite number as JSON: an integer when it is one that `f64` holds
-/// exactly (ECMAScript prints it without a fraction).
-fn number(value: f64) -> Json {
-    const EXACT: f64 = 9_007_199_254_740_992.0;
-    if value.fract() == 0.0 && value.abs() < EXACT {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "an integral value under 2^53 in magnitude converts exactly"
-        )]
-        return Json::from(value as i64);
-    }
-    serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
-}
-
 /// Executes `<conversation:message_for_turn>`.
-fn message_for_turn<H: ConversationHost>(
+fn message_for_turn<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -481,9 +334,11 @@ fn message_for_turn<H: ConversationHost>(
     let [location, direction, event, message, provenance] = attribute_values(
         attributes,
         ["location", "direction", "event", "message", "provenance"],
-        "conversation:message_for_turn takes only the location, direction, event, message and provenance attributes",
-        "conversation:message_for_turn repeats an attribute",
-        "conversation:message_for_turn has an empty attribute",
+        [
+            "conversation:message_for_turn takes only the location, direction, event, message and provenance attributes",
+            "conversation:message_for_turn repeats an attribute",
+            "conversation:message_for_turn has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:message_for_turn requires a location",
@@ -538,7 +393,7 @@ fn message_for_turn<H: ConversationHost>(
 }
 
 /// Evaluates `event` to a non-empty string, else `malformed`.
-fn read_event<H: ConversationHost>(
+fn read_event<H: Host>(
     host: &mut H,
     event: &str,
     [failed, malformed]: [&'static str; 2],
@@ -551,7 +406,7 @@ fn read_event<H: ConversationHost>(
 
 /// Evaluates `provenance`, when present, to an object (`null` or
 /// `undefined` is none).
-fn provenance_of<H: ConversationHost>(
+fn provenance_of<H: Host>(
     host: &mut H,
     provenance: Option<&str>,
 ) -> Result<Map<String, Json>, Failure<H::Error>> {
@@ -970,7 +825,7 @@ fn ascii_json_string(text: &str) -> String {
 }
 
 /// Evaluates `expression` to JSON, else `malformed`.
-fn read_json<H: ConversationHost>(
+fn read_json<H: Host>(
     host: &mut H,
     expression: &str,
     [failed, malformed]: [&'static str; 2],
@@ -980,7 +835,7 @@ fn read_json<H: ConversationHost>(
 
 /// Evaluates `expression` to an identity, or `None` for `null` and
 /// `undefined`; anything else is `malformed`.
-fn read_source<H: ConversationHost>(
+fn read_source<H: Host>(
     host: &mut H,
     expression: &str,
     [failed, malformed]: [&'static str; 2],
@@ -1270,7 +1125,7 @@ pub fn relationship_index_for(
 }
 
 /// Executes `<conversation:relationship_for_input>`.
-fn relationship_for_input<H: ConversationHost>(
+fn relationship_for_input<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1278,9 +1133,11 @@ fn relationship_for_input<H: ConversationHost>(
     let [location, index_location, input] = attribute_values(
         attributes,
         ["location", "indexlocation", "input"],
-        "conversation:relationship_for_input takes only the location, indexlocation and input attributes",
-        "conversation:relationship_for_input repeats an attribute",
-        "conversation:relationship_for_input has an empty attribute",
+        [
+            "conversation:relationship_for_input takes only the location, indexlocation and input attributes",
+            "conversation:relationship_for_input repeats an attribute",
+            "conversation:relationship_for_input has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:relationship_for_input requires a location",
@@ -1385,7 +1242,7 @@ pub fn relationship_for(
 
 /// Executes `<conversation:participant_for_source>` (`add`) and
 /// `<conversation:fail_turn>`.
-fn participant_for_source<H: ConversationHost>(
+fn participant_for_source<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1433,8 +1290,11 @@ fn participant_for_source<H: ConversationHost>(
         not_identity,
         not_assigned,
     ] = details;
-    let [location, source] =
-        attribute_values(attributes, ["location", "source"], refused, repeated, empty)?;
+    let [location, source] = attribute_values(
+        attributes,
+        ["location", "source"],
+        [refused, repeated, empty],
+    )?;
     let location = location.ok_or(Failure::Execution(no_location))?;
     let source = source.ok_or(Failure::Execution(no_source))?;
     no_content(content, has_content)?;
@@ -1469,7 +1329,7 @@ fn participant_for_source<H: ConversationHost>(
 }
 
 /// Executes `<conversation:detector_refs>`.
-fn detector_refs_element<H: ConversationHost>(
+fn detector_refs_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1479,9 +1339,11 @@ fn detector_refs_element<H: ConversationHost>(
     let [location, relationships] = attribute_values(
         attributes,
         ["location", "relationships"],
-        "conversation:detector_refs takes only the location and relationships attributes",
-        "conversation:detector_refs repeats an attribute",
-        "conversation:detector_refs has an empty attribute",
+        [
+            "conversation:detector_refs takes only the location and relationships attributes",
+            "conversation:detector_refs repeats an attribute",
+            "conversation:detector_refs has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:detector_refs requires a location",
@@ -1548,7 +1410,7 @@ pub fn detector_refs(relationships: &[Json]) -> Result<Vec<Json>, &'static str> 
 }
 
 /// Executes `<conversation:new_track_ref>`.
-fn new_track_ref_element<H: ConversationHost>(
+fn new_track_ref_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1556,9 +1418,11 @@ fn new_track_ref_element<H: ConversationHost>(
     let [location, source] = attribute_values(
         attributes,
         ["location", "source"],
-        "conversation:new_track_ref takes only the location and source attributes",
-        "conversation:new_track_ref repeats an attribute",
-        "conversation:new_track_ref has an empty attribute",
+        [
+            "conversation:new_track_ref takes only the location and source attributes",
+            "conversation:new_track_ref repeats an attribute",
+            "conversation:new_track_ref has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:new_track_ref requires a location",
@@ -1634,7 +1498,7 @@ fn ecmascript_number(value: f64) -> String {
 }
 
 /// Executes `<conversation:content_for_detector>`.
-fn content_for_detector_element<H: ConversationHost>(
+fn content_for_detector_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1642,9 +1506,11 @@ fn content_for_detector_element<H: ConversationHost>(
     let [location, input, source] = attribute_values(
         attributes,
         ["location", "input", "source"],
-        "conversation:content_for_detector takes only the location, input and source attributes",
-        "conversation:content_for_detector repeats an attribute",
-        "conversation:content_for_detector has an empty attribute",
+        [
+            "conversation:content_for_detector takes only the location, input and source attributes",
+            "conversation:content_for_detector repeats an attribute",
+            "conversation:content_for_detector has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:content_for_detector requires a location",
@@ -1730,7 +1596,7 @@ pub fn content_for_detector(
 }
 
 /// Executes `<conversation:complete_turn>`.
-fn complete_turn<H: ConversationHost>(
+fn complete_turn<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1745,9 +1611,11 @@ fn complete_turn<H: ConversationHost>(
             "session_ref",
             "participants",
         ],
-        "conversation:complete_turn takes only the location, event, input, turns, session_ref and participants attributes",
-        "conversation:complete_turn repeats an attribute",
-        "conversation:complete_turn has an empty attribute",
+        [
+            "conversation:complete_turn takes only the location, event, input, turns, session_ref and participants attributes",
+            "conversation:complete_turn repeats an attribute",
+            "conversation:complete_turn has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:complete_turn requires a location",
@@ -2131,7 +1999,7 @@ fn js_trim(text: &str) -> &str {
 }
 
 /// Executes `<conversation:ingest_content>`.
-fn ingest_content_element<H: ConversationHost>(
+fn ingest_content_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -2139,9 +2007,11 @@ fn ingest_content_element<H: ConversationHost>(
     let [location, stimulus] = attribute_values(
         attributes,
         ["location", "content"],
-        "conversation:ingest_content takes only the location and content attributes",
-        "conversation:ingest_content repeats an attribute",
-        "conversation:ingest_content has an empty attribute",
+        [
+            "conversation:ingest_content takes only the location and content attributes",
+            "conversation:ingest_content repeats an attribute",
+            "conversation:ingest_content has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:ingest_content requires a location",
@@ -2184,7 +2054,7 @@ fn ingest_content_element<H: ConversationHost>(
 }
 
 /// Executes `<conversation:on_end>`.
-fn on_end_element<H: ConversationHost>(
+fn on_end_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -2206,9 +2076,11 @@ fn on_end_element<H: ConversationHost>(
             "turn_ref",
             "source_participant_ref",
         ],
-        "conversation:on_end takes only the location, turn, participant_ref, conversation_ref, turn_ref and source_participant_ref attributes",
-        "conversation:on_end repeats an attribute",
-        "conversation:on_end has an empty attribute",
+        [
+            "conversation:on_end takes only the location, turn, participant_ref, conversation_ref, turn_ref and source_participant_ref attributes",
+            "conversation:on_end repeats an attribute",
+            "conversation:on_end has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:on_end requires a location",
@@ -2277,7 +2149,7 @@ const MALFORMED_INPUT: &str =
     "conversation:turn_participants input is not an object with source_ids and target_ids";
 
 /// Executes `<conversation:turn_participants>`.
-fn turn_participants_element<H: ConversationHost>(
+fn turn_participants_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -2285,9 +2157,11 @@ fn turn_participants_element<H: ConversationHost>(
     let [location, input, parent] = attribute_values(
         attributes,
         ["location", "input", "parent"],
-        "conversation:turn_participants takes only the location, input and parent attributes",
-        "conversation:turn_participants repeats an attribute",
-        "conversation:turn_participants has an empty attribute",
+        [
+            "conversation:turn_participants takes only the location, input and parent attributes",
+            "conversation:turn_participants repeats an attribute",
+            "conversation:turn_participants has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:turn_participants requires a location",
@@ -2415,209 +2289,7 @@ pub fn turn_participants(sources: &[Json], targets: &[Json], carried: &[Json]) -
     participants
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
-
-    use std::cell::Cell;
-
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::data_model_host;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-
-    use super::{Attribute, Content, ConversationHost, Data, Executed, Failure};
-
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
-
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
-
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl ConversationHost for Host {
-        type Error = ComponentError;
-
-        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(expression) {
-                Ok(value) => Ok(match value {
-                    DataValue::Absent => Ok(Data::Absent),
-                    DataValue::Undefined => Ok(Data::Undefined),
-                    DataValue::Null => Ok(Data::Null),
-                    DataValue::Boolean(value) => Ok(Data::Bool(value)),
-                    DataValue::Number(value) => scxml_types::FiniteNumber::new(value)
-                        .map(Data::Number)
-                        .map_err(|_| ()),
-                    DataValue::Text(text) => Ok(Data::String(text)),
-                    DataValue::JsonArray(text) => Ok(Data::JsonArray(text)),
-                    DataValue::JsonObject(text) => Ok(Data::JsonObject(text)),
-                    DataValue::Xml(text) => Ok(Data::Xml(text)),
-                }),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let value = match value {
-                Data::Null => DataValue::Null,
-                Data::Bool(value) => DataValue::Boolean(*value),
-                Data::Number(value) => DataValue::Number(value.get()),
-                Data::String(text) => DataValue::Text(text.clone()),
-                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
-                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
-                Data::Absent | Data::Undefined | Data::Xml(_) => return Ok(Err(())),
-            };
-            match data_model_host::assign(location, &value) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
-                    })
-                    .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
-                }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
-        }
-    }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
-}
+floppy_guest::extension_guest!();
 
 mod people;
 

@@ -108,23 +108,30 @@
 //! turn it is learned from. `done` (required) evaluates to the run's
 //! donedata, `null` when it reached no top-level final state; `turn`
 //! (required) to that turn's number; `input` (required) to that turn's
-//! behavior input, an object; `targets` (required) to the sessions that
+//! behavior input, an object, whose `targets` member, when the turn
+//! offered choices, maps each offered event's name to the session id that
+//! receives it (the map the invoking stage resolves a selection's
+//! recipient against at send time, so a behavior's program carries no
+//! session id of its own); `targets` (required) to the sessions that
 //! turn's output names, an array of strings; and `error` (optional) to the
 //! name of the error event the run ended on, or `null`. `location`
 //! (required) receives `E0008` messages, at most 20 (for the run, the
-//! donedata contract, nothing selected, the targets, and selection data that
-//! disagrees with `input`): none when the
+//! donedata contract, nothing selected, the offered events, and selection
+//! data that disagrees with `input`): none when the
 //! donedata is `{turn, handled, selected}` with the live turn,
-//! `handled` true and at least one selection, each with an event, a target
-//! among `targets` (floppy's check, decision D104: autonomy
-//! sends each selection to its target, so an empty `targets` refuses every
-//! selection) and data whose members agree with the string, number and
+//! `handled` true and at least one selection, each with an event, no
+//! target of its own (naming one is a message: a session id must never be
+//! baked into a behavior's program), whose event is one the turn's input
+//! offers (nothing is offered without `input.targets`), whose resolved
+//! session is one the turn's output names (an empty `targets` refuses
+//! every selection) and data whose
+//! members agree with the string, number and
 //! boolean members of `input` of the same names (compared as JSON
 //! values); else why, an error or no donedata first. `choices` (optional)
 //! evaluates to the turn's choices, `[{event, target, schema}]`, or `null`:
 //! with any, a selection whose event is not one its target takes on that
 //! turn, or whose data its choice's schema does not admit, is a message too
-//! (decision D221), since autonomy's send of it is checked
+//! (decision D221), since the sending stage's send of it is checked
 //! against the receiving transition and fails with `error.execution`.
 //! `handled` (optional, default `true`) evaluates to whether the run must
 //! handle the turn: `false` for a turn that taught the behavior, whose
@@ -171,7 +178,6 @@ use quick_xml::name::ResolveResult;
 use quick_xml::reader::NsReader;
 use quick_xml::writer::Writer;
 use scxml_event_schema::{CompiledSchema, canonical_json};
-use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
 /// The namespace's name: the last path segment of its repository namespace
@@ -219,66 +225,33 @@ const MAX_LIFETIME_ERRORS: usize = 20;
 /// once.
 const FORCED_TICK_DELAY: &str = "1500ms";
 
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure, Host};
+use floppy_guest::element::{assign_to, attribute_values, data_of, json_of, no_content, number};
+
+/// Evaluates `expression` to JSON, else `failed` (it does not evaluate) or
+/// `malformed` (it evaluates to no JSON value).
+fn evaluate_json<H: Host>(
+    host: &mut H,
+    expression: &str,
+    failed: &'static str,
+    malformed: &'static str,
+) -> Result<Json, Failure<H::Error>> {
+    let value = host
+        .read(expression)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(failed))?;
+    json_of(&value).ok_or(Failure::Execution(malformed))
 }
 
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
-
-/// The host capabilities one `execute` call uses.
-pub trait BehaviorHost {
-    /// A non-recoverable host failure.
-    type Error;
-
-    /// Evaluates one value expression in the current data model;
-    /// `Ok(Err(()))` is a recoverable evaluation failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, Self::Error>;
-
-    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
-    /// recoverable assignment failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
+/// Assigns a JSON value to `location`, else `failed`.
+fn assign_json<H: Host>(
+    host: &mut H,
+    location: &str,
+    value: &Json,
+    failed: &'static str,
+) -> Result<(), Failure<H::Error>> {
+    let value = data_of(value).ok_or(Failure::Execution(failed))?;
+    assign_to(host, location, &value, failed)
 }
 
 /// Executes one element with the given local name, attributes, and
@@ -288,7 +261,7 @@ pub trait BehaviorHost {
 ///
 /// [`Failure::Execution`] for every malformed element, value, or
 /// assignment; [`Failure::Host`] for a non-recoverable host failure.
-pub fn execute<H: BehaviorHost>(
+pub fn execute<H: Host>(
     local_name: &str,
     attributes: &[Attribute],
     content: &[Content],
@@ -304,114 +277,8 @@ pub fn execute<H: BehaviorHost>(
     }
 }
 
-/// The values of an element's unqualified attributes named in `names`, in
-/// that order, each trimmed and non-empty; any other attribute is `refused`,
-/// a repeated one `repeated`, an empty one `empty`.
-fn attribute_values<'a, E, const N: usize>(
-    attributes: &'a [Attribute],
-    names: [&str; N],
-    [refused, repeated, empty]: [&'static str; 3],
-) -> Result<[Option<&'a str>; N], Failure<E>> {
-    let mut values = [None; N];
-    for attribute in attributes {
-        let index = match attribute.namespace_uri {
-            None => names.iter().position(|name| *name == attribute.local_name),
-            Some(_) => None,
-        }
-        .ok_or(Failure::Execution(refused))?;
-        let value = attribute.value.trim();
-        if value.is_empty() {
-            return Err(Failure::Execution(empty));
-        }
-        if values[index].replace(value).is_some() {
-            return Err(Failure::Execution(repeated));
-        }
-    }
-    Ok(values)
-}
-
-/// Refuses any content but white space with `detail`.
-fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
-    if content
-        .iter()
-        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
-    {
-        return Err(Failure::Execution(detail));
-    }
-    Ok(())
-}
-
-/// Evaluates `expression` to JSON, else `failed` (it does not evaluate) or
-/// `malformed` (it evaluates to no JSON value).
-fn evaluate<H: BehaviorHost>(
-    host: &mut H,
-    expression: &str,
-    failed: &'static str,
-    malformed: &'static str,
-) -> Result<Json, Failure<H::Error>> {
-    let value = host
-        .read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))?;
-    json_of(&value).ok_or(Failure::Execution(malformed))
-}
-
-/// Assigns `value` to `location`, else `failed`.
-fn assign_to<H: BehaviorHost>(
-    host: &mut H,
-    location: &str,
-    value: &Json,
-    failed: &'static str,
-) -> Result<(), Failure<H::Error>> {
-    let value = data_of(value).ok_or(Failure::Execution(failed))?;
-    host.assign(location, &value)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// A data value as JSON; `None` for `undefined`, an absent value, XML, or
-/// a JSON text that does not parse.
-fn json_of(value: &Data) -> Option<Json> {
-    match value {
-        Data::Null => Some(Json::Null),
-        Data::Bool(value) => Some(Json::Bool(*value)),
-        Data::Number(value) => Some(number(value.get())),
-        Data::String(text) => Some(Json::String(text.clone())),
-        Data::JsonArray(text) | Data::JsonObject(text) => serde_json::from_str(text).ok(),
-        Data::Absent | Data::Undefined | Data::Xml(_) => None,
-    }
-}
-
-/// A finite number as JSON: an integer when it is one that `f64` holds
-/// exactly (ECMAScript prints it without a fraction), `null` when it is
-/// not finite (ECMAScript's `JSON.stringify` of `NaN`).
-fn number(value: f64) -> Json {
-    const EXACT: f64 = 9_007_199_254_740_992.0;
-    if value.fract() == 0.0 && value.abs() < EXACT {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "an integral value under 2^53 in magnitude converts exactly"
-        )]
-        return Json::from(value as i64);
-    }
-    serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
-}
-
-/// The data value of a JSON value (canonical JSON text for arrays and
-/// objects: `serde_json` sorts object members).
-fn data_of(value: &Json) -> Option<Data> {
-    Some(match value {
-        Json::Null => Data::Null,
-        Json::Bool(value) => Data::Bool(*value),
-        Json::Number(value) => Data::Number(scxml_types::FiniteNumber::new(value.as_f64()?).ok()?),
-        Json::String(text) => Data::String(text.clone()),
-        Json::Array(_) => Data::JsonArray(value.to_string()),
-        Json::Object(_) => Data::JsonObject(value.to_string()),
-    })
-}
-
 /// Executes `<behavior:instances_from_behavior_results>`.
-fn instances_element<H: BehaviorHost>(
+fn instances_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -438,13 +305,13 @@ fn instances_element<H: BehaviorHost>(
         content,
         "behavior:instances_from_behavior_results holds no content",
     )?;
-    let behaviors = evaluate(
+    let behaviors = evaluate_json(
         host,
         behaviors,
         "behavior:instances_from_behavior_results behaviors did not evaluate",
         "behavior:instances_from_behavior_results behaviors is not a result",
     )?;
-    let triggers = evaluate(
+    let triggers = evaluate_json(
         host,
         triggers,
         "behavior:instances_from_behavior_results triggers did not evaluate",
@@ -452,7 +319,7 @@ fn instances_element<H: BehaviorHost>(
     )?;
     let instances =
         instances_from_behavior_results(&behaviors, &triggers).map_err(Failure::Execution)?;
-    assign_to(
+    assign_json(
         host,
         location,
         &Json::Array(instances),
@@ -589,7 +456,7 @@ fn is_decimal_literal(text: &str) -> bool {
 }
 
 /// Executes `<behavior:replace_behavior_clauses>`.
-fn replace_element<H: BehaviorHost>(
+fn replace_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -613,14 +480,14 @@ fn replace_element<H: BehaviorHost>(
         content,
         "behavior:replace_behavior_clauses holds no content",
     )?;
-    let instance = evaluate(
+    let instance = evaluate_json(
         host,
         instance,
         "behavior:replace_behavior_clauses instance did not evaluate",
         "behavior:replace_behavior_clauses instance is not an object",
     )?;
     let statements = replace_behavior_clauses(&instance).map_err(Failure::Execution)?;
-    assign_to(
+    assign_json(
         host,
         location,
         &Json::Array(statements),
@@ -832,7 +699,7 @@ fn exponent_parts(value: f64) -> (String, String) {
 }
 
 /// Executes `<behavior:lifetime_errors>`.
-fn lifetime_element<H: BehaviorHost>(
+fn lifetime_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -869,7 +736,7 @@ fn lifetime_element<H: BehaviorHost>(
         "behavior:lifetime_errors requires an scxml",
     ))?;
     no_content(content, "behavior:lifetime_errors holds no content")?;
-    let Json::String(text) = evaluate(
+    let Json::String(text) = evaluate_json(
         host,
         scxml,
         "behavior:lifetime_errors scxml did not evaluate",
@@ -884,7 +751,7 @@ fn lifetime_element<H: BehaviorHost>(
         let Some(expression) = expression else {
             return Ok(None);
         };
-        match evaluate(
+        match evaluate_json(
             host,
             expression,
             "behavior:lifetime_errors a bound did not evaluate",
@@ -900,14 +767,14 @@ fn lifetime_element<H: BehaviorHost>(
     let min_every = bound(min_every)?;
     let turn_after_bound = bound(turn_after_bound)?;
     let checked = lifetime_errors(&text, min_every, turn_after_bound);
-    assign_to(
+    assign_json(
         host,
         location,
         &Json::Array(checked.errors),
         "behavior:lifetime_errors could not assign the diagnostics",
     )?;
     if let Some(lifetime_location) = lifetime_location {
-        assign_to(
+        assign_json(
             host,
             lifetime_location,
             &Json::String(checked.lifetime.into()),
@@ -915,7 +782,7 @@ fn lifetime_element<H: BehaviorHost>(
         )?;
     }
     if let Some(schedules_location) = schedules_location {
-        assign_to(
+        assign_json(
             host,
             schedules_location,
             &Json::Array(checked.schedules.into_iter().map(Json::String).collect()),
@@ -923,7 +790,7 @@ fn lifetime_element<H: BehaviorHost>(
         )?;
     }
     if let Some(tick_location) = tick_location {
-        assign_to(
+        assign_json(
             host,
             tick_location,
             &forced_tick_copy(&text).map_or(Json::Null, Json::String),
@@ -1293,7 +1160,7 @@ pub fn lifetime_errors(
 }
 
 /// Executes `<behavior:verify_tick>`.
-fn verify_tick_element<H: BehaviorHost>(
+fn verify_tick_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1312,7 +1179,7 @@ fn verify_tick_element<H: BehaviorHost>(
     ))?;
     let ticks = ticks.ok_or(Failure::Execution("behavior:verify_tick requires ticks"))?;
     no_content(content, "behavior:verify_tick holds no content")?;
-    let Json::Array(ticks) = evaluate(
+    let Json::Array(ticks) = evaluate_json(
         host,
         ticks,
         "behavior:verify_tick ticks did not evaluate",
@@ -1324,7 +1191,7 @@ fn verify_tick_element<H: BehaviorHost>(
         ));
     };
     let messages = verify_tick(&ticks).into_iter().map(Json::String).collect();
-    assign_to(
+    assign_json(
         host,
         location,
         &Json::Array(messages),
@@ -1438,14 +1305,14 @@ const NOT_A_BOOLEAN: &str = "behavior:verify_apply handled is not a boolean";
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
 
 /// `<behavior:verify_apply>`'s error: its message, or none.
-fn apply_error<H: BehaviorHost>(
+fn apply_error<H: Host>(
     host: &mut H,
     error: Option<&str>,
 ) -> Result<Option<String>, Failure<H::Error>> {
     let Some(error) = error else {
         return Ok(None);
     };
-    match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
+    match evaluate_json(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
         Json::Null => Ok(None),
         Json::String(error) => Ok(Some(error)),
         _ => Err(Failure::Execution(NOT_AN_ERROR)),
@@ -1453,14 +1320,14 @@ fn apply_error<H: BehaviorHost>(
 }
 
 /// `<behavior:verify_apply>`'s choices: the turn's, or none.
-fn apply_choices<H: BehaviorHost>(
+fn apply_choices<H: Host>(
     host: &mut H,
     choices: Option<&str>,
 ) -> Result<Vec<Json>, Failure<H::Error>> {
     let Some(choices) = choices else {
         return Ok(Vec::new());
     };
-    match evaluate(host, choices, NOT_CHOICES, NOT_CHOICES)? {
+    match evaluate_json(host, choices, NOT_CHOICES, NOT_CHOICES)? {
         Json::Null => Ok(Vec::new()),
         Json::Array(choices) if choices.iter().all(Json::is_object) => Ok(choices),
         _ => Err(Failure::Execution(NOT_CHOICES)),
@@ -1469,21 +1336,18 @@ fn apply_choices<H: BehaviorHost>(
 
 /// `<behavior:verify_apply>`'s handled: whether the run must handle the
 /// turn (default true).
-fn apply_handled<H: BehaviorHost>(
-    host: &mut H,
-    handled: Option<&str>,
-) -> Result<bool, Failure<H::Error>> {
+fn apply_handled<H: Host>(host: &mut H, handled: Option<&str>) -> Result<bool, Failure<H::Error>> {
     let Some(handled) = handled else {
         return Ok(true);
     };
-    match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
+    match evaluate_json(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
         Json::Bool(required) => Ok(required),
         _ => Err(Failure::Execution(NOT_A_BOOLEAN)),
     }
 }
 
 /// Executes `<behavior:verify_apply>`.
-fn verify_apply_element<H: BehaviorHost>(
+fn verify_apply_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -1518,13 +1382,13 @@ fn verify_apply_element<H: BehaviorHost>(
     ))?;
     let targets = targets.ok_or(Failure::Execution("behavior:verify_apply requires targets"))?;
     no_content(content, "behavior:verify_apply holds no content")?;
-    let done = evaluate(
+    let done = evaluate_json(
         host,
         done,
         "behavior:verify_apply done did not evaluate",
         "behavior:verify_apply done did not evaluate",
     )?;
-    let turn = evaluate(
+    let turn = evaluate_json(
         host,
         turn,
         "behavior:verify_apply turn is not a number",
@@ -1535,7 +1399,7 @@ fn verify_apply_element<H: BehaviorHost>(
             "behavior:verify_apply turn is not a number",
         ));
     }
-    let Json::Object(input) = evaluate(
+    let Json::Object(input) = evaluate_json(
         host,
         input,
         "behavior:verify_apply input is not an object",
@@ -1546,7 +1410,7 @@ fn verify_apply_element<H: BehaviorHost>(
             "behavior:verify_apply input is not an object",
         ));
     };
-    let Json::Array(targets) = evaluate(host, targets, NOT_STRINGS, NOT_STRINGS)? else {
+    let Json::Array(targets) = evaluate_json(host, targets, NOT_STRINGS, NOT_STRINGS)? else {
         return Err(Failure::Execution(NOT_STRINGS));
     };
     let targets = targets
@@ -1572,7 +1436,7 @@ fn verify_apply_element<H: BehaviorHost>(
     .into_iter()
     .map(Json::String)
     .collect();
-    assign_to(
+    assign_json(
         host,
         location,
         &Json::Array(messages),
@@ -1582,7 +1446,12 @@ fn verify_apply_element<H: BehaviorHost>(
 }
 
 /// The live-turn check of a turn behavior (decision D131) with the donedata
-/// contract (autonomy's) and target check (decision D104); see
+/// contract (autonomy's) and the offered-targets resolution: a selection
+/// names its event and no target, and the sending stage resolves the
+/// session that receives it from the choices the turn offered at send time
+/// (decision D113, as send-time resolution amends it) — the check resolves
+/// it the same way, from the run input's `targets`, and holds it to the
+/// sessions the turn's output names; see
 /// the crate documentation, `<behavior:verify_apply>`.
 #[must_use]
 pub fn verify_apply(
@@ -1620,7 +1489,13 @@ pub fn verify_apply(
     if !*handled || selected.is_empty() {
         return vec![NO_SELECTION.into()];
     }
-    let offered = js_stringify(&Json::Array(
+    let offered = input.get("targets").and_then(Json::as_object);
+    let offered_list = js_stringify(&Json::Array(
+        offered
+            .map(|offered| offered.keys().cloned().map(Json::String).collect())
+            .unwrap_or_default(),
+    ));
+    let named = js_stringify(&Json::Array(
         targets.iter().cloned().map(Json::String).collect(),
     ));
     let mut errors = Vec::new();
@@ -1631,24 +1506,34 @@ pub fn verify_apply(
             .filter(|event| !event.is_empty())
         else {
             errors.push(format!(
-                "selected[{index}] has no event: each selection is an object {{event, target, data?, reason?}}."
+                "selected[{index}] has no event: each selection is an object {{event, data?, reason?}}."
             ));
             continue;
         };
-        match selection.get("target") {
-            Some(Json::String(target)) if !target.is_empty() => {
-                if !targets.contains(target) {
-                    errors.push(format!(
-                        "selected[{index}] ({event}) names the target {}, which is not one of this turn's targets {offered}: name the session exactly as this turn's cognition_output names it.",
-                        js_string(target)
-                    ));
-                } else if let Some(error) = choice_error(index, event, target, selection, choices) {
-                    errors.push(error);
-                }
-            }
-            _ => errors.push(format!(
-                "selected[{index}] ({event}) names no target: name the session that receives its event, one of {offered}."
-            )),
+        if selection.get("target").and_then(Json::as_str).is_some() {
+            errors.push(format!(
+                "selected[{index}] ({event}) names a target: name no target; the stage that runs you resolves, from the choices the turn offers, the session that receives each event, so no session id is ever written into the program."
+            ));
+            continue;
+        }
+        let Some(target) = offered
+            .and_then(|offered| offered.get(event))
+            .and_then(Json::as_str)
+        else {
+            errors.push(format!(
+                "selected[{index}] ({event}) names an event no choice of this turn offers: the turn's input offers {offered_list}."
+            ));
+            continue;
+        };
+        if !targets.iter().any(|named| named == target) {
+            errors.push(format!(
+                "selected[{index}] ({event}) resolves to the session {}, which is not one of this turn's targets {named}.",
+                js_string(target)
+            ));
+            continue;
+        }
+        if let Some(error) = choice_error(index, event, target, selection, choices) {
+            errors.push(error);
         }
     }
     errors.extend(selection_binding_errors(
@@ -1744,209 +1629,7 @@ fn live_binding_values(data: &Map<String, Json>) -> Map<String, Json> {
         .collect()
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
-
-    use std::cell::Cell;
-
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::data_model_host;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-
-    use super::{Attribute, BehaviorHost, Content, Data, Executed, Failure};
-
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
-
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
-
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl BehaviorHost for Host {
-        type Error = ComponentError;
-
-        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(expression) {
-                Ok(value) => Ok(match value {
-                    DataValue::Absent => Ok(Data::Absent),
-                    DataValue::Undefined => Ok(Data::Undefined),
-                    DataValue::Null => Ok(Data::Null),
-                    DataValue::Boolean(value) => Ok(Data::Bool(value)),
-                    DataValue::Number(value) => scxml_types::FiniteNumber::new(value)
-                        .map(Data::Number)
-                        .map_err(|_| ()),
-                    DataValue::Text(text) => Ok(Data::String(text)),
-                    DataValue::JsonArray(text) => Ok(Data::JsonArray(text)),
-                    DataValue::JsonObject(text) => Ok(Data::JsonObject(text)),
-                    DataValue::Xml(text) => Ok(Data::Xml(text)),
-                }),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let value = match value {
-                Data::Null => DataValue::Null,
-                Data::Bool(value) => DataValue::Boolean(*value),
-                Data::Number(value) => DataValue::Number(value.get()),
-                Data::String(text) => DataValue::Text(text.clone()),
-                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
-                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
-                Data::Absent | Data::Undefined | Data::Xml(_) => return Ok(Err(())),
-            };
-            match data_model_host::assign(location, &value) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
-                    })
-                    .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
-                }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
-        }
-    }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
-}
+floppy_guest::extension_guest!();
 
 #[cfg(test)]
 mod tests;

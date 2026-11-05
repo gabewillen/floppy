@@ -13,6 +13,10 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The guest plumbing the namespace components share (the element types and
+# host trait, attribute parsing and JSON conversion, the quantized-vector
+# codec, and the guest glue).
+floppy-guest.workspace = true
 # The rows and the memory JSON as JSON (no schema code, so no randomness);
 # serde reads a stimulus's fields in their order (the projection keeps the
 # first 16 in that order).

@@ -11,7 +11,9 @@
   It ends in exactly one of two top-level final states, whose <donedata>
   carries the result: done {scxml, schemas, script, path, tests, report} or
   failed {reason, diagnostics, history, scxml?, path?} (scxml: the last draft
-  a check rejected, when there is one, and path where it was written). Run directly, scx run prints that data in its done
+  a check rejected, when there is one; path: the live path the documents
+  were promoted to, or the staged path the rejected draft was written at,
+  which the failure discarded). Run directly, scx run prints that data in its done
   record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
   Progress goes to <log>, labelled with the stage. The event:schema
   contracts below reference schemas/<event>.json (a final state's donedata
@@ -26,30 +28,45 @@
   (an invoked generate service: the draft as three fields, its SCXML
   structure, its input events' schemas as one JSON object with $defs keyed
   by event, and its ECMAScript, or none, + test scripts) -> writing (the
-  files service: the draft as three documents beside each other,
-  <name>/<name>.scx, <name>/<name>.json and <name>/<name>.js, in the
-  directory the run grants it, so the model never escapes one inside
-  another, decision D121; then its IRP, <name>/irp/, one case per test
-  script, decision D278) -> validate
-  (scx:validate; EVENT004, the schema file it is not given, waived; machine-applicable
-  fixes through apply_fixes and writing, at most 2 passes per draft; with the request's
+  files service: the draft as three documents beside each other in its
+  staging directory, <name>.draft/<name>.scx, <name>.draft/<name>.json and
+  <name>.draft/<name>.js, in the directory the run grants it, so the model
+  never escapes one inside another, decision D121; then its IRP,
+  <name>.draft/irp/, one case per test script, decision D278) -> validate
+  (scx:validate; EVENT004, the schema file it is not given, waived, and the
+  sibling <name>.json the build holds is checked itself: every event:schema
+  reference resolves into it and names a schema that is a JSON object;
+  machine-applicable fixes through apply_fixes and writing, at most 2 passes
+  per draft, a fix pass rewriting the staged .scx only; with the request's
   min_every_ms and turn_after_bound_ms, the lifetime bounds, E0009,
-  <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
-  child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
-  a draft that sends bot.behavior.tick, also runs as its forced tick copy
-  (<name>/<name>.tick.scx, written by writing_tick: each schedule 1500 ms away, sent
-  nothing, so its own schedule send must arm and fire, decision D153) and
-  must tick with a selection within 2 s (the forced tick, E0008,
-  <behavior:verify_tick>); and, with the request's apply, a turn behavior
-  (one that sends no bot.behavior.tick) also runs once on that live turn, as the
-  candidates runner runs it, by <invoke srcexpr> with the params turn and input,
-  within min(turn_after_bound_ms, 2000) ms, and <behavior:verify_apply> checks its
-  donedata, the live-turn check of a turn behavior, E0008, decision D131;
-  then each IRP case, invoked by srcexpr on its path, must end in pass) -> done. Every failure goes through retry_gate, which takes its
+  <behavior:lifetime_errors>) -> writing_tick (a persistent routine's forced
+  tick copy <name>.draft/<name>.tick.scx, each schedule 1500 ms away, sent
+  nothing, so its own schedule send must arm and fire, decision D153) ->
+  simulate (first, for a change of a D278-era row, the regression gate: the
+  existing behavior's <name>/irp/ suite, read by its manifest, copied into
+  the staging tree and run against the staged candidate, where the case's
+  own relative path to the draft it invokes names the candidate; then each
+  test script drives the staged draft as an invoked child, by <invoke
+  srcexpr> on its staged path, with its own invoke id; with those bounds, a
+  persistent routine, a draft that sends bot.behavior.tick, also runs as
+  its forced tick copy and must tick with a selection within 2 s (the forced
+  tick, E0008, <behavior:verify_tick>); and, with the request's apply, a
+  turn behavior (one that sends no bot.behavior.tick) also runs once on that
+  live turn, as the candidates runner runs it, by <invoke srcexpr> with the
+  params turn and input, within min(turn_after_bound_ms, 2000) ms, and
+  <behavior:verify_apply> checks its donedata, the live-turn check of a turn
+  behavior, E0008, decision D131; then each IRP case, invoked by srcexpr on
+  its staged path, must end in pass) -> promoting (the staged documents
+  moved to their live paths <name>/ by the files service, the IRP replaced
+  first and the program moved last, so only the build's done promotes a
+  draft, and a live behavior and its IRP never hold unvalidated bytes) ->
+  done. Every failure goes through retry_gate, which takes its
   fingerprint, marks the diagnostics an earlier failure of the build already
   had as repeated for the next author call, and ends the build
   (attempts-exhausted) at max_attempts failures, 8 unless the request sets
-  it (decision D133, replacing D124's end at the first repeat); triage then reads its enabled
+  it (decision D133, replacing D124's end at the first repeat); every path
+  out of the build that is not done first discards the staging directory
+  (discarding), so a failed build leaves draft bytes nowhere; triage then reads its enabled
   event:schema transitions with decision:choice and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon),
   which it answers as decision.selected and the builder sends itself.
@@ -78,8 +95,8 @@
   FLOPPY_REFLECTION_BASE_URL with FLOPPY_REFLECTION_API_KEY (decision
   D260). The simulation is bounded the same way: each test runs
   at most sim_test_cap_ms, and simulate-timeout fires only after
-  2 * max_tests * sim_test_cap_ms (the tests, then their IRP cases) plus a
-  margin.
+  3 * max_tests * sim_test_cap_ms (a change's regression cases, the tests,
+  then their IRP cases) plus a margin.
 
   Drafts are unrestricted: a draft may use any SCXML, extension
   namespaces, <invoke> (SCXML children and services), <script>, and
@@ -171,6 +188,9 @@
     <data id="lifetime_errors" expr="[]"/>
     <!-- The draft's script checks (scriptErrors, decision D123). -->
     <data id="script_errors" expr="[]"/>
+    <!-- The draft's schema checks out of its sibling <name>.json, which the
+         validator is not given (schemaErrors). -->
+    <data id="schema_errors" expr="[]"/>
     <!-- The draft's lifetime (persistent when it sends bot.behavior.tick)
          and a persistent routine's schedule events, in document order. -->
     <data id="lifetime" expr="'turn'"/>
@@ -240,6 +260,9 @@
     <!-- The draft's IRP file being written (writing_irp), then the IRP case
          being run (sim_irp). -->
     <data id="irp_index" expr="0"/>
+    <!-- The draft's IRP files, cached once on entry to writing_irp (the
+         texts are quadratic to rebuild per loop transition). -->
+    <data id="irp_files" expr="[]"/>
     <!-- The draft's tests and, for a routine, its forced tick, or, for a turn
          behavior given the live turn, its run on that turn. -->
     <data id="sim_tests" expr="[]"/>
@@ -259,6 +282,13 @@
     <data id="sid" expr="null"/>
     <!-- The decision service's selection being taken (the <foreach> item). -->
     <data id="selection" expr="null"/>
+    <!-- The regression gate (a change of a D278-era row): the existing
+         behavior's IRP manifest, the case ids it lists, the case being
+         copied and run, and its case text. -->
+    <data id="existing_irp_manifest" expr="''"/>
+    <data id="regression_cases" expr="[]"/>
+    <data id="regression_index" expr="0"/>
+    <data id="regression_case_text" expr="''"/>
   </datamodel>
   <script src="builder.js"/>
 
@@ -282,7 +312,7 @@
       <!-- The request as the build reads it, once (decision D226). -->
       <log label="builder.request" expr="requestLog()"/>
     </transition>
-    <transition event="builder.request" target="failed">
+    <transition event="builder.request" target="discarding">
       <assign location="failure_reason" expr="'invalid-request'"/>
       <assign location="diagnostics" expr="invalidRequestDiagnostics()"/>
     </transition>
@@ -351,7 +381,7 @@
       <assign location="mode" expr="'author'"/>
     </transition>
     <!-- No backend configured: no retry can help, so fail fast. -->
-    <transition event="done.invoke" cond="isUnconfigured(_event)" target="failed">
+    <transition event="done.invoke" cond="isUnconfigured(_event)" target="discarding">
       <assign location="failure_reason" expr="'unconfigured'"/>
       <assign location="diagnostics" expr="unconfiguredDiagnostics()"/>
     </transition>
@@ -441,7 +471,7 @@
       <assign location="fix_passes" expr="0"/>
     </transition>
     <!-- No backend configured: no retry can help, so fail fast. -->
-    <transition event="done.invoke" cond="isUnconfigured(_event)" target="failed">
+    <transition event="done.invoke" cond="isUnconfigured(_event)" target="discarding">
       <assign location="failure_reason" expr="'unconfigured'"/>
       <assign location="diagnostics" expr="unconfiguredDiagnostics()"/>
     </transition>
@@ -461,14 +491,20 @@
   </state>
 
   <!-- Writes the draft as three documents beside each other through the
-       files service (decision D121): <name>/<name>.scx (its text, fixes
-       applied), <name>/<name>.json (its schemas) and <name>/<name>.js (its
-       script, empty for none), which the chart references by relative URI;
-       the simulation and every later invoker load them from the draft's
-       path. Then its IRP beside them (writing_irp): <name>/irp/README.md,
-       manifest.xml and sources/<id>/test<id>.scxml, one case per test
-       script, which the simulation runs. One at a time, so a write that
-       fails ends the writing with one error. -->
+       files service (decision D121) into its staging directory,
+       <name>.draft/ (draft staging): <name>.draft/<name>.scx (its text,
+       fixes applied), <name>.draft/<name>.json (its schemas) and
+       <name>.draft/<name>.js (its script, empty for none), which the chart
+       references by relative URI; the simulation and every later invoker
+       load them from the draft's staged path, and promoting moves them to
+       <name>/ only when the build is done. Then its IRP beside them
+       (writing_irp): <name>.draft/irp/README.md, manifest.xml and
+       sources/<id>/test<id>.scxml, one case per test script, which the
+       simulation runs. One at a time, so a write that fails ends the
+       writing with one error. A fix pass (apply_fixes changed only
+       scxml_text) writes the staged .scx and goes straight back to
+       validate: the schemas, script and IRP are already written, and the
+       IRP files are cached. -->
   <state id="writing" initial="writing_scxml">
     <transition event="error.*" target="retry_gate">
       <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
@@ -478,6 +514,7 @@
         <param name="name" expr="storedFile(draftFile('.scx'))"/>
         <param name="text" expr="scxml_text"/>
       </invoke>
+      <transition event="done.invoke.write_scxml" cond="isFixPass()" target="validate"/>
       <transition event="done.invoke.write_scxml" target="writing_schemas"/>
     </state>
     <state id="writing_schemas">
@@ -500,6 +537,11 @@
     </state>
     <!-- Test scripts out of bounds have no IRP: validate refuses them. -->
     <state id="writing_irp">
+      <onentry>
+        <!-- The files' texts, built once (irpFiles is quadratic in the
+             tests to rebuild on every loop transition). -->
+        <assign location="irp_files" expr="irpFiles()"/>
+      </onentry>
       <transition cond="hasIrpFile()" target="writing_irp_file"/>
       <transition target="validate"/>
     </state>
@@ -533,11 +575,18 @@
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
       <assign location="script_errors" expr="scriptErrors()"/>
+      <assign location="schema_errors" expr="schemaErrors()"/>
     </onentry>
     <!-- A script that is not loaded, or a function no script declares: the
          simulation would throw in every cond that calls one (decision D123). -->
     <transition cond="hasScriptErrors()" target="retry_gate">
       <assign location="diagnostics" expr="script_errors"/>
+    </transition>
+    <!-- A schema reference the sibling <name>.json does not answer: the
+         validator is not given the file (its EVENT004 is waived), so the
+         build checks it itself. -->
+    <transition cond="hasSchemaErrors()" target="retry_gate">
+      <assign location="diagnostics" expr="schema_errors"/>
     </transition>
     <!-- The lifetime check: E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
@@ -589,21 +638,26 @@
     <transition target="writing"/>
   </state>
 
-  <!-- Runs every test script against the draft as an invoked child, loaded
-       from its path (the documents writing wrote). The
-       timeout covers the longest simulation validate admits (max_tests
-       tests of at most sim_test_cap_ms each) plus a margin. -->
-  <state id="simulate" initial="sim_next">
+  <!-- Runs the regression gate (a change of a D278-era row: the existing
+       behavior's IRP suite against the staged candidate), then every test
+       script against the staged draft as an invoked child, loaded from its
+       staged path (the documents writing wrote). The
+       timeout covers the longest simulation validate admits (the
+       regression cases, the tests of at most sim_test_cap_ms each, their
+       IRP cases) plus a margin. -->
+  <state id="simulate" initial="sim_regression">
     <onentry>
       <assign location="simulation" expr="increment(simulation)"/>
       <assign location="sim_tests" expr="simTests()"/>
+      <assign location="sim_index" expr="0"/>
+      <assign location="sim_results" expr="[]"/>
+      <assign location="irp_index" expr="0"/>
+      <assign location="regression_index" expr="0"/>
+      <assign location="regression_cases" expr="[]"/>
       <log label="simulate" expr="simulateLog()"/>
       <send id="simulate-timeout" event="builder.timeout" delayexpr="simulateTimeoutDelay()">
         <param name="run" expr="simulation"/>
       </send>
-      <assign location="sim_index" expr="0"/>
-      <assign location="sim_results" expr="[]"/>
-      <assign location="irp_index" expr="0"/>
     </onentry>
     <onexit>
       <cancel sendid="simulate-timeout"/>
@@ -614,6 +668,77 @@
     <transition event="builder.timeout" cond="isOwnEvent(_event, simulation)" target="retry_gate">
       <assign location="diagnostics" expr="simulateTimeoutDiagnostics()"/>
     </transition>
+
+    <!-- The regression gate: the existing behavior's IRP suite runs against
+         the staged candidate before any promotion. The suite's manifest
+         lists its cases; each is copied into the staging tree at
+         <name>.draft/regression/sources/<id>/, the same depth below the
+         staging directory as the live case is below the live directory, so
+         the copy's relative path to the draft it invokes is the one its
+         text already carries, and names the staged candidate. A case that
+         does not end in pass is a simulate regression-failed diagnostic,
+         repaired like any other. A manifest or case that cannot be read
+         skips the gate or the case (this attempt's writes proved the
+         grant); a copy that cannot be written fails the writing. -->
+    <state id="sim_regression">
+      <transition cond="!hasExistingIrp()" target="sim_next"/>
+      <invoke id="read_regression_manifest" type="https://github.com/stateforward/floppy/services/files">
+        <param name="seed" expr="existingIrpManifestFile()"/>
+      </invoke>
+      <transition event="done.invoke.read_regression_manifest" target="sim_regression_case">
+        <assign location="existing_irp_manifest" expr="_event.data.seed"/>
+        <assign location="regression_cases" expr="regressionCaseIds()"/>
+      </transition>
+      <transition event="error.*" target="sim_next">
+        <log label="builder.regression" expr="'the existing IRP suite could not be read: no regression gate this attempt'"/>
+      </transition>
+    </state>
+    <state id="sim_regression_case">
+      <transition cond="!hasRegressionCase()" target="sim_next"/>
+      <transition target="sim_regression_read"/>
+    </state>
+    <state id="sim_regression_read">
+      <invoke id="read_regression_case" type="https://github.com/stateforward/floppy/services/files">
+        <param name="seed" expr="existingIrpCaseFile()"/>
+      </invoke>
+      <transition event="done.invoke.read_regression_case" target="sim_regression_write">
+        <assign location="regression_case_text" expr="_event.data.seed"/>
+      </transition>
+      <transition event="error.*" target="sim_regression_case">
+        <log label="builder.regression" expr="'regression case ' + regressionCaseId() + ' could not be read from the existing suite and is skipped'"/>
+        <assign location="regression_index" expr="increment(regression_index)"/>
+      </transition>
+    </state>
+    <state id="sim_regression_write">
+      <invoke id="write_regression_case" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="regressionCaseFile()"/>
+        <param name="text" expr="regression_case_text"/>
+      </invoke>
+      <transition event="done.invoke.write_regression_case" target="sim_regression_run"/>
+      <transition event="error.*" target="retry_gate">
+        <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
+      </transition>
+    </state>
+    <state id="sim_regression_run">
+      <onentry>
+        <assign location="sim_error" expr="null"/>
+        <assign location="child_data" expr="null"/>
+      </onentry>
+      <invoke idlocation="candidate_id" type="scxml" srcexpr="regressionCasePath()"/>
+      <transition event="done.invoke" cond="isFrom(_event, candidate_id)" target="sim_regression_result">
+        <assign location="child_data" expr="_event.data"/>
+      </transition>
+      <transition event="error.*" cond="isOwnOrCandidateEvent(_event)" target="sim_regression_result">
+        <assign location="sim_error" expr="_event.name"/>
+      </transition>
+    </state>
+    <state id="sim_regression_result">
+      <onentry>
+        <assign location="sim_results" expr="nextRegressionResults()"/>
+        <assign location="regression_index" expr="increment(regression_index)"/>
+      </onentry>
+      <transition target="sim_regression_case"/>
+    </state>
 
     <state id="sim_next">
       <transition cond="isIrpCaseToRun()" target="sim_irp"/>
@@ -781,9 +906,100 @@
     </state>
 
     <state id="sim_verdict">
-      <transition cond="allTestsPassed()" target="done"/>
+      <transition cond="allTestsPassed()" target="promoting"/>
       <transition target="retry_gate">
         <assign location="diagnostics" expr="simulateDiagnostics()"/>
+      </transition>
+    </state>
+  </state>
+
+  <!-- Moves the staged draft to its live paths through the files service,
+       and removes the staging directory: only the build's done promotes a
+       draft, so a live behavior and its IRP never hold unvalidated bytes,
+       mid-build or after a failed build. The IRP is replaced first (the
+       old one removed, the staged one moved in) and the program moved
+       last, so the documents a promotion that fails leaves mixed hold the
+       previous program for as long as possible; a routine's forced-tick
+       copy moves with the documents and a turn behavior's stale one is
+       removed. Any failure of a move or a removal counts a failure
+       (promote-failed) and is repaired like any other, the staging
+       directory keeping whatever did not move. -->
+  <state id="promoting" initial="promoting_tick">
+    <transition event="error.*" target="retry_gate">
+      <assign location="diagnostics" expr="promoteFailedDiagnostics()"/>
+    </transition>
+    <state id="promoting_tick">
+      <transition cond="!isRoutineTicked()" target="promoting_remove_tick"/>
+      <invoke id="promote_tick" type="https://github.com/stateforward/floppy/services/files">
+        <param name="from" expr="storedFile(draftFile('.tick.scx'))"/>
+        <param name="to" expr="liveStoredFile(draftFile('.tick.scx'))"/>
+      </invoke>
+      <transition event="done.invoke.promote_tick" target="promoting_irp_old"/>
+    </state>
+    <state id="promoting_remove_tick">
+      <invoke id="remove_tick" type="https://github.com/stateforward/floppy/services/files">
+        <param name="remove" expr="liveStoredFile(draftFile('.tick.scx'))"/>
+      </invoke>
+      <transition event="done.invoke.remove_tick" target="promoting_irp_old"/>
+    </state>
+    <state id="promoting_irp_old">
+      <invoke id="remove_irp" type="https://github.com/stateforward/floppy/services/files">
+        <param name="remove" expr="liveStoredFile('irp')"/>
+      </invoke>
+      <transition event="done.invoke.remove_irp" target="promoting_irp_new"/>
+    </state>
+    <state id="promoting_irp_new">
+      <invoke id="promote_irp" type="https://github.com/stateforward/floppy/services/files">
+        <param name="from" expr="storedFile('irp')"/>
+        <param name="to" expr="liveStoredFile('irp')"/>
+      </invoke>
+      <transition event="done.invoke.promote_irp" target="promoting_schemas"/>
+    </state>
+    <state id="promoting_schemas">
+      <invoke id="promote_schemas" type="https://github.com/stateforward/floppy/services/files">
+        <param name="from" expr="storedFile(draftFile('.json'))"/>
+        <param name="to" expr="liveStoredFile(draftFile('.json'))"/>
+      </invoke>
+      <transition event="done.invoke.promote_schemas" target="promoting_script"/>
+    </state>
+    <state id="promoting_script">
+      <invoke id="promote_script" type="https://github.com/stateforward/floppy/services/files">
+        <param name="from" expr="storedFile(draftFile('.js'))"/>
+        <param name="to" expr="liveStoredFile(draftFile('.js'))"/>
+      </invoke>
+      <transition event="done.invoke.promote_script" target="promoting_scxml"/>
+    </state>
+    <state id="promoting_scxml">
+      <invoke id="promote_scxml" type="https://github.com/stateforward/floppy/services/files">
+        <param name="from" expr="storedFile(draftFile('.scx'))"/>
+        <param name="to" expr="liveStoredFile(draftFile('.scx'))"/>
+      </invoke>
+      <transition event="done.invoke.promote_scxml" target="promoting_discard"/>
+    </state>
+    <state id="promoting_discard">
+      <invoke id="discard_staged" type="https://github.com/stateforward/floppy/services/files">
+        <param name="remove" expr="draftDir()"/>
+      </invoke>
+      <transition event="done.invoke.discard_staged" target="done"/>
+    </state>
+  </state>
+
+  <!-- Discards the staging directory (a failed build never leaves draft
+       bytes there), then fails with the failure already recorded. A build
+       whose intake was never named has nothing to discard. The discard's
+       own failure keeps the failure: the live documents are untouched
+       either way. -->
+  <state id="discarding" initial="discarding_draft">
+    <state id="discarding_draft">
+      <transition cond="!hasDraftDir()" target="failed"/>
+      <invoke id="discard_draft" type="https://github.com/stateforward/floppy/services/files">
+        <param name="remove" expr="draftDir()"/>
+      </invoke>
+      <transition event="done.invoke.discard_draft" target="failed">
+        <log label="builder.discard" expr="discardLog()"/>
+      </transition>
+      <transition event="error.*" target="failed">
+        <log label="builder.discard" expr="discardLog()"/>
       </transition>
     </state>
   </state>
@@ -801,8 +1017,8 @@
       <assign location="attempt_log" expr="nextAttemptLog()"/>
       <log label="retry_gate" expr="retryGateLog()"/>
     </onentry>
-    <transition cond="isAttemptsExhausted()" target="failed">
-      <assign location="failure_reason" expr="'attempts-exhausted'"/>
+    <transition cond="isAttemptsExhausted()" target="discarding">
+      <assign location="failure_reason" expr="attemptsExhaustedReason()"/>
     </transition>
     <transition target="triage">
       <assign location="fingerprints" expr="nextFingerprints()"/>
@@ -854,8 +1070,8 @@
     <transition event="triage.redesign" event:schema="schemas/triage.redesign.json" target="design">
       <assign location="decisions" expr="appended(decisions, 'triage.redesign')"/>
     </transition>
-    <transition event="triage.abandon" event:schema="schemas/triage.abandon.json" target="failed">
-      <assign location="failure_reason" expr="'abandoned'"/>
+    <transition event="triage.abandon" event:schema="schemas/triage.abandon.json" target="discarding">
+      <assign location="failure_reason" expr="abandonedReason()"/>
       <assign location="decisions" expr="appended(decisions, 'triage.abandon')"/>
     </transition>
     <transition event="decision.abstain" cond="isDecisionEvent(_event)" event:schema="schemas/decision.abstain.json" target="fallback">

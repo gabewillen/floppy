@@ -380,11 +380,12 @@ fn expected_logs(case: &Path) -> Vec<(String, Vec<String>)> {
         .collect()
 }
 
-/// Runs one case; returns why it did not pass, if it did not.
-fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
+/// The `scx` arguments for one case: its env file, its fuel and grants,
+/// and the document under test. `Err` names why the case cannot run.
+fn case_args(document: &Path, case: &Path, test: &str) -> Result<Vec<String>, String> {
     let start = case.join(format!("test{test}.scxml"));
     if !start.is_file() {
-        return Some(format!("{} is missing", start.display()));
+        return Err(format!("{} is missing", start.display()));
     }
     let (wall, answers) = script(case);
     let streams = std::fs::read_to_string(case.join("backend.json"))
@@ -460,6 +461,15 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
             .display()
             .to_string(),
     ]);
+    Ok(args)
+}
+
+/// Runs one case; returns why it did not pass, if it did not.
+fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
+    let args = match case_args(document, case, test) {
+        Ok(args) => args,
+        Err(why) => return Some(why),
+    };
     let run = Run::start(&args, &[]);
     let finished = run.finish(LIMIT);
     let logged = logs(&finished.all);
