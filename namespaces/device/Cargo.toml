@@ -13,6 +13,10 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# The guest plumbing the namespace components share (the element types and
+# the guest glue; the host trait is device's own: its element reads another
+# session's snapshot).
+floppy-guest.workspace = true
 # The data values the data model reads and assigns, and the JSON of the
 # snapshot document and the read it writes (no schema code, so no
 # randomness).

@@ -34,12 +34,18 @@
   handling behaviors selected in the percepts' arrival order. Otherwise it
   is unhandled, and its answer carries those selections as acted
   {percepts, acts} (the handled percepts' positions and their
-  selections). A selection that names no target (the trusted seed's) is not sent here: it reaches the body only when the
+  selections). A learned behavior's selections are sent here, each to the
+  session that offers its event (resolved from the choices the turn
+  offered); a selection that names no event any choice offers is a failed
+  dispatch. A trusted seed's selection names no target and is not sent
+  here: it reaches the body only when the
   cognition carries acted.acts into the turn's output.
 
   Input: each turn is one bot.ability.autonomy.input
-  (schemas/bot.ability.autonomy.input.json) {turn, input (focus and
-  focus_candidates), stimulus (the turn's stimulus envelope)}; one that
+  (schemas/bot.ability.autonomy.input.json) {turn, input (the turn's focus
+  and focus_candidates, the targets its choices offer, and the read-only
+  environment and owned_devices snapshots the turn holds), stimulus (the
+  turn's stimulus envelope)}; one that
   arrives during a turn waits for its answer. The <param> memory is the
   address of the bot's memory (null means no learned inventory, and only
   the seeds run).
@@ -77,13 +83,18 @@
   D121), run in running_service as the child "service" by <invoke srcexpr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
-  focus and focus_candidates: <autonomy:behavior_input_payload>). It answers by
+  focus, focus_candidates, the targets the turn's choices offer, and the
+  turn's environment and owned_devices
+  snapshots: <autonomy:behavior_input_payload>). It answers by
   its final state's <donedata> {turn, handled, selected}:
-    * handled with selections: dispatching sends each to the session its
-      target names (decision D113; a learned behavior names its targets,
-      the session ids of its turn's selections). Sent, its used_count and
+    * handled with selections: dispatching sends each to the session that
+      offers its event, resolved from the choices the turn offered
+      (input.targets, decision D113): a learned behavior names no target of
+      its own, so no session id of the invoking tree is baked into its
+      program, and a selection of an event no offered choice takes is a
+      failed dispatch. Sent, its used_count and
       last_used_at are persisted, then autonomy answers {turn, handled: true, selected, services,
-      reason: "behavior"}. A send that fails, its failed_count and
+      reason: "behavior"} with each selection's resolved target on it. A send that fails, its failed_count and
       last_failed_at are persisted and autonomy fails with the failure's
       message, so the turn fails;
     * not handled (service.advance), or no answer within silence_ms
@@ -280,7 +291,9 @@
       <state id="running" initial="running_service">
         <onentry>
           <autonomy:behavior_input_payload location="behavior_input" stimulus="view"
-              focus="input.focus" focus_candidates="input.focus_candidates"/>
+              focus="input.focus" focus_candidates="input.focus_candidates"
+              environment="input.environment" owned_devices="input.owned_devices"
+              targets="input.targets"/>
           <assign location="services" expr="serviceRows()"/>
         </onentry>
 
@@ -316,11 +329,13 @@
         </state>
 
         <!-- The handled service's selections are sent before its use is
-             persisted. -->
+             persisted: each to the session that offers its event, resolved
+             from the choices the turn offered (input.targets), which the
+             behavior named none of. -->
         <state id="dispatching">
           <onentry>
             <foreach array="answer" item="s">
-              <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+              <send eventexpr="s.event" targetexpr="serviceTarget(s)">
                 <content expr="selectionData(s)"/>
               </send>
             </foreach>
@@ -349,6 +364,10 @@
           </onentry>
           <onexit>
             <cancel sendid="usage-timeout"/>
+            <!-- The answer leaves with each selection's resolved target, so
+                 the body (which sends itself only the selections that name
+                 no target) does not send the dispatched ones again. -->
+            <assign location="answer" expr="stampedSelections()"/>
           </onexit>
           <!-- The update's results: nothing to keep. -->
           <transition event="bot.ability.memory.output" cond="isMemoryReply('usage')" event:schema="../schemas/bot.ability.memory.output.json" target="percept_handled"/>

@@ -259,10 +259,30 @@ function draftFile(extension) {
   return fileName() + extension;
 }
 
-// A file of the draft's directory, <name>/, as the files service names it
-// in the behaviors directory: every behavior is <name>/<name>.scx with its
-// .json and .js beside it, and its IRP in <name>/irp/.
+// The draft's staging directory, <name>.draft/ beside <name>/ in the
+// behaviors directory: every attempt writes there, and only the build's
+// done promotes its documents to <name>/ (promoting), so a live behavior
+// and its IRP never hold an unvalidated draft, mid-build or after a failed
+// build, and a failed build discards the staging directory, never the live
+// one.
+function draftDir() {
+  return fileName() + '.draft';
+}
+
+// A file of the draft's staging directory, <name>.draft/, as the files
+// service names it in the behaviors directory: the draft's documents, its
+// IRP in <name>.draft/irp/, and the existing suite's regression cases in
+// <name>.draft/regression/sources/, the same depth below the staging
+// directory as the live tree's irp/sources is below the live directory, so
+// a copied case's relative path to the draft it invokes is the same three
+// steps up it takes in the live tree.
 function storedFile(file) {
+  return draftDir() + '/' + file;
+}
+
+// A file of the live behavior's directory, <name>/, which the documents
+// are promoted to and a stored behavior's row names.
+function liveStoredFile(file) {
   return fileName() + '/' + file;
 }
 
@@ -273,20 +293,27 @@ function draftPath() {
   return '../../behaviors/' + storedFile(draftFile('.scx'));
 }
 
+// The path the draft's documents are promoted to, the stored row's source.
+function livePath() {
+  return '../../behaviors/' + liveStoredFile(draftFile('.scx'));
+}
+
 function schemasText() {
   return JSON.stringify(draft.schemas);
 }
 
 function writeFailedDiagnostics() {
-  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written as ' + storedFile(draftFile('.scx')) + ', .json, .js and its IRP (error.execution: no directory granted to the files service, or a name it refuses)'}];
+  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written to its staging directory ' + draftDir() + '/ as ' + draftFile('.scx') + ', .json, .js and its IRP (error.execution: no directory granted to the files service, or a name it refuses)'}];
 }
 
 // The draft's IRP (the W3C SCXML IRP's manifest format and Outcome oracle,
 // as floppy's own documents keep theirs, tests/irp/harness.py): one
 // statement, <name>-1, the specification, and one case per test script,
 // test<id>.scxml with ids from 100, written with the draft as
-// <name>/irp/README.md, <name>/irp/manifest.xml and
-// <name>/irp/sources/<id>/test<id>.scxml.
+// <name>.draft/irp/README.md, <name>.draft/irp/manifest.xml and
+// <name>.draft/irp/sources/<id>/test<id>.scxml. Cached once on entry to
+// writing_irp (the irp_files data): every file's text built twice or more
+// per write pass was quadratic in the tests.
 function irpFiles() {
   return draft.tests.map(function (t, i) {
     return {name: storedFile('irp/sources/' + irpCaseId(i) + '/test' + irpCaseId(i) + '.scxml'), text: irpCase(t, irpCaseId(i))};
@@ -297,13 +324,14 @@ function irpCaseId(index) {
   return 100 + index;
 }
 
+// The cached IRP file being written (writing_irp).
 function irpFile() {
-  return irpFiles()[irp_index];
+  return irp_files[irp_index];
 }
 
 // Its cases, then the manifest and the README.
 function hasIrpFile() {
-  return hasTestsWithinBounds() && irp_index < draft.tests.length + 2;
+  return hasTestsWithinBounds() && irp_index < irp_files.length;
 }
 
 function irpStatement() {
@@ -402,13 +430,55 @@ function irpReadme() {
 
 // The validator's errors but EVENT004: it is not given the draft's schema
 // file (scx:eventschema names a literal file), which writing wrote and the
-// simulation's compile reads.
+// simulation's compile reads. The build checks that file itself, in
+// schemaErrors, out of the sibling <name>.json it holds.
 function validatorErrors() {
   return report.validator.diagnostics.filter(function (d) { return d.severity === 'error' && d.code !== 'EVENT004'; });
 }
 
 function isValidatorClean() {
   return report !== null && validatorErrors().length === 0;
+}
+
+// The draft's schema checks, out of the sibling <name>.json the build
+// writes (the validator is not given the file, so its EVENT004 is waived):
+// schemas is an object of $defs, every event:schema reference the document
+// carries is that file's $defs/<event>, and every schema it names is a JSON
+// object. A malformed reference or schema would otherwise surface only if
+// a simulation test happened to send an event that exercises its
+// transition, or at the first live turn that does.
+function schemaErrors() {
+  var errors = [];
+  var schemas = draft === null ? null : draft.schemas;
+  if (schemas === null || typeof schemas !== 'object' || Array.isArray(schemas) || schemas.$defs === null || typeof schemas.$defs !== 'object' || Array.isArray(schemas.$defs)) {
+    errors.push({kind: 'draft', code: 'schemas-not-object', message: 'schemas is not an object holding $defs: give every input event a JSON Schema under $defs keyed by the event name'});
+    return errors;
+  }
+  scxml_text.replace(/event:schema\s*=\s*("[^"]*"|'[^']*')/g, function (attribute, quoted) {
+    var reference = unescapedAttribute(quoted.slice(1, -1));
+    var expected = draftFile('.json') + '#/$defs/';
+    if (reference.indexOf(expected) !== 0) {
+      errors.push({kind: 'draft', code: 'schema-reference-outside', message: 'the document references ' + reference + ', which is not ' + expected + 'EVENT: every event:schema names the sibling ' + draftFile('.json')});
+      return attribute;
+    }
+    var event = reference.slice(expected.length);
+    if (event === '' || event.indexOf('/') >= 0) {
+      errors.push({kind: 'draft', code: 'schema-reference-deep', message: 'the document references ' + reference + ': an event:schema is exactly ' + expected + 'EVENT, the event\'s whole schema, never a deeper pointer'});
+      return attribute;
+    }
+    var schema = schemas.$defs[event];
+    if (schema === undefined) {
+      errors.push({kind: 'draft', code: 'missing-schema', message: 'the document references ' + reference + ', which ' + draftFile('.json') + ' does not hold: add the event\'s schema under $defs.' + event});
+    } else if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
+      errors.push({kind: 'draft', code: 'schema-not-object', message: 'the schema ' + reference + ' names is not a JSON object: give the event a schema object, {"type": "object"} or one of its kinds'});
+    }
+    return attribute;
+  });
+  return errors;
+}
+
+function hasSchemaErrors() {
+  return isReadyToSimulate() && schema_errors.length > 0;
 }
 
 function hasTestsWithinBounds() {
@@ -448,11 +518,17 @@ function scriptErrors() {
 
 var ECMASCRIPT_GLOBALS = ['In', 'Array', 'Boolean', 'Date', 'Error', 'Number', 'Object', 'RegExp', 'String', 'decodeURIComponent', 'encodeURIComponent', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
 
+// A single- or double-quoted ECMAScript string literal, escapes included.
+var STRING_LITERAL = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g;
+
 // The distinct bare names the document's cond and *expr attributes call.
+// The attribute's value is stripped of its string literals first, so an
+// expression like 'Call help() for info' does not name a call of help the
+// script does not declare.
 function calledFunctions() {
   var names = [];
   scxml_text.replace(/\s(?:cond|[a-z]*expr)\s*=\s*("[^"]*"|'[^']*')/g, function (attribute, quoted) {
-    unescapedAttribute(quoted.slice(1, -1)).replace(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g, function (call, before, name) {
+    unescapedAttribute(quoted.slice(1, -1)).replace(STRING_LITERAL, '').replace(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g, function (call, before, name) {
       if (names.indexOf(name) < 0 && ['function', 'if', 'return', 'typeof', 'while', 'for', 'switch', 'catch'].indexOf(name) < 0) {
         names.push(name);
       }
@@ -483,6 +559,31 @@ function hasScriptErrors() {
 
 function hasMachineApplicableFixes() {
   return report !== null && typeof fixed === 'string' && fixed !== scxml_text && fix_passes < 2;
+}
+
+// Whether writing is a fix pass (apply_fixes changed only scxml_text): the
+// schemas, script and IRP are already written, and the IRP files are
+// cached, so the loop goes straight back to validate.
+function isFixPass() {
+  return fix_passes > 0;
+}
+
+// Whether the build has a staging directory's name (the request's or the
+// plan's): a failure before intake named one has none to discard.
+function hasDraftDir() {
+  return name !== null || plan !== null;
+}
+
+// The discard's log: the staging directory removed, or nothing to remove.
+function discardLog() {
+  return hasDraftDir() ? 'discarded ' + draftDir() : 'nothing to discard';
+}
+
+// A promotion that failed part-way: the staging directory keeps what did
+// not move, and the live behavior may hold a mix of its previous and the
+// promoted documents; the run's grant or its names failed, not the draft.
+function promoteFailedDiagnostics() {
+  return [{kind: 'draft', code: 'promote-failed', message: 'the staged draft could not be promoted to ' + liveStoredFile(draftFile('.scx')) + ' and its IRP (error.execution: the files service could not move or remove a path)'}];
 }
 
 function isValidated() {
@@ -579,6 +680,80 @@ function simTests() {
   return isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat(liveTurnTests()) : draft.tests;
 }
 
+// The existing behavior's stored source (the request's context), '' for
+// none.
+function existingSource() {
+  var behavior = context === null || typeof context !== 'object' ? null : context.existing_behavior;
+  return behavior === null || behavior === undefined || typeof behavior !== 'object' || typeof behavior.source !== 'string' ? '' : behavior.source;
+}
+
+// The layout the stored source names, its path below the behaviors
+// directory: 'nested' when its documents are <name>/<name>.scx (D278, with
+// its IRP suite in <name>/irp/), 'flat' when <name>.scx (how builders
+// before the IRP wrote it), 'none' when the row has none.
+function existingLayout() {
+  var below = existingSource().replace(/^(\.\.\/)*behaviors\//, '');
+  return below === '' ? 'none' : below.indexOf('/') >= 0 ? 'nested' : 'flat';
+}
+
+// Whether a change revises a D278-era row, whose existing IRP suite runs
+// against the new candidate before promoting (the regression gate).
+function hasExistingIrp() {
+  return existingLayout() === 'nested';
+}
+
+// The live suite's manifest, at the existing behavior's IRP.
+function existingIrpManifestFile() {
+  return liveStoredFile('irp/manifest.xml');
+}
+
+// The suite's case ids, out of the manifest's test entries, in order, at
+// most max_tests of them.
+function regressionCaseIds() {
+  var ids = [];
+  existing_irp_manifest.replace(/<test id="(\d+)"/g, function (entry, id) {
+    if (ids.length < max_tests) {
+      ids.push(id);
+    }
+    return entry;
+  });
+  return ids;
+}
+
+function hasRegressionCase() {
+  return regression_index < regression_cases.length;
+}
+
+function regressionCaseId() {
+  return regression_cases[regression_index];
+}
+
+// The live case being copied, in the existing behavior's suite.
+function existingIrpCaseFile() {
+  var id = regressionCaseId();
+  return liveStoredFile('irp/sources/' + id + '/test' + id + '.scxml');
+}
+
+// Its copy in the staging tree, <name>.draft/regression/sources/<id>/, the
+// same depth below the staging directory as the live case is below the
+// live directory, so the copy's relative path to the draft it invokes is
+// the one its text already carries, and names the staged candidate.
+function regressionCaseFile() {
+  var id = regressionCaseId();
+  return storedFile('regression/sources/' + id + '/test' + id + '.scxml');
+}
+
+function regressionCasePath() {
+  return '../../behaviors/' + regressionCaseFile();
+}
+
+// sim_results with a regression case's result: the existing suite's case,
+// run against the staged candidate from its copy in the staging tree,
+// passed when it ended in pass.
+function nextRegressionResults() {
+  return sim_results.concat([{name: 'regression' + regressionCaseId(), regression: true, invokeid: candidate_id, passed: sim_error === null && child_data === 'pass', outcome: sim_error === null ? child_data : null, error: sim_error === null ? null : withoutInvokeId(sim_error, candidate_id)}]);
+}
+
 function isRoutineTicked() {
   return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0;
 }
@@ -617,13 +792,13 @@ function liveTurnBoundMs() {
 }
 
 function simulateLog() {
-  return sim_tests.length + ' test script(s)';
+  return sim_tests.length + ' test script(s)' + (regression_cases.length > 0 ? ', ' + regression_cases.length + ' regression case(s) of the existing suite' : '');
 }
 
-// The longest simulation validate admits, its tests and then their IRP
-// cases, plus a margin.
+// The longest simulation validate admits: a change's regression cases,
+// each test script and then its IRP case, plus a margin.
 function simulateTimeoutDelay() {
-  return delay(2 * max_tests * sim_test_cap_ms + 60000);
+  return delay(3 * max_tests * sim_test_cap_ms + 60000);
 }
 
 function simulateTimeoutDiagnostics() {
@@ -792,7 +967,13 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.outcome !== undefined ? [irpDiagnostic(r)] : r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.regression === true ? [regressionDiagnostic(r)] : r.outcome !== undefined ? [irpDiagnostic(r)] : r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+}
+
+// A regression case that did not end in pass against the candidate: a
+// change keeps every case the existing program already answers.
+function regressionDiagnostic(r) {
+  return {kind: 'simulate', code: 'regression-failed', message: 'regression case ' + r.name + ' of the existing behavior\'s IRP suite ended ' + (r.error !== null ? 'with error ' + r.error : 'in ' + r.outcome) + ' against the new draft: a change keeps every case the existing program already answers, so make the draft pass it or say why it no longer applies'};
 }
 
 // An IRP case that did not end in pass, though its test passed: the case
@@ -886,6 +1067,24 @@ function isAttemptsExhausted() {
   return failures >= max_attempts;
 }
 
+// Whether the failure in hand is a promotion failure (promoting): its
+// diagnostic's code names it.
+function isPromoteFailure() {
+  return diagnostics.length > 0 && diagnostics[0].code === 'promote-failed';
+}
+
+// The reason the build ends with at its cap (retry_gate): one whose last
+// failure was a promotion failure ends promote-failed.
+function attemptsExhaustedReason() {
+  return isPromoteFailure() ? 'promote-failed' : 'attempts-exhausted';
+}
+
+// The reason a triage.abandon ends the build with: promote-failed when the
+// failure it abandons is a promotion failure.
+function abandonedReason() {
+  return isPromoteFailure() ? 'promote-failed' : 'abandoned';
+}
+
 // triage
 
 function triageLog() {
@@ -912,7 +1111,7 @@ function doneLog() {
 }
 
 function doneData() {
-  return {scxml: scxml_text, schemas: draft.schemas, script: draft.script, path: draftPath(), tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
+  return {scxml: scxml_text, schemas: draft.schemas, script: draft.script, path: livePath(), tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
 }
 
 // failed
@@ -921,7 +1120,10 @@ function failedLog() {
   return failure_reason + firstDiagnosticSummary();
 }
 
-// With the last draft a check rejected, when there is one.
+// With the last draft a check rejected, when there is one, and the staging
+// path it was written at: the rejected source is this data's scxml, and the
+// staging directory is discarded, so the row a rejecting revision keeps is
+// its own documents' path, which the staged build never wrote.
 function failedData() {
   var data = {reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log};
   if (rejected !== null) {

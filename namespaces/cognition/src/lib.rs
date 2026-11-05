@@ -280,67 +280,8 @@ const BYTE_BUDGET: &str = "prompt projection encoded byte budget exceeded";
 const ITEM_BUDGET: &str = "prompt projection collection item budget exceeded";
 const SCALAR_BUDGET: &str = "prompt projection scalar length budget exceeded";
 
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
-}
-
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
-
-/// The host capabilities one `execute` call uses.
-pub trait CognitionHost {
-    /// A non-recoverable host failure.
-    type Error;
-
-    /// Evaluates one value expression in the current data model;
-    /// `Ok(Err(()))` is a recoverable evaluation failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, Self::Error>;
-
-    /// Assigns one value to one data-model location; `Ok(Err(()))` is a
-    /// recoverable assignment failure.
-    ///
-    /// # Errors
-    ///
-    /// A non-recoverable host failure.
-    fn assign(&mut self, location: &str, value: &Data) -> Result<Result<(), ()>, Self::Error>;
-}
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure, Host};
+use floppy_guest::element::{assign_to, attribute_values, data_of, evaluate, json_of, no_content};
 
 /// Executes one element with the given local name, attributes, and
 /// flattened content.
@@ -349,7 +290,7 @@ pub trait CognitionHost {
 ///
 /// [`Failure::Execution`] for every malformed element, value, or
 /// assignment; [`Failure::Host`] for a non-recoverable host failure.
-pub fn execute<H: CognitionHost>(
+pub fn execute<H: Host>(
     local_name: &str,
     attributes: &[Attribute],
     content: &[Content],
@@ -364,108 +305,8 @@ pub fn execute<H: CognitionHost>(
     }
 }
 
-/// The values of an element's unqualified attributes named in `names`, in
-/// that order, each trimmed and non-empty; any other attribute is `refused`,
-/// a repeated one `repeated`, an empty one `empty`.
-fn attribute_values<'a, E, const N: usize>(
-    attributes: &'a [Attribute],
-    names: [&str; N],
-    [refused, repeated, empty]: [&'static str; 3],
-) -> Result<[Option<&'a str>; N], Failure<E>> {
-    let mut values = [None; N];
-    for attribute in attributes {
-        let index = match attribute.namespace_uri {
-            None => names.iter().position(|name| *name == attribute.local_name),
-            Some(_) => None,
-        }
-        .ok_or(Failure::Execution(refused))?;
-        let value = attribute.value.trim();
-        if value.is_empty() {
-            return Err(Failure::Execution(empty));
-        }
-        if values[index].replace(value).is_some() {
-            return Err(Failure::Execution(repeated));
-        }
-    }
-    Ok(values)
-}
-
-/// Refuses any content but white space with `detail`.
-fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
-    if content
-        .iter()
-        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
-    {
-        return Err(Failure::Execution(detail));
-    }
-    Ok(())
-}
-
-/// Evaluates `expression`, else `failed`.
-fn evaluate<H: CognitionHost>(
-    host: &mut H,
-    expression: &str,
-    failed: &'static str,
-) -> Result<Data, Failure<H::Error>> {
-    host.read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// Assigns `value` to `location`, else `failed`.
-fn assign_to<H: CognitionHost>(
-    host: &mut H,
-    location: &str,
-    value: &Data,
-    failed: &'static str,
-) -> Result<(), Failure<H::Error>> {
-    host.assign(location, value)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
-}
-
-/// A data value as JSON; `None` for `undefined`, an absent value, XML, or
-/// a JSON text that does not parse.
-fn json_of(value: &Data) -> Option<Json> {
-    match value {
-        Data::Null => Some(Json::Null),
-        Data::Bool(value) => Some(Json::Bool(*value)),
-        Data::Number(value) => Some(number(value.get())),
-        Data::String(text) => Some(Json::String(text.clone())),
-        Data::JsonArray(text) | Data::JsonObject(text) => serde_json::from_str(text).ok(),
-        Data::Absent | Data::Undefined | Data::Xml(_) => None,
-    }
-}
-
-/// A finite number as JSON: an integer when it is one that `f64` holds
-/// exactly (ECMAScript prints it without a fraction).
-fn number(value: f64) -> Json {
-    const EXACT: f64 = 9_007_199_254_740_992.0;
-    if value.fract() == 0.0 && value.abs() < EXACT {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "an integral value under 2^53 in magnitude converts exactly"
-        )]
-        return Json::from(value as i64);
-    }
-    serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
-}
-
-/// The data value of a JSON value (canonical JSON text for arrays and
-/// objects: `serde_json` sorts object members).
-fn data_of(value: &Json) -> Option<Data> {
-    Some(match value {
-        Json::Null => Data::Null,
-        Json::Bool(value) => Data::Bool(*value),
-        Json::Number(value) => Data::Number(scxml_types::FiniteNumber::new(value.as_f64()?).ok()?),
-        Json::String(text) => Data::String(text.clone()),
-        Json::Array(_) => Data::JsonArray(value.to_string()),
-        Json::Object(_) => Data::JsonObject(value.to_string()),
-    })
-}
-
 /// Executes `<cognition:attention_bias_for_turn>`.
-fn attention_bias_for_turn<H: CognitionHost>(
+fn attention_bias_for_turn<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -593,7 +434,7 @@ fn input_device(stimulus: &Map<String, Json>) -> Json {
 }
 
 /// Executes `<cognition:within_ceiling>`.
-fn within_ceiling<H: CognitionHost>(
+fn within_ceiling<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -716,7 +557,7 @@ pub fn frame(choices: &Json, ceiling: Option<u64>) -> Result<Frame, &'static str
 }
 
 /// Executes `<cognition:model_facing_content>`.
-fn model_facing_content<H: CognitionHost>(
+fn model_facing_content<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -818,7 +659,7 @@ fn model_facing_content<H: CognitionHost>(
 }
 
 /// Executes `<cognition:model_facing_data>`.
-fn model_facing_data_element<H: CognitionHost>(
+fn model_facing_data_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -969,7 +810,7 @@ fn is_xml_name(name: &str) -> bool {
 /// system channel (`null` when empty), the fit (`null` without a budget)
 /// and the content; on failure the message and `null`s (without
 /// `failurelocation`, the failure is `error.execution`).
-fn assign_projection<H: CognitionHost>(
+fn assign_projection<H: Host>(
     host: &mut H,
     projected: Result<Projected, &'static str>,
     system: String,
@@ -1015,7 +856,7 @@ fn assign_projection<H: CognitionHost>(
 
 /// The stimulus envelope `expression` evaluates to: an object with a
 /// string `event`, or `None` for `null`.
-fn read_stimulus<H: CognitionHost>(
+fn read_stimulus<H: Host>(
     host: &mut H,
     expression: &str,
 ) -> Result<Option<Map<String, Json>>, Failure<H::Error>> {
@@ -1095,7 +936,7 @@ fn input_failures(name: &str) -> (&'static str, &'static str) {
 
 /// The JSON value the optional input attribute `name` evaluates to
 /// (`None` without the attribute).
-fn read_json<H: CognitionHost>(
+fn read_json<H: Host>(
     host: &mut H,
     expression: Option<&str>,
     name: &str,
@@ -1110,7 +951,7 @@ fn read_json<H: CognitionHost>(
 
 /// The array the optional list attribute `name` evaluates to; `null` or no
 /// attribute is none.
-fn read_list<H: CognitionHost>(
+fn read_list<H: Host>(
     host: &mut H,
     expression: Option<&str>,
     name: &str,
@@ -1124,7 +965,7 @@ fn read_list<H: CognitionHost>(
 
 /// The string the optional text attribute `name` evaluates to; `null` or
 /// no attribute is empty.
-fn read_text<H: CognitionHost>(
+fn read_text<H: Host>(
     host: &mut H,
     expression: Option<&str>,
     name: &str,
@@ -1142,7 +983,7 @@ fn read_text<H: CognitionHost>(
 
 /// The fitted budget an optional `expression` evaluates to: a number of
 /// bytes, floored at zero; `null` or no attribute fits nothing.
-fn read_budget<H: CognitionHost>(
+fn read_budget<H: Host>(
     host: &mut H,
     expression: Option<&str>,
 ) -> Result<Option<usize>, Failure<H::Error>> {
@@ -2579,209 +2420,7 @@ fn snapshot_tag(key: &str) -> String {
     tag
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
-
-    use std::cell::Cell;
-
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::data_model_host;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-
-    use super::{Attribute, CognitionHost, Content, Data, Executed, Failure};
-
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
-
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
-
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl CognitionHost for Host {
-        type Error = ComponentError;
-
-        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(expression) {
-                Ok(value) => Ok(match value {
-                    DataValue::Absent => Ok(Data::Absent),
-                    DataValue::Undefined => Ok(Data::Undefined),
-                    DataValue::Null => Ok(Data::Null),
-                    DataValue::Boolean(value) => Ok(Data::Bool(value)),
-                    DataValue::Number(value) => scxml_types::FiniteNumber::new(value)
-                        .map(Data::Number)
-                        .map_err(|_| ()),
-                    DataValue::Text(text) => Ok(Data::String(text)),
-                    DataValue::JsonArray(text) => Ok(Data::JsonArray(text)),
-                    DataValue::JsonObject(text) => Ok(Data::JsonObject(text)),
-                    DataValue::Xml(text) => Ok(Data::Xml(text)),
-                }),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let value = match value {
-                Data::Null => DataValue::Null,
-                Data::Bool(value) => DataValue::Boolean(*value),
-                Data::Number(value) => DataValue::Number(value.get()),
-                Data::String(text) => DataValue::Text(text.clone()),
-                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
-                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
-                Data::Absent | Data::Undefined | Data::Xml(_) => return Ok(Err(())),
-            };
-            match data_model_host::assign(location, &value) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
-                    })
-                    .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
-                }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
-        }
-    }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
-}
+floppy_guest::extension_guest!();
 
 #[cfg(test)]
 mod tests;

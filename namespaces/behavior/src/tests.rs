@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use scxml_types::DataValue as Data;
 use serde_json::json;
 
 use super::*;
@@ -13,7 +14,7 @@ struct FakeHost {
     fail_assign: bool,
 }
 
-impl BehaviorHost for FakeHost {
+impl Host for FakeHost {
     type Error = &'static str;
 
     fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, &'static str> {
@@ -588,7 +589,7 @@ fn verify_apply_writes_its_e0008_messages() {
             ("done", Json::Null),
             ("turn", json!(1)),
             ("input", json!({})),
-            ("targets", json!([])),
+            ("targets", json!(["communication"])),
         ],
     )
     .expect("the element runs without error");

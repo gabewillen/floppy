@@ -25,7 +25,7 @@ impl Default for FakeHost {
     }
 }
 
-impl ProcessingHost for FakeHost {
+impl Host for FakeHost {
     type Error = &'static str;
 
     fn read(&mut self, location: &str) -> Result<Result<Data, ()>, &'static str> {
@@ -275,7 +275,7 @@ fn malformed_model_facing_schema_elements_or_choices_raise_error_execution() {
         (
             vec![location(" ")],
             Some(offers.clone()),
-            "processing:model_facing_schema requires a non-empty location",
+            "processing:model_facing_schema has an empty attribute",
         ),
         (
             vec![location("offers"), location("offers")],
@@ -290,7 +290,7 @@ fn malformed_model_facing_schema_elements_or_choices_raise_error_execution() {
         (
             vec![location("offers"), attr("overlocation", "")],
             Some(offers.clone()),
-            "processing:model_facing_schema overlocation is empty",
+            "processing:model_facing_schema has an empty attribute",
         ),
         (
             vec![location("offers"), attr("bound", "-1")],
@@ -981,7 +981,12 @@ fn send_with_max_bounds_the_events_array() {
             &mut host,
         ));
         assert_eq!(
-            got, "processing:send max is not a decimal integer",
+            got,
+            if max.is_empty() {
+                "processing:send has an empty attribute"
+            } else {
+                "processing:send max is not a decimal integer"
+            },
             "{max:?}"
         );
     }

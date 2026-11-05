@@ -27,20 +27,37 @@ function isCurrentTurn(_event) {
 
 // reaching
 
-// The input that brings the turn in hand, sent before it reached this
-// tier, to it: the same turn and frame, reached.
-function isReaching(_event) {
-  var given = _event.data;
-  return !reached && given.reached === true && given.turn === turn && isSameFrame(given);
+// A value's structural equality, by recursion: objects and arrays by
+// their members, anything else by identity. No key order, no
+// serialization: the comparison costs the size of the (small) value.
+function deepEqual(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length
+      && a.every(function (item, i) { return deepEqual(item, b[i]); });
+  }
+  if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
+    var keys = Object.keys(a);
+    var others = Object.keys(b);
+    return keys.length === others.length
+      && keys.every(function (key) { return deepEqual(a[key], b[key]); });
+  }
+  return false;
 }
 
-// Whether an input frames the turn as the one in hand was framed.
-function isSameFrame(given) {
-  var frame = {focus: focus, focus_candidates: focus_candidates, choices: choices, held: held,
-    environment: environment, self: self, acted: acted, recent: recent};
-  return Object.keys(frame).every(function (key) {
-    return JSON.stringify(given[key]) === JSON.stringify(frame[key]);
-  });
+// The input that brings the turn in hand, sent before it reached this
+// tier, to it: the same turn, reached, framed the same. The acted are
+// all the cascade can change mid-turn (autonomy and the decision layer
+// append to it, nothing else of the frame), so the frame is the acted
+// compared deeply, and choices/environment/recent are never compared
+// (decision D275). The reach input may be lightweight, the turn, the
+// acted and reached with the frame's other members as placeholders, so
+// the reached path reads those three alone.
+function isReaching(_event) {
+  var given = _event.data;
+  return !reached && given.reached === true && given.turn === turn && deepEqual(given.acted, acted);
 }
 
 // A selection kept until the turn reaches this tier.
@@ -118,75 +135,20 @@ function candidateSelectStatements() {
   return [{sql: candidate_select, parameters: ['cognitive_episode', context_ref]}];
 }
 
-// A stored vector's components, from its compact text (i8: and the
-// standard base64 of signed bytes over 127, as
-// namespaces/conversation decode_voice reads it), else null.
-function storedVector(text) {
-  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  if (typeof text !== 'string' || text.slice(0, 3) !== 'i8:' || (text.length - 3) % 4 !== 0) {
-    return null;
-  }
-  var body = text.slice(3).replace(/=+$/, '');
-  var values = [];
-  var bits = 0;
-  var held = 0;
-  for (var i = 0; i < body.length; i++) {
-    var sextet = alphabet.indexOf(body.charAt(i));
-    if (sextet < 0) {
-      return null;
-    }
-    held = (held << 6) | sextet;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      var byte = (held >> bits) & 255;
-      values.push((byte > 127 ? byte - 256 : byte) / 127);
-    }
-  }
-  return values;
-}
-
-// The cosine of the cue with a stored vector, 0 for none or another space.
-function cueSimilarity(text) {
-  var values = storedVector(text);
-  if (values === null || values.length !== cue.length) {
-    return 0;
-  }
-  var dot = 0;
-  var norm = 0;
-  for (var i = 0; i < values.length; i++) {
-    dot += values[i] * cue[i];
-    norm += values[i] * values[i];
-  }
-  return norm > 0 ? dot / Math.sqrt(norm) : 0;
-}
-
-// A created_at's milliseconds (SQLite's and Postgres's text, UTC).
-function createdAtMs(text) {
-  var parts = /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d(?:\.\d+)?)/.exec(String(text));
-  return parts === null ? 0 : Date.UTC(+parts[1], parts[2] - 1, +parts[3], +parts[4], +parts[5], 0) + parseFloat(parts[6]) * 1000;
-}
-
 // The candidates scored (mosfet.py's Associative: similarity times the
 // cosine plus recency times 0.5^(age / half-life), the age before the
-// newest candidate), best first, ties newer first.
-function scoredCandidates(output) {
-  var rows = output.results[0].rows;
-  var newest = rows.reduce(function (most, r) { return Math.max(most, createdAtMs(r.values[1])); }, 0);
-  return rows.map(function (r, order) {
-    var similarity = cueSimilarity(r.values[3]);
-    var recency = Math.pow(0.5, (newest - createdAtMs(r.values[1])) / weights.recency_half_life_ms);
-    return {id: r.values[0], length: Number(r.values[2]), order: order, similarity: similarity, score: weights.similarity * similarity + weights.recency * recency};
-  }).sort(function (a, b) { return b.score - a.score || a.order - b.order; });
-}
+// newest candidate), best first, ties newer first, are
+// <memory:scored_candidates>' output (assigned to scored on the
+// transition that takes the candidates output); the ranking and the log
+// read that.
 
 // The ids of the best candidates that hold at most 4096 characters of
 // content in all (mosfet.py's Associative budget, 1024 tokens of four
-// bytes, decision D279).
-function rankedEpisodeIds(output) {
+// bytes, decision D279), from the scores of one candidates output.
+function rankedEpisodeIds(scored) {
   var room = 4096;
   var ids = [];
-  scoredCandidates(output).forEach(function (row) {
+  scored.forEach(function (row) {
     if (row.length <= room) {
       ids.push(row.id);
       room -= row.length;
@@ -195,8 +157,8 @@ function rankedEpisodeIds(output) {
   return ids;
 }
 
-function recallLog(output) {
-  return scoredCandidates(output).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
+function recallLog(scored) {
+  return scored.slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
 }
 
 // The standing directives appended.

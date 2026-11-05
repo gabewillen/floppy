@@ -13,7 +13,7 @@ struct FakeHost {
     fail_assign: bool,
 }
 
-impl ConversationHost for FakeHost {
+impl Host for FakeHost {
     type Error = &'static str;
 
     fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, &'static str> {

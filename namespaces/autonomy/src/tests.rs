@@ -13,7 +13,7 @@ struct FakeHost {
     fail_assign: bool,
 }
 
-impl AutonomyHost for FakeHost {
+impl Host for FakeHost {
     type Error = &'static str;
 
     fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, &'static str> {
@@ -171,6 +171,95 @@ fn the_payload_is_what_the_javascript_it_replaces_built() {
         .expect("the case runs");
         assert_eq!(assigned["input"], case["autonomy"], "{case}");
     }
+}
+
+/// The turn's read-only snapshots, when the caller passes them, are copied
+/// into the payload as the members of their names; one that evaluates to
+/// `undefined` is left out, as the focus is.
+#[test]
+fn the_snapshots_are_copied_and_an_undefined_one_is_left_out() {
+    let environment = json!({"id": "room", "self": {"state": "processing", "owned_devices": {"lamp": {"ref": "lamp", "id": "session.lamp", "state": "on"}}}});
+    let owned_devices = json!({"lamp": {"ref": "lamp", "id": "session.lamp", "state": "on"}});
+    let targets = json!({"bot.ability.communication.respond": "communication"});
+    let attributes = [
+        attr("location", "input"),
+        attr("stimulus", "s"),
+        attr("focus", "f"),
+        attr("focus_candidates", "c"),
+        attr("environment", "e"),
+        attr("owned_devices", "o"),
+        attr("targets", "t"),
+    ];
+    let assigned = run(
+        "behavior_input_payload",
+        &attributes,
+        &[
+            ("s", json!({"event": "bot.input", "data": {"text": "hi"}})),
+            ("f", json!(null)),
+            ("c", json!([])),
+            ("e", environment.clone()),
+            ("o", owned_devices.clone()),
+            ("t", targets.clone()),
+        ],
+    )
+    .expect("the case runs");
+    assert_eq!(
+        assigned["input"],
+        json!({"text": "hi", "focus": null, "focus_candidates": [], "environment": environment, "owned_devices": owned_devices, "targets": targets})
+    );
+    let mut host = FakeHost {
+        values: BTreeMap::from([
+            (
+                "s".to_owned(),
+                data(&json!({"event": "bot.input", "data": {"text": "hi"}})),
+            ),
+            ("f".to_owned(), Data::Null),
+            ("c".to_owned(), data(&json!([]))),
+            ("e".to_owned(), Data::Undefined),
+            ("o".to_owned(), Data::Null),
+            ("t".to_owned(), Data::Undefined),
+        ]),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execute("behavior_input_payload", &attributes, &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    assert_eq!(
+        host.assigned
+            .iter()
+            .map(|(location, value)| (location.as_str(), json(value)))
+            .collect::<Vec<_>>(),
+        [(
+            "input",
+            json!({"text": "hi", "focus": null, "focus_candidates": [], "owned_devices": null})
+        )]
+    );
+}
+
+/// A snapshot attribute that does not evaluate is an error.execution, and
+/// nothing is assigned.
+#[test]
+fn a_snapshot_that_does_not_evaluate_raises_error_execution() {
+    let attributes = [
+        attr("location", "input"),
+        attr("stimulus", "s"),
+        attr("focus", "f"),
+        attr("focus_candidates", "c"),
+        attr("environment", "e"),
+    ];
+    assert_eq!(
+        run(
+            "behavior_input_payload",
+            &attributes,
+            &[
+                ("s", json!({"data": {}})),
+                ("f", json!(null)),
+                ("c", json!([])),
+            ],
+        ),
+        Err("autonomy:behavior_input_payload environment did not evaluate")
+    );
 }
 
 /// The behavior input wraps any data that is not an

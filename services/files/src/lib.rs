@@ -1,10 +1,11 @@
 //! The `files` invoked service: reads and writes the files of one directory
 //! the run grants, as a `stateforward:scxml/invoked-service` Wasm component.
 //! The builder bot (`bots/builder/builder.scx`) writes each draft through it
-//! as three documents beside each other, `<name>/<name>.scx`,
-//! `<name>/<name>.json` and `<name>/<name>.js` (decision D121), with its IRP
-//! in `<name>/irp/`, and reflection reads a stored behavior's back through
-//! it to revise it. It is modeled on scxml.rs's files example
+//! into its staging directory, `<name>.draft/<name>.scx`,
+//! `<name>.draft/<name>.json` and `<name>.draft/<name>.js` (decision D121),
+//! with its IRP in `<name>.draft/irp/`, and moves them to `<name>/` when the
+//! build is done; reflection reads a stored behavior's back through it to
+//! revise it. It is modeled on scxml.rs's files example
 //! service (`scxml.rs/components/scxml-service-files`), with its parameter
 //! names and its result.
 //!
@@ -25,12 +26,20 @@
 //! * `seed`: the name of a file to read.
 //! * `name` and `text`, both or neither: the name of a file to write and its
 //!   text (a string), written whole (created, or truncated first).
+//! * `from` and `to`, both or neither: the names of a file or directory to
+//!   move (rename) and its destination, whose parent directories are created
+//!   first. A `to` that names an existing directory fails.
+//! * `remove`: the name of a file or directory to remove, a directory with
+//!   everything below it. A name that names nothing is not a failure.
 //!
 //! A name is a relative path of plain components ([`is_file_name`]): at most
 //! [`MAX_FILE_NAME_BYTES`] bytes, its components separated by `/`, each
 //! non-empty, not `.` or `..`, and free of `\` and control characters, so it
 //! names a file in [`DIRECTORY`] or a directory below it and never one
-//! outside it. A write creates the directories its name names first. Any other parameter is ignored, as the example
+//! outside it. A write creates the directories its name names first. A
+//! removal never follows a symbolic link and is bounded
+//! ([`MAX_REMOVE_DEPTH`], [`MAX_REMOVE_ENTRIES`]); a deeper or larger tree
+//! is refused, not removed. Any other parameter is ignored, as the example
 //! ignores it; the last of a parameter given twice wins.
 //!
 //! The directory is the run's grant:
@@ -40,12 +49,13 @@
 //!
 //! # Result
 //!
-//! As the example: `invoke` reads the seed, then writes, then resolves its
-//! future at once with the done data `{"seed": TEXT-OR-NULL, "wrote":
-//! BYTES-OR-NULL}` (the invoking session receives it as `done.invoke.<id>`),
-//! and returns no event. An invalid parameter, or a failed filesystem call
-//! (a missing seed, a seed that is not UTF-8),
-//! rejects the start: the `<invoke>` raises `error.execution`.
+//! As the example: `invoke` reads the seed, then writes, moves and removes,
+//! then resolves its future at once with the done data
+//! `{"seed": TEXT-OR-NULL, "wrote": BYTES-OR-NULL}` (the invoking session
+//! receives it as `done.invoke.<id>`; a move or a removal answers neither
+//! field), and returns no event. An invalid parameter, or a failed
+//! filesystem call (a missing seed, a seed that is not UTF-8), rejects the
+//! start: the `<invoke>` raises `error.execution`.
 //!
 //! # Bounds
 //!
@@ -87,6 +97,14 @@ pub const DIRECTORY: &str = "/behaviors";
 /// Upper bound on a file name's bytes (wasm builds only).
 pub const MAX_FILE_NAME_BYTES: usize = wasm_bound(1024);
 
+/// Upper bound on a removed directory tree's depth, [`DIRECTORY`]'s root at
+/// 0 (wasm builds only).
+pub const MAX_REMOVE_DEPTH: usize = wasm_bound(16);
+
+/// Upper bound on a removed directory tree's entries, files and directories
+/// together (wasm builds only).
+pub const MAX_REMOVE_ENTRIES: usize = wasm_bound(4096);
+
 /// Why the service rejected its start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FilesError {
@@ -127,6 +145,11 @@ pub struct FilesRequest {
     pub seed: Option<String>,
     /// The file to write, in [`DIRECTORY`], and its text.
     pub write: Option<(String, String)>,
+    /// The file or directory to move (rename), in [`DIRECTORY`], and its
+    /// destination.
+    pub rename: Option<(String, String)>,
+    /// The file or directory to remove, in [`DIRECTORY`].
+    pub remove: Option<String>,
 }
 
 /// Whether `name` is a relative path of plain components: at most
@@ -161,12 +184,18 @@ impl FilesRequest {
         let mut seed = None;
         let mut name = None;
         let mut text = None;
+        let mut from = None;
+        let mut to = None;
+        let mut remove = None;
         for (parameter, value) in parameters {
             match (parameter, value) {
                 ("seed", value) => seed = Some(file_name(value)?),
                 ("name", value) => name = Some(file_name(value)?),
                 ("text", Parameter::Text(value)) => text = Some(value.to_owned()),
                 ("text", Parameter::Other) => return Err(FilesError::InvalidText),
+                ("from", value) => from = Some(file_name(value)?),
+                ("to", value) => to = Some(file_name(value)?),
+                ("remove", value) => remove = Some(file_name(value)?),
                 _ => {}
             }
         }
@@ -175,7 +204,17 @@ impl FilesRequest {
             (None, None) => None,
             _ => return Err(FilesError::InvalidText),
         };
-        Ok(Self { seed, write })
+        let rename = match (from, to) {
+            (Some(from), Some(to)) => Some((from, to)),
+            (None, None) => None,
+            _ => return Err(FilesError::InvalidText),
+        };
+        Ok(Self {
+            seed,
+            write,
+            rename,
+            remove,
+        })
     }
 }
 
@@ -190,6 +229,93 @@ fn file_name(value: Parameter<'_>) -> Result<String, FilesError> {
 #[must_use]
 pub fn path(name: &str) -> String {
     format!("{DIRECTORY}/{name}")
+}
+
+/// Moves (renames) the file or directory `from` to `to` under
+/// [`DIRECTORY`], creating `to`'s parent directories first. A `to` that
+/// names an existing directory fails, as does a name that is not an
+/// [`is_file_name`].
+///
+/// # Errors
+///
+/// [`FilesError::InvalidName`] for a name that is not [`is_file_name`], and
+/// [`FilesError::Filesystem`] for a failed call.
+pub fn rename_path(from: &str, to: &str) -> Result<(), FilesError> {
+    rename_under(DIRECTORY, from, to)
+}
+
+/// [`rename_path`] under the directory `root`, the seam its tests redirect.
+fn rename_under(root: &str, from: &str, to: &str) -> Result<(), FilesError> {
+    if !is_file_name(from) || !is_file_name(to) {
+        return Err(FilesError::InvalidName);
+    }
+    if let Some((parent, _)) = to.rsplit_once('/') {
+        std::fs::create_dir_all(format!("{root}/{parent}")).map_err(|_| FilesError::Filesystem)?;
+    }
+    std::fs::rename(format!("{root}/{from}"), format!("{root}/{to}"))
+        .map_err(|_| FilesError::Filesystem)
+}
+
+/// Removes the file or directory `name` under [`DIRECTORY`], a directory
+/// with everything below it, and answers whether anything was there. A name
+/// that names nothing is [`Ok`](Result)::[`false`](bool), not a failure; a
+/// tree deeper than [`MAX_REMOVE_DEPTH`] or with more than
+/// [`MAX_REMOVE_ENTRIES`] entries is refused, not removed, and so is a name
+/// that is not an [`is_file_name`]. A symbolic link is removed, never
+/// followed.
+///
+/// # Errors
+///
+/// [`FilesError::InvalidName`] for a name that is not [`is_file_name`], and
+/// [`FilesError::Filesystem`] for a failed call or a tree past its bounds.
+pub fn remove_path(name: &str) -> Result<bool, FilesError> {
+    remove_under(DIRECTORY, name)
+}
+
+/// [`remove_path`] under the directory `root`, the seam its tests redirect.
+fn remove_under(root: &str, name: &str) -> Result<bool, FilesError> {
+    if !is_file_name(name) {
+        return Err(FilesError::InvalidName);
+    }
+    let full = format!("{root}/{name}");
+    let metadata = match std::fs::symlink_metadata(&full) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err(FilesError::Filesystem),
+    };
+    if metadata.is_dir() {
+        let mut entries = 0usize;
+        remove_tree(std::path::Path::new(&full), 0, &mut entries)?;
+    } else {
+        std::fs::remove_file(&full).map_err(|_| FilesError::Filesystem)?;
+    }
+    Ok(true)
+}
+
+/// Removes the directory `dir` and everything below it, `entries` counting
+/// every entry together with the caller's, never following a symbolic link.
+fn remove_tree(dir: &std::path::Path, depth: usize, entries: &mut usize) -> Result<(), FilesError> {
+    if exceeds_wasm_bound(depth, MAX_REMOVE_DEPTH)
+        || exceeds_wasm_bound(*entries, MAX_REMOVE_ENTRIES)
+    {
+        return Err(FilesError::Filesystem);
+    }
+    for entry in std::fs::read_dir(dir).map_err(|_| FilesError::Filesystem)? {
+        *entries = entries.saturating_add(1);
+        if exceeds_wasm_bound(*entries, MAX_REMOVE_ENTRIES) {
+            return Err(FilesError::Filesystem);
+        }
+        let child = entry.map_err(|_| FilesError::Filesystem)?.path();
+        if std::fs::symlink_metadata(&child)
+            .map_err(|_| FilesError::Filesystem)?
+            .is_dir()
+        {
+            remove_tree(&child, depth.saturating_add(1), entries)?;
+        } else {
+            std::fs::remove_file(&child).map_err(|_| FilesError::Filesystem)?;
+        }
+    }
+    std::fs::remove_dir(dir).map_err(|_| FilesError::Filesystem)
 }
 
 /// `text` as a JSON string literal (quotes, backslashes and control
@@ -320,6 +446,12 @@ mod guest {
             Some((name, text)) => Some(write(name, text)?),
             None => None,
         };
+        if let Some((from, to)) = &files.rename {
+            super::rename_path(from, to).map_err(files_error)?;
+        }
+        if let Some(name) = &files.remove {
+            super::remove_path(name).map_err(files_error)?;
+        }
         Ok(super::completion(seed.as_deref(), wrote))
     }
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.learning.output",
   "additionalProperties": false,
-  "description": "How the bot's practice of a lesson it was taught went.\n\nThe bot perceives this as a turn of its own, after the turn it was taught on. learned true: the lesson is now a behavior of the bot (a rule it answers with, or a routine it keeps on its schedule), and the bot may say so in its own words. learned false: the lesson did not take yet, as a person needs more practice; the bot may say that it needs more practice or to be shown again, never why it failed. A turn that perceives this cannot select another lesson.",
+  "description": "How the bot's practice of a lesson it was taught went.\n\nThe bot perceives this as a turn of its own, after the turn it was taught on. learned true: the lesson is now a behavior of the bot (a rule it answers with, or a routine it keeps on its schedule), and the bot may say so in its own words. learned false: the lesson did not take yet, as a person needs more practice; the bot may say that it needs more practice or to be shown again, and say the coarse category of why (a routine no shorter than its minimum interval, a message it could not turn into a behavior), but never the failure's detail. A turn that perceives this cannot select another lesson.",
   "properties": {
     "lesson": {
       "description": "The lesson as it was taught.",
@@ -20,6 +20,17 @@
       "description": "Whether the bot learned it.",
       "title": "Learned",
       "type": "boolean"
+    },
+    "category": {
+      "description": "Why the lesson did not take, coarsely: validation, the builder rejected every draft's checks; simulation, the built behavior failed its run; timeout, a bound fired; unbuildable, the lesson cannot be built as a behavior; unconfigured, the run lacks what building needs (a backend, a memory). Absent when the lesson took, and left out when no category applies [floppy field].",
+      "enum": [
+        "validation",
+        "simulation",
+        "timeout",
+        "unbuildable",
+        "unconfigured"
+      ],
+      "title": "Category"
     },
     "behavior": {
       "anyOf": [
@@ -90,6 +101,13 @@
       "lesson_turn": 5,
       "learned": false,
       "behavior": null
+    },
+    {
+      "lesson": "Check the door every 10 seconds.",
+      "lesson_turn": 7,
+      "learned": false,
+      "behavior": null,
+      "category": "validation"
     }
   ]
 }

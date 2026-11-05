@@ -37,13 +37,17 @@
 
   Output: the lesson's result goes to the cognition,
   bot.ability.learning.output {lesson, lesson_turn, learned, behavior,
-  participants}
+  participants, category}
   (the teaching turn's participants), which the cognition hands to the
   body as a stimulus to perceive in a turn of its own, so the bot tells
   its teacher in its own words. A lesson that failed anywhere is
-  learned false with behavior null: why it failed (logged as
-  learning.failed) never reaches the stimulus, so the bot can only say it
-  needs more practice.
+  learned false with behavior null: the failure's coarse category (a
+  builder failure's, derived from the revision's answer: validation,
+  simulation, timeout, unbuildable or unconfigured; a select that chose
+  nothing is unbuildable, a bound that fired is timeout, a non-text
+  lesson is unbuildable, no memory is unconfigured; null when none
+  applies) reaches the stimulus, so the bot can say why it needs more
+  practice; the failure's detail (logged as learning.failed) does not.
 
   Logs: learning.recalled (the episodes and behaviors read), learning.selected
   (the selected event, or none), learning.learned (the behavior's name and
@@ -110,11 +114,14 @@
     <!-- The selected inventory event and whether it was a create. -->
     <data id="intent" expr="null"/>
     <data id="create_intent" expr="null"/>
-    <!-- The revision's inactivity timer, its applied behavior, and why the
-         lesson failed. -->
+    <!-- The revision's inactivity timer, its applied behavior, why the
+         lesson failed, and the failure's coarse category (null with none;
+         the closed set is validation, simulation, timeout, unbuildable,
+         unconfigured). -->
     <data id="revising_timer" expr="null"/>
     <data id="behavior" expr="null"/>
     <data id="failure" expr="null"/>
+    <data id="failure_category" expr="null"/>
 
     <!-- The select call's instructions. -->
     <data id="learn_instructions" expr="'You are taught a lesson: implement it as exactly one offered behavior inventory event. Select bot.behavior.create with a new PascalCase name for a new behavior, or bot.behavior.change naming an installed behavior the lesson revises (behaviors lists them). A lesson that asks to stop, cancel or forget a behavior (stop reminding me, do not say that any more) is bot.behavior.break naming it, never a change: a break stops it at once. A lesson that says how to answer something (when I say X, say Y) is a turn behavior: its triggers are the stimulus event names it answers, such as the teaching turn\'s stimulus event. A lesson that asks for something on a schedule or repeatedly (every hour, each morning at 8) is a persistent routine: it needs no triggers, and its description says the schedule. For a turn behavior, example is one message it must answer, as the user would say it (for when I say ping, say pong: ping); the behavior is run on it before it is learned, and answers every message the lesson describes, not only the example\'s words. counterexample is one message close to the example that the lesson does not describe (for ping: pin), which the behavior must not answer. description says what the behavior does; reason says why, from the lesson. Never answer with an empty selection. Use only offered events; data must match the event schema.'"/>
@@ -137,6 +144,7 @@
       <assign location="deferred" expr="deferred.slice(1)"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="failure_category" expr="null"/>
       <assign location="select_attempt" expr="0"/>
     </transition>
     <transition event="bot.ability.learning.lesson" event:schema="../schemas/bot.ability.learning.lesson.json"
@@ -144,6 +152,7 @@
       <assign location="lesson" expr="_event.data"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="failure_category" expr="null"/>
       <assign location="select_attempt" expr="0"/>
     </transition>
   </state>
@@ -159,9 +168,11 @@
     </onentry>
     <transition cond="hasNoMemory()" target="failing">
       <assign location="failure" expr="'Learning memory recall failed: no database.'"/>
+      <assign location="failure_category" expr="'unconfigured'"/>
     </transition>
     <transition cond="isNotText()" target="failing">
       <assign location="failure" expr="notTextMessage()"/>
+      <assign location="failure_category" expr="'unbuildable'"/>
     </transition>
     <onentry>
       <if cond="isRecallable()">
@@ -256,6 +267,7 @@
     <transition event="bot.ability.learning.selected" target="failing">
       <log label="learning.selected" expr="'none'"/>
       <assign location="failure" expr="'Learning select returned an empty selection.'"/>
+      <assign location="failure_category" expr="'unbuildable'"/>
     </transition>
     <transition event="done.invoke" cond="hasAnswered(_event)"/>
     <transition event="done.invoke" cond="isGenerate(_event)" target="failing">
@@ -263,6 +275,7 @@
     </transition>
     <transition event="bot.ability.learning.select.hop.timed_out" cond="isSelectHopTimeout(_event)" target="failing">
       <assign location="failure" expr="'Learning select timed out.'"/>
+      <assign location="failure_category" expr="'timeout'"/>
     </transition>
     <transition event="error.communication" cond="canRetrySelect()" target="selecting">
       <assign location="select_attempt" expr="select_attempt + 1"/>
@@ -303,6 +316,7 @@
     </invoke>
     <transition event="revising.after" target="failing">
       <assign location="failure" expr="'Learning revision timed out.'"/>
+      <assign location="failure_category" expr="'timeout'"/>
     </transition>
     <!-- The builder's streamed generation made progress: the inactivity
          bound starts, or starts over; a stage it enters has no reply yet,
@@ -321,6 +335,9 @@
     </transition>
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="_event.data.message"/>
+      <!-- The revision derives the builder failure's coarse category from
+           the builder's failed donedata; null when it has none. -->
+      <assign location="failure_category" expr="_event.data.category"/>
     </transition>
     <transition event="error.*" target="failing">
       <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
@@ -373,7 +390,8 @@
     <transition target="idle"/>
   </state>
 
-  <!-- The lesson did not take: the bot is told so, and only why is logged. -->
+  <!-- The lesson did not take: the bot is told so, with the coarse
+       category of the failure when there is one, and only why is logged. -->
   <state id="failing">
     <transition event="bot.ability.learning.lesson" event:schema="../schemas/bot.ability.learning.lesson.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
@@ -381,7 +399,7 @@
     <onentry>
       <log label="learning.failed" expr="failedLog()"/>
       <send event="bot.ability.learning.output" target="#_parent">
-        <content expr="learningOutput(false)"/>
+        <content expr="failedLearningOutput()"/>
       </send>
     </onentry>
     <transition target="idle"/>

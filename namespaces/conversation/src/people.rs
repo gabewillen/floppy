@@ -17,21 +17,21 @@
 use serde_json::{Map, Value as Json};
 
 use super::{
-    Attribute, Content, ConversationHost, Data, Executed, Failure, SIMILARITY_MARGIN,
-    SIMILARITY_THRESHOLD, VOICE_SIMILARITY_THRESHOLD, assign_to, attribute_values,
-    cosine_similarity, embedding, evaluate, identities_of, is_identity, no_content, read_json,
-    relationship_context_ref, unit_vector,
+    Attribute, Content, Data, Executed, Failure, Host, SIMILARITY_MARGIN, SIMILARITY_THRESHOLD,
+    VOICE_SIMILARITY_THRESHOLD, assign_to, attribute_values, cosine_similarity, embedding,
+    evaluate, identities_of, is_identity, no_content, read_json, relationship_context_ref,
+    unit_vector,
 };
 
 /// The prefix of a person's participant ref, `person-<n>`.
 pub const PERSON_REF_PREFIX: &str = "person-";
 
 /// The prefix of a representative voice's compact text: signed bytes.
-pub const VOICE_PREFIX: &str = "i8:";
+pub const VOICE_PREFIX: &str = floppy_guest::quantized::PREFIX;
 
 /// The scale of a quantized component: a unit component times this,
 /// rounded.
-const VOICE_SCALE: f64 = 127.0;
+const VOICE_SCALE: f64 = floppy_guest::quantized::SCALE;
 
 const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -88,41 +88,12 @@ pub fn encode_voice(voice: &[f64]) -> Option<String> {
 }
 
 /// A representative voice's components (each signed byte over 127), from
-/// its compact text; `None` for text of another form (a damaged row).
+/// its compact text; `None` for text of another form (a damaged row, or a
+/// voice without a norm: every component zero).
 #[must_use]
 pub fn decode_voice(text: &str) -> Option<Vec<f64>> {
-    let body = text.strip_prefix(VOICE_PREFIX)?.as_bytes();
-    if body.is_empty() || body.len() % 4 != 0 {
-        return None;
-    }
-    let mut bytes = Vec::with_capacity(body.len() / 4 * 3);
-    let quads = body.len() / 4;
-    for (index, quad) in body.chunks(4).enumerate() {
-        let last = index + 1 == quads;
-        let padding = quad.iter().rev().take_while(|byte| **byte == b'=').count();
-        if padding > 2 || (padding > 0 && !last) {
-            return None;
-        }
-        let mut sextets = [0_u8; 4];
-        for (slot, byte) in sextets.iter_mut().zip(quad.iter().take(4 - padding)) {
-            let position = BASE64.iter().position(|known| known == byte)?;
-            *slot = u8::try_from(position).ok()?;
-        }
-        let decoded = [
-            (sextets[0] << 2) | (sextets[1] >> 4),
-            (sextets[1] << 4) | (sextets[2] >> 2),
-            (sextets[2] << 6) | sextets[3],
-        ];
-        bytes.extend_from_slice(&decoded[..3 - padding]);
-    }
-    let components: Vec<f64> = bytes
-        .iter()
-        .map(|byte| f64::from(i8::from_le_bytes([*byte])) / VOICE_SCALE)
-        .collect();
-    components
-        .iter()
-        .any(|component| *component != 0.0)
-        .then_some(components)
+    floppy_guest::quantized::decode(text)
+        .filter(|components| components.iter().any(|component| *component != 0.0))
 }
 
 /// A whole number from 0 to 2^53.
@@ -140,7 +111,7 @@ fn whole_number(value: f64) -> Option<u64> {
 }
 
 /// Evaluates `expression` to a whole number, else `malformed`.
-fn read_whole<H: ConversationHost>(
+fn read_whole<H: Host>(
     host: &mut H,
     expression: &str,
     [failed, malformed]: [&'static str; 2],
@@ -153,7 +124,7 @@ fn read_whole<H: ConversationHost>(
 }
 
 /// Evaluates `expression` to an array, else `malformed`.
-fn read_array<H: ConversationHost>(
+fn read_array<H: Host>(
     host: &mut H,
     expression: &str,
     details: [&'static str; 2],
@@ -165,7 +136,7 @@ fn read_array<H: ConversationHost>(
 }
 
 /// Evaluates `expression` to a non-empty string, else `malformed`.
-fn read_text<H: ConversationHost>(
+fn read_text<H: Host>(
     host: &mut H,
     expression: &str,
     [failed, malformed]: [&'static str; 2],
@@ -205,7 +176,7 @@ fn known_voices(voices: &[Json]) -> Vec<(String, Vec<f64>)> {
 }
 
 /// Executes `<conversation:people_for_input>`.
-pub(super) fn people_for_input_element<H: ConversationHost>(
+pub(super) fn people_for_input_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -213,9 +184,11 @@ pub(super) fn people_for_input_element<H: ConversationHost>(
     let [location, input, voices, after] = attribute_values(
         attributes,
         ["location", "input", "voices", "after"],
-        "conversation:people_for_input takes only the location, input, voices and after attributes",
-        "conversation:people_for_input repeats an attribute",
-        "conversation:people_for_input has an empty attribute",
+        [
+            "conversation:people_for_input takes only the location, input, voices and after attributes",
+            "conversation:people_for_input repeats an attribute",
+            "conversation:people_for_input has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:people_for_input requires a location",
@@ -440,7 +413,7 @@ pub fn fold_voices(centroid: &str, weight: u64, voices: &[Json]) -> Json {
 }
 
 /// Executes `<conversation:fold_voices>`.
-pub(super) fn fold_voices_element<H: ConversationHost>(
+pub(super) fn fold_voices_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -448,9 +421,11 @@ pub(super) fn fold_voices_element<H: ConversationHost>(
     let [location, centroid, weight, voices] = attribute_values(
         attributes,
         ["location", "centroid", "weight", "voices"],
-        "conversation:fold_voices takes only the location, centroid, weight and voices attributes",
-        "conversation:fold_voices repeats an attribute",
-        "conversation:fold_voices has an empty attribute",
+        [
+            "conversation:fold_voices takes only the location, centroid, weight and voices attributes",
+            "conversation:fold_voices repeats an attribute",
+            "conversation:fold_voices has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:fold_voices requires a location",
@@ -561,7 +536,7 @@ pub fn people_to_merge(people: &[Json]) -> Json {
 }
 
 /// Executes `<conversation:people_to_merge>`.
-pub(super) fn people_to_merge_element<H: ConversationHost>(
+pub(super) fn people_to_merge_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -569,9 +544,11 @@ pub(super) fn people_to_merge_element<H: ConversationHost>(
     let [location, people] = attribute_values(
         attributes,
         ["location", "people"],
-        "conversation:people_to_merge takes only the location and people attributes",
-        "conversation:people_to_merge repeats an attribute",
-        "conversation:people_to_merge has an empty attribute",
+        [
+            "conversation:people_to_merge takes only the location and people attributes",
+            "conversation:people_to_merge repeats an attribute",
+            "conversation:people_to_merge has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:people_to_merge requires a location",
@@ -643,7 +620,7 @@ pub fn merged_context_refs(refs: &[Json], from: &str, into: &str) -> Json {
 }
 
 /// Executes `<conversation:merged_context_refs>`.
-pub(super) fn merged_context_refs_element<H: ConversationHost>(
+pub(super) fn merged_context_refs_element<H: Host>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
@@ -651,9 +628,11 @@ pub(super) fn merged_context_refs_element<H: ConversationHost>(
     let [location, refs, from, into] = attribute_values(
         attributes,
         ["location", "refs", "from", "into"],
-        "conversation:merged_context_refs takes only the location, refs, from and into attributes",
-        "conversation:merged_context_refs repeats an attribute",
-        "conversation:merged_context_refs has an empty attribute",
+        [
+            "conversation:merged_context_refs takes only the location, refs, from and into attributes",
+            "conversation:merged_context_refs repeats an attribute",
+            "conversation:merged_context_refs has an empty attribute",
+        ],
     )?;
     let location = location.ok_or(Failure::Execution(
         "conversation:merged_context_refs requires a location",

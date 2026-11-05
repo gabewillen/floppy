@@ -148,7 +148,22 @@
     )
 )]
 
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure};
+use floppy_guest::element::{attribute_values, no_content};
 use scxml_event_schema::{CompiledSchema, canonical_json, sha256_hex};
+
+/// Assigns `value` to `location`, else `failed`.
+fn assign_to<H: ChoiceHost>(
+    host: &mut H,
+    location: &str,
+    value: &Data,
+    failed: &'static str,
+) -> Result<(), Failure<H::Error>> {
+    host.assign(location, value)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution(failed))
+}
+
 use scxml_types::{DataValue as Data, exceeds_wasm_bound, wasm_bound};
 use std::collections::BTreeMap;
 
@@ -169,28 +184,6 @@ pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
 /// The greatest effort a choice may declare (decision D206): an effort is a
 /// small whole number, compared only with tier ceilings.
 pub const MAX_EFFORT: u32 = 1_000;
-
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
-}
-
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
 
 /// A section of the session snapshot a read can omit
 /// (`session-snapshot-host.section`).
@@ -225,24 +218,6 @@ pub const OFFERS_SNAPSHOT_EXCLUDE: [Section; 3] =
 /// The `<data>` id a session declares its offerable events in (decision
 /// D242): each event it offers its parent, mapped to `{effort?}`.
 pub const OFFERABLE_DATA_ID: &str = "offerable";
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
 
 /// What a guard evaluated to: `Some(b)` for a boolean, `None` for a failed
 /// or non-boolean evaluation.
@@ -375,28 +350,6 @@ pub fn execute<H: ChoiceHost>(
     }
 }
 
-/// The values of an element's unqualified attributes named in `names`, in
-/// that order; any other attribute is `refused`, a repeated one `repeated`.
-fn attribute_values<'a, E, const N: usize>(
-    attributes: &'a [Attribute],
-    names: [&str; N],
-    refused: &'static str,
-    repeated: &'static str,
-) -> Result<[Option<&'a str>; N], Failure<E>> {
-    let mut values = [None; N];
-    for attribute in attributes {
-        let index = match attribute.namespace_uri {
-            None => names.iter().position(|name| *name == attribute.local_name),
-            Some(_) => None,
-        }
-        .ok_or(Failure::Execution(refused))?;
-        if values[index].replace(attribute.value.as_str()).is_some() {
-            return Err(Failure::Execution(repeated));
-        }
-    }
-    Ok(values)
-}
-
 /// A required, non-empty (trimmed) attribute value, else `missing`.
 fn required<'a, E>(value: Option<&'a str>, missing: &'static str) -> Result<&'a str, Failure<E>> {
     optional(value, missing)?.ok_or(Failure::Execution(missing))
@@ -415,29 +368,6 @@ fn optional<'a, E>(
                 .ok_or(Failure::Execution(empty))
         })
         .transpose()
-}
-
-/// Refuses any content but white space with `detail`.
-fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failure<E>> {
-    if content
-        .iter()
-        .any(|item| !matches!(item, Content::Text(text) if text.trim().is_empty()))
-    {
-        return Err(Failure::Execution(detail));
-    }
-    Ok(())
-}
-
-/// Assigns `value` to `location`, else `failed`.
-fn assign_to<H: ChoiceHost>(
-    host: &mut H,
-    location: &str,
-    value: &Data,
-    failed: &'static str,
-) -> Result<(), Failure<H::Error>> {
-    host.assign(location, value)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(failed))
 }
 
 /// A declared effort: a whole number from 0 to [`MAX_EFFORT`], else `None`.
@@ -526,8 +456,11 @@ fn offers<H: ChoiceHost>(
     let [location, target, undeclared] = attribute_values(
         attributes,
         ["location", "target", "undeclared"],
-        "decision:offers takes only the location, target and undeclared attributes",
-        "decision:offers repeats an attribute",
+        [
+            "decision:offers takes only the location, target and undeclared attributes",
+            "decision:offers repeats an attribute",
+            "decision:offers has an empty attribute",
+        ],
     )?;
     let location = required(location, "decision:offers requires a non-empty location")?;
     let target = required(target, "decision:offers requires a non-empty target")?;
@@ -910,268 +843,122 @@ pub fn selection_walk<E>(
     Ok(choices)
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
+floppy_guest::extension_guest!(
+    host = {
+        use super::{ChoiceHost, GuardValue, Section, SnapshotRead};
+        use stateforward::scxml::session_snapshot_host;
 
-    use std::cell::Cell;
+        impl ChoiceHost for Host {
+            type Error = ComponentError;
 
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-    use stateforward::scxml::{data_model_host, session_snapshot_host};
+            fn guard(&mut self, cond: &str) -> Result<GuardValue, ComponentError> {
+                match data_model_host::evaluate(cond) {
+                    Ok(DataValue::Boolean(value)) => Ok(Some(value)),
+                    Ok(_) => Ok(None),
+                    Err(error) if recoverable(error.code) => Ok(None),
+                    Err(error) => Err(error),
+                }
+            }
 
-    use super::{
-        Attribute, ChoiceHost, Content, Data, Executed, Failure, GuardValue, Section, SnapshotRead,
-    };
+            fn read(&mut self, location: &str) -> Result<Result<Data, ()>, ComponentError> {
+                match data_model_host::evaluate(location) {
+                    Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
+                    Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
+                    // A string is `<decision:offers>`' target; `<decision:choice>`
+                    // reads nothing.
+                    Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
+                    Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)
+                        .map(Data::Number)
+                        .map_err(|_| ())),
+                    Ok(_) => Ok(Err(())),
+                    Err(error) if recoverable(error.code) => Ok(Err(())),
+                    Err(error) => Err(error),
+                }
+            }
 
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
+            fn assign(
+                &mut self,
+                location: &str,
+                value: &Data,
+            ) -> Result<Result<(), ()>, ComponentError> {
+                let value = match value {
+                    Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
+                    Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
+                    Data::String(text) => DataValue::Text(text.clone()),
+                    Data::Number(value) => DataValue::Number(value.get()),
+                    Data::Bool(value) => DataValue::Boolean(*value),
+                    Data::Null => DataValue::Null,
+                    _ => return Ok(Err(())),
+                };
+                match data_model_host::assign(location, &value) {
+                    Ok(()) => Ok(Ok(())),
+                    Err(error) if recoverable(error.code) => Ok(Err(())),
+                    Err(error) => Err(error),
+                }
+            }
 
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
+            fn snapshot(
+                &mut self,
+                exclude: &[Section],
+            ) -> Result<Result<String, ()>, ComponentError> {
+                match session_snapshot_host::snapshot(&sections(exclude), None) {
+                    Ok(document) => Ok(Ok(document)),
+                    // No image for this call, the call bound, or a document
+                    // bound: the element cannot read the choices
+                    // (`error.execution`).
+                    Err(error)
+                        if recoverable(error.code)
+                            || error.code == ErrorCode::CapacityExhausted =>
+                    {
+                        Ok(Err(()))
+                    }
+                    Err(error) => Err(error),
+                }
+            }
 
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl ChoiceHost for Host {
-        type Error = ComponentError;
-
-        fn guard(&mut self, cond: &str) -> Result<GuardValue, ComponentError> {
-            match data_model_host::evaluate(cond) {
-                Ok(DataValue::Boolean(value)) => Ok(Some(value)),
-                Ok(_) => Ok(None),
-                Err(error) if recoverable(error.code) => Ok(None),
-                Err(error) => Err(error),
+            fn snapshot_of(
+                &mut self,
+                exclude: &[Section],
+                target: &str,
+            ) -> Result<SnapshotRead, ComponentError> {
+                match session_snapshot_host::snapshot(&sections(exclude), Some(target)) {
+                    Ok(document) => Ok(SnapshotRead::Document(document)),
+                    // `unavailable` with a target: the target is malformed or no
+                    // running session of the run answers it (scxml.rs
+                    // `session-snapshot.snapshot`). The no-image case it shares
+                    // with the self read arises only outside `execute` or for a
+                    // target naming the executing session, which no document
+                    // reads its own offers with. Nothing to read.
+                    Err(error) if error.code == ErrorCode::Unavailable => {
+                        Ok(SnapshotRead::NotRunning)
+                    }
+                    // The call bound or a document bound: the element cannot
+                    // read it (`error.execution`), as the self read above.
+                    Err(error)
+                        if recoverable(error.code)
+                            || error.code == ErrorCode::CapacityExhausted =>
+                    {
+                        Ok(SnapshotRead::Failed)
+                    }
+                    Err(error) => Err(error),
+                }
             }
         }
 
-        fn read(&mut self, location: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(location) {
-                Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
-                Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
-                // A string is `<decision:offers>`' target; `<decision:choice>`
-                // reads nothing.
-                Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
-                Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)
-                    .map(Data::Number)
-                    .map_err(|_| ())),
-                Ok(_) => Ok(Err(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let value = match value {
-                Data::JsonArray(text) => DataValue::JsonArray(text.clone()),
-                Data::JsonObject(text) => DataValue::JsonObject(text.clone()),
-                Data::String(text) => DataValue::Text(text.clone()),
-                Data::Number(value) => DataValue::Number(value.get()),
-                Data::Bool(value) => DataValue::Boolean(*value),
-                Data::Null => DataValue::Null,
-                _ => return Ok(Err(())),
-            };
-            match data_model_host::assign(location, &value) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
-            }
-        }
-
-        fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, ComponentError> {
-            match session_snapshot_host::snapshot(&sections(exclude), None) {
-                Ok(document) => Ok(Ok(document)),
-                // No image for this call, the call bound, or a document
-                // bound: the element cannot read the choices (`error.execution`).
-                Err(error)
-                    if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
-                {
-                    Ok(Err(()))
-                }
-                Err(error) => Err(error),
-            }
-        }
-
-        fn snapshot_of(
-            &mut self,
-            exclude: &[Section],
-            target: &str,
-        ) -> Result<SnapshotRead, ComponentError> {
-            match session_snapshot_host::snapshot(&sections(exclude), Some(target)) {
-                Ok(document) => Ok(SnapshotRead::Document(document)),
-                // `unavailable` with a target: the target is malformed or no
-                // running session of the run answers it (scxml.rs
-                // `session-snapshot.snapshot`). The no-image case it shares
-                // with the self read arises only outside `execute` or for a
-                // target naming the executing session, which no document
-                // reads its own offers with. Nothing to read.
-                Err(error) if error.code == ErrorCode::Unavailable => Ok(SnapshotRead::NotRunning),
-                // The call bound or a document bound: the element cannot
-                // read it (`error.execution`), as the self read above.
-                Err(error)
-                    if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
-                {
-                    Ok(SnapshotRead::Failed)
-                }
-                Err(error) => Err(error),
-            }
+        fn sections(exclude: &[Section]) -> Vec<session_snapshot_host::Section> {
+            exclude
+                .iter()
+                .map(|section| match section {
+                    Section::System => session_snapshot_host::Section::System,
+                    Section::DataModel => session_snapshot_host::Section::DataModel,
+                    Section::Queues => session_snapshot_host::Section::Queues,
+                    Section::PendingSends => session_snapshot_host::Section::PendingSends,
+                    Section::Transitions => session_snapshot_host::Section::Transitions,
+                })
+                .collect()
         }
     }
-
-    fn sections(exclude: &[Section]) -> Vec<session_snapshot_host::Section> {
-        exclude
-            .iter()
-            .map(|section| match section {
-                Section::System => session_snapshot_host::Section::System,
-                Section::DataModel => session_snapshot_host::Section::DataModel,
-                Section::Queues => session_snapshot_host::Section::Queues,
-                Section::PendingSends => session_snapshot_host::Section::PendingSends,
-                Section::Transitions => session_snapshot_host::Section::Transitions,
-            })
-            .collect()
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
-                    })
-                    .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
-                }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
-        }
-    }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
-}
+);
 
 #[cfg(test)]
 mod tests;

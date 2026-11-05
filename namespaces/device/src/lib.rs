@@ -64,6 +64,8 @@
     )
 )]
 
+pub use floppy_guest::element::{Attribute, Content, Executed, Failure};
+
 use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
@@ -75,28 +77,6 @@ pub const NAMESPACE_NAME: &str = "device";
 /// repository's latest release (decision D19); the manifest and schema name
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/device";
-
-/// One attribute of an element.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Attribute {
-    /// Its namespace URI, when it has one.
-    pub namespace_uri: Option<String>,
-    /// Local name.
-    pub local_name: String,
-    /// Value exactly as authored.
-    pub value: String,
-}
-
-/// One item of an element's flattened content, in document order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Content {
-    /// Character data.
-    Text(String),
-    /// The start tag of a nested element.
-    Start,
-    /// The end tag of the innermost open nested element.
-    End,
-}
 
 /// A section of the session snapshot a read can omit
 /// (`session-snapshot-host.section`).
@@ -118,24 +98,6 @@ pub enum Section {
 /// model and the transitions.
 pub const SNAPSHOT_EXCLUDE: [Section; 3] =
     [Section::System, Section::Queues, Section::PendingSends];
-
-/// What `execute` did with the element.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Executed {
-    /// The element was executed.
-    Handled,
-    /// The local name is not one of this namespace's elements.
-    NotHandled,
-}
-
-/// Why `execute` failed.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Failure<E> {
-    /// SCXML `error.execution`, with a static detail.
-    Execution(&'static str),
-    /// A non-recoverable host failure, passed through unchanged.
-    Host(E),
-}
 
 /// What a host read of another session gave.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -362,223 +324,74 @@ fn number_json(value: f64) -> Option<Json> {
     serde_json::Number::from_f64(value).map(Json::Number)
 }
 
-#[cfg(target_arch = "wasm32")]
-#[allow(
-    clippy::same_length_and_capacity,
-    reason = "generated canonical-ABI ownership transfer"
-)]
-mod guest {
-    wit_bindgen::generate!({
-        world: "executable-content-extension",
-        path: "../../scxml.rs/crates/scxml-wit/wit/scxml",
-    });
+floppy_guest::extension_guest!(
+    host = {
+        use super::{DeviceHost, Section, SnapshotRead};
+        use stateforward::scxml::session_snapshot_host;
 
-    use std::cell::Cell;
+        impl DeviceHost for Host {
+            type Error = ComponentError;
 
-    use exports::stateforward::scxml::executable_content_extension_api::Guest;
-    use stateforward::scxml::telemetry::{self, Operation, Outcome, SignalEvent};
-    use stateforward::scxml::types::{
-        ComponentError, DataValue, ErrorCode, ErrorVersion, ExecutableContentExtension,
-        ExtensionContent, ExtensionOutcome, TraceContext,
-    };
-    use stateforward::scxml::{data_model_host, session_snapshot_host};
-
-    use super::{Attribute, Content, Data, DeviceHost, Executed, Failure, Section, SnapshotRead};
-
-    /// The lifecycle of this instance.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Lifecycle {
-        Created,
-        Live,
-        ShutDown,
-    }
-
-    thread_local! {
-        static STATE: Cell<Lifecycle> = const { Cell::new(Lifecycle::Created) };
-    }
-
-    struct Component;
-
-    /// The host capabilities of one `execute` call.
-    struct Host;
-
-    /// Evaluation and assignment failures (and a session with no data
-    /// model) are document errors.
-    fn recoverable(code: ErrorCode) -> bool {
-        matches!(
-            code,
-            ErrorCode::InvalidInput
-                | ErrorCode::Execution
-                | ErrorCode::Unavailable
-                | ErrorCode::PayloadTooLarge
-        )
-    }
-
-    impl DeviceHost for Host {
-        type Error = ComponentError;
-
-        fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
-            match data_model_host::evaluate(expression) {
-                Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
-                Ok(_) => Ok(Err(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
+            fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, ComponentError> {
+                match data_model_host::evaluate(expression) {
+                    Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
+                    Ok(_) => Ok(Err(())),
+                    Err(error) if recoverable(error.code) => Ok(Err(())),
+                    Err(error) => Err(error),
+                }
             }
-        }
 
-        fn assign(
-            &mut self,
-            location: &str,
-            value: &Data,
-        ) -> Result<Result<(), ()>, ComponentError> {
-            let Data::JsonObject(text) = value else {
-                return Ok(Err(()));
-            };
-            match data_model_host::assign(location, &DataValue::JsonObject(text.clone())) {
-                Ok(()) => Ok(Ok(())),
-                Err(error) if recoverable(error.code) => Ok(Err(())),
-                Err(error) => Err(error),
+            fn assign(
+                &mut self,
+                location: &str,
+                value: &Data,
+            ) -> Result<Result<(), ()>, ComponentError> {
+                let Data::JsonObject(text) = value else {
+                    return Ok(Err(()));
+                };
+                match data_model_host::assign(location, &DataValue::JsonObject(text.clone())) {
+                    Ok(()) => Ok(Ok(())),
+                    Err(error) if recoverable(error.code) => Ok(Err(())),
+                    Err(error) => Err(error),
+                }
             }
-        }
 
-        fn snapshot(
-            &mut self,
-            exclude: &[Section],
-            target: &str,
-        ) -> Result<SnapshotRead, ComponentError> {
-            let exclude: Vec<session_snapshot_host::Section> = exclude
-                .iter()
-                .map(|section| match section {
-                    Section::System => session_snapshot_host::Section::System,
-                    Section::DataModel => session_snapshot_host::Section::DataModel,
-                    Section::Queues => session_snapshot_host::Section::Queues,
-                    Section::PendingSends => session_snapshot_host::Section::PendingSends,
-                    Section::Transitions => session_snapshot_host::Section::Transitions,
-                })
-                .collect();
-            match session_snapshot_host::snapshot(&exclude, Some(target)) {
-                Ok(document) => Ok(SnapshotRead::Document(document)),
-                // No running session of the run answers the target: nothing
-                // to read.
-                Err(error) if error.code == ErrorCode::Unavailable => Ok(SnapshotRead::NotRunning),
-                // The call bound or a document bound: the element cannot
-                // read it (`error.execution`).
-                Err(error)
-                    if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
-                {
-                    Ok(SnapshotRead::Failed)
-                }
-                Err(error) => Err(error),
-            }
-        }
-    }
-
-    fn content(items: Vec<ExtensionContent>) -> Vec<Content> {
-        items
-            .into_iter()
-            .map(|item| match item {
-                ExtensionContent::Text(text) => Content::Text(text),
-                ExtensionContent::StartElement(_) => Content::Start,
-                ExtensionContent::EndElement(_) => Content::End,
-            })
-            .collect()
-    }
-
-    impl Guest for Component {
-        fn namespace_uri() -> String {
-            super::NAMESPACE_URI.into()
-        }
-
-        fn initialize() -> Result<(), ComponentError> {
-            observed(Operation::Initialize, None, || {
-                if STATE.get() != Lifecycle::Created {
-                    return Err(error(ErrorCode::Protocol, "initialize was already called"));
-                }
-                STATE.set(Lifecycle::Live);
-                Ok(())
-            })
-        }
-
-        fn execute(
-            element: ExecutableContentExtension,
-            context: Option<TraceContext>,
-        ) -> Result<ExtensionOutcome, ComponentError> {
-            observed(Operation::Execute, context.as_ref(), || {
-                if element.name.namespace_uri.as_deref() != Some(super::NAMESPACE_URI) {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "element namespace does not match extension component identity",
-                    ));
-                }
-                if STATE.get() != Lifecycle::Live {
-                    return Err(error(
-                        ErrorCode::Protocol,
-                        "execute outside the initialized lifecycle",
-                    ));
-                }
-                let attributes: Vec<Attribute> = element
-                    .attributes
-                    .into_iter()
-                    .map(|attribute| Attribute {
-                        namespace_uri: attribute.name.namespace_uri,
-                        local_name: attribute.name.local_name,
-                        value: attribute.value,
+            fn snapshot(
+                &mut self,
+                exclude: &[Section],
+                target: &str,
+            ) -> Result<SnapshotRead, ComponentError> {
+                let exclude: Vec<session_snapshot_host::Section> = exclude
+                    .iter()
+                    .map(|section| match section {
+                        Section::System => session_snapshot_host::Section::System,
+                        Section::DataModel => session_snapshot_host::Section::DataModel,
+                        Section::Queues => session_snapshot_host::Section::Queues,
+                        Section::PendingSends => session_snapshot_host::Section::PendingSends,
+                        Section::Transitions => session_snapshot_host::Section::Transitions,
                     })
                     .collect();
-                let flattened = content(element.content);
-                match super::execute(&element.name.local_name, &attributes, &flattened, &mut Host) {
-                    Ok(Executed::Handled) => Ok(ExtensionOutcome::Handled),
-                    Ok(Executed::NotHandled) => Ok(ExtensionOutcome::NotHandled),
-                    Err(Failure::Execution(detail)) => Err(error(ErrorCode::Execution, detail)),
-                    Err(Failure::Host(host)) => Err(host),
+                match session_snapshot_host::snapshot(&exclude, Some(target)) {
+                    Ok(document) => Ok(SnapshotRead::Document(document)),
+                    // No running session of the run answers the target: nothing
+                    // to read.
+                    Err(error) if error.code == ErrorCode::Unavailable => {
+                        Ok(SnapshotRead::NotRunning)
+                    }
+                    // The call bound or a document bound: the element cannot
+                    // read it (`error.execution`).
+                    Err(error)
+                        if recoverable(error.code)
+                            || error.code == ErrorCode::CapacityExhausted =>
+                    {
+                        Ok(SnapshotRead::Failed)
+                    }
+                    Err(error) => Err(error),
                 }
-            })
-        }
-
-        fn shutdown() -> Result<(), ComponentError> {
-            observed(Operation::Shutdown, None, || {
-                STATE.set(Lifecycle::ShutDown);
-                Ok(())
-            })
+            }
         }
     }
-
-    /// Records one closed-label observation per entry point: the operation,
-    /// its outcome, and one signal event (no attribute carries input).
-    fn observed<T>(
-        operation: Operation,
-        context: Option<&TraceContext>,
-        body: impl FnOnce() -> Result<T, ComponentError>,
-    ) -> Result<T, ComponentError> {
-        let result = body();
-        let outcome = match &result {
-            Ok(_) => Outcome::Ok,
-            Err(error) if error.code == ErrorCode::Execution => Outcome::Failed,
-            Err(_) => Outcome::Rejected,
-        };
-        telemetry::observe(operation, outcome, None, context);
-        telemetry::event(
-            operation,
-            if result.is_ok() {
-                SignalEvent::TransformationCompleted
-            } else {
-                SignalEvent::InputRejected
-            },
-            context,
-        );
-        result
-    }
-
-    fn error(code: ErrorCode, detail: &'static str) -> ComponentError {
-        ComponentError {
-            version: ErrorVersion::V1,
-            code,
-            detail: (detail.len() <= 160).then(|| detail.into()),
-        }
-    }
-
-    export!(Component);
-}
+);
 
 #[cfg(test)]
 mod tests;

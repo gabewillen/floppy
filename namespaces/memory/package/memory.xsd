@@ -17,6 +17,14 @@
   memory:stm_projection  location (required): receives the bounded scalar
                          projection of a stimulus's data.
                          data (required): an expression.
+  memory:scored_candidates
+                         location (required): receives the candidates scored
+                         (decision D256), best first.
+                         output (required): an expression (the candidates
+                         output).
+                         cue (required): an expression (the cue's vector).
+                         weights (required): an expression (the scores'
+                         weights).
                          None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -44,6 +52,14 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="data" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="scored_candidates">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="output" type="xs:string" use="required"/>
+      <xs:attribute name="cue" type="xs:string" use="required"/>
+      <xs:attribute name="weights" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

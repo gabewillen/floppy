@@ -137,9 +137,35 @@ function takesDecision() {
   return !perceivesFailureOf(['reflex', 'intuition']);
 }
 
-// The stage's input param, and bot.ability.failed's input.
+// The autonomy stage's input param, and bot.ability.failed's input: the
+// turn's focus and its candidates, the choices' offered targets (each
+// offered event naming the session that receives it, which autonomy
+// resolves a learned behavior's selections against at send time), and the
+// read-only environment and owned-device snapshots the turn holds, which a
+// learned behavior reads as input's members (decision D106).
 function processingInput() {
-  return ({focus: focus, focus_candidates: focus_candidates});
+  var input = {focus: focus, focus_candidates: focus_candidates, targets: offeredTargets()};
+  if (environment !== null) {
+    input.environment = environment;
+    var devices = Object(environment.self).owned_devices;
+    if (devices !== undefined) {
+      input.owned_devices = devices;
+    }
+  }
+  return input;
+}
+
+// The sessions the turn's choices offer, each offered event naming the
+// session that receives it: the first choice of an event wins, in the
+// choices' order.
+function offeredTargets() {
+  var offered = {};
+  choices.forEach(function (choice) {
+    if (typeof choice.event === 'string' && typeof choice.target === 'string' && offered[choice.event] === undefined) {
+      offered[choice.event] = choice.target;
+    }
+  });
+  return offered;
 }
 
 function isCurrentTurn(_event) {
@@ -152,9 +178,12 @@ function handledOutput(_event) {
 }
 
 // What earlier stages acted, then what this stage dispatched before it
-// passed the turn on (its donedata's acted, when it has one).
-// A stage's donedata acted is the selections it dispatched (an array), or
+// passed the turn on (its output event's acted, when it has one).
+// A stage's output acted is the selections it dispatched (an array), or
 // {percepts, acts} (autonomy's, for the percepts its behaviors handled).
+// The stages are long-lived children (decisions D268, D269 and D272):
+// each turn's answer arrives as their bot.ability.{autonomy,intuition,
+// processing}.output event, not as a donedata.
 function actsOf(_event) {
   var given = _event.data.acted;
   return Array.isArray(given) ? given : Array.isArray(Object(given).acts) ? given.acts : [];
@@ -176,12 +205,15 @@ function actedFact() {
   return acted_percepts === null ? acted : ({percepts: acted_percepts, acts: acted});
 }
 
-// A done.invoke.<stage> that handled the turn in hand with its selections.
+// A stage's output event that handled the turn in hand with its selections
+// (the stages answer each turn as bot.ability.{autonomy,intuition,
+// processing}.output, decisions D268, D269 and D272).
 function isHandled(_event) {
   return _event.data.turn === turn && _event.data.handled === true && _event.data.failed !== true && Array.isArray(_event.data.selected);
 }
 
-// A done.invoke.<stage> that did not handle the turn in hand, and did not fail.
+// A stage's output event that did not handle the turn in hand, and did not
+// fail.
 function isUnhandled(_event) {
   return _event.data.turn === turn && typeof _event.data.handled === 'boolean' && _event.data.failed !== true;
 }
@@ -191,7 +223,8 @@ function declinedServices(_event) {
   return Array.isArray(_event.data.services) ? _event.data.services.filter(function (c) { return typeof c === 'string'; }) : [];
 }
 
-// Any well-formed done.invoke.<stage> for the turn in hand (after isHandled and isUnhandled: a failure).
+// Any well-formed stage output for the turn in hand (after isHandled and
+// isUnhandled: a failure).
 function matchesStageOutput(_event) {
   return _event.data.turn === turn && typeof _event.data.handled === 'boolean';
 }
@@ -215,7 +248,8 @@ function stageRunFailure(name, _event) {
 
 // running_decision
 
-// The decision layer's confidence tuner from its donedata, else the one in hand.
+// The decision layer's confidence tuner from its output event, else the
+// one in hand.
 function decisionTuner(_event) {
   var state = _event.data.confidence_tuner;
   return state instanceof Object && !Array.isArray(state) ? state : confidence_tuner;
@@ -237,14 +271,15 @@ function handOns() {
   return intuition_model === null ? ['reasoning'] : ['intuition', 'reasoning'];
 }
 
-// The decision model's bytes a token from the decision layer's donedata,
-// else the one in hand.
+// The decision model's bytes a token from the decision layer's output
+// event, else the one in hand.
 function decisionBytesPerTokenAfter(_event) {
   var learned = _event.data.bytes_per_token;
   return typeof learned === 'number' && learned > 0 ? learned : decision_bytes_per_token;
 }
 
-// The tier the decision layer's pass chose (its donedata's hand_to), else null.
+// The tier the decision layer's pass chose (its output event's hand_to),
+// else null.
 function handTo(_event) {
   return typeof _event.data.hand_to === 'string' ? _event.data.hand_to : null;
 }
@@ -371,13 +406,35 @@ function perceivesLessonOrTick() {
 function turnLesson() {
   var lesson = selectedLesson();
   var data = lesson === null ? {} : Object(lesson.data);
-  return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: cognitionInput(), cognition_output: selected, participants: participants, choices: choices});
+  return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: taughtInput(), cognition_output: selected, participants: participants, choices: choices});
+}
+
+// The teaching turn's input with the read-only environment and owned-device
+// snapshots added, so a behavior learned from the turn is built and checked
+// against what it reads when autonomy runs it (the revision builds the
+// behavior's input from its cognition_input).
+function taughtInput() {
+  var taught = cognitionInput();
+  if (environment !== null) {
+    taught.environment = environment;
+    var devices = Object(environment.self).owned_devices;
+    if (devices !== undefined) {
+      taught.owned_devices = devices;
+    }
+  }
+  return taught;
 }
 
 // learning_region
 
 // A lesson's result as the stimulus the body grants a turn: whether it
-// took and the behavior it became, without the participants it carries.
+// took, the behavior it became, and the coarse category of the failure
+// when there is one (so the bot can tell its teacher why it needs more
+// practice), without the participants it carries.
 function lessonStimulus(_event) {
-  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, lesson_turn: _event.data.lesson_turn, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
+  var data = {lesson: _event.data.lesson, lesson_turn: _event.data.lesson_turn, learned: _event.data.learned, behavior: _event.data.behavior};
+  if (typeof _event.data.category === 'string') {
+    data.category = _event.data.category;
+  }
+  return ({event: 'bot.ability.learning.output', data: data, source: 'learning'});
 }

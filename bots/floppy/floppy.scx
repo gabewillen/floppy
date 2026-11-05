@@ -75,10 +75,14 @@
   reads the register's recent turns
   (bot.ability.memory.stm.recent_turns {}) and relays the answer,
   bot.ability.memory.stm.recent_turns.output, to the cognition ahead of
-  the turn's input; after reading_turns_timeout_ms (1 s) the turn starts
-  without it, and a later answer is dropped (the body counts the reads
-  not answered yet, turn_reads, since the register answers in order and
-  no answer names its read). The cognition cannot ask
+  the turn's input; the register's failure of the read (a
+  bot.ability.failed from the register, whose message names no read) is
+  that read's answer while a read is outstanding: the turn starts without
+  the recent turns at once, the read counted answered and the failure
+  logged as floppy.diagnostic. After reading_turns_timeout_ms (1 s) the
+  turn starts without it, and a later answer is dropped (the body counts
+  the reads not answered yet, turn_reads, since the register answers in
+  order and no answer names its read). The cognition cannot ask
   through the body: the request's descriptor matches the answer's name
   too, and scxml.rs judges an arriving event by every matching
   transition's schema, so a body taking both would refuse the answer.
@@ -313,11 +317,20 @@
          environment's <invoke> may give as a <param>; null runs
          firmware/firmware.scx, the firmware of a bot that has none, which offers
          nothing and is not shown to the cognition. Its start (its session
-         answering a snapshot, checked every firmware_check_ms) is bounded
-         by firmware_timeout_ms. -->
+         answering a snapshot; the first check runs at once, then with an
+         exponential backoff from firmware_check_ms to firmware_check_max_ms, at
+         most firmware_max_checks attempts) is bounded by firmware_timeout_ms. -->
     <data id="firmware_src" expr="null"/>
     <data id="firmware_timeout_ms" expr="30000"/>
-    <data id="firmware_check_ms" expr="10"/>
+    <!-- The base of the backoff between checks that the firmware's session
+         answers a snapshot (decision D242): at least 25 ms, doubling each
+         attempt, capped at firmware_check_max_ms. -->
+    <data id="firmware_check_ms" expr="50"/>
+    <data id="firmware_check_max_ms" expr="1000"/>
+    <!-- The checks spent this start, and how many are allowed: the start
+         fails when they are used up without the session answering. -->
+    <data id="firmware_checks" expr="0"/>
+    <data id="firmware_max_checks" expr="48"/>
     <!-- The firmware read this turn (<device:snapshot>), or null. -->
     <data id="firmware_snapshot" expr="null"/>
     <!-- The identity read this turn (<device:snapshot>), or null: whether
@@ -560,12 +573,15 @@
 
       <!-- The last activation step: the
            firmware is started when its session answers a snapshot
-           (decision D242), checked at once and then every
-           firmware_check_ms; a failure, an ability or the firmware ending,
-           or no answer within firmware_timeout_ms fails the activation. -->
+           (decision D242), checked at once and then with an exponential
+           backoff from firmware_check_ms to firmware_check_max_ms, at most
+           firmware_max_checks checks; a failure, an ability or the firmware
+           ending, or no answer within firmware_timeout_ms or after the
+           checks fails the activation. -->
       <state id="firmware_starting">
         <onentry>
           <assign location="firmware_snapshot" expr="null"/>
+          <assign location="firmware_checks" expr="0"/>
           <send id="firmware-timer" event="firmware_starting.after" delayexpr="delay(firmware_timeout_ms)">
             <param name="run" expr="live_run"/>
           </send>
@@ -578,14 +594,24 @@
         </onexit>
         <transition event="firmware_starting.check" cond="isCurrentRun(_event)">
           <device:snapshot location="firmware_snapshot" target="firmwareTarget()"/>
-          <if cond="!isFirmwareStarted()">
-            <send event="firmware_starting.check" delayexpr="delay(firmware_check_ms)">
+          <assign location="firmware_checks" expr="nextFirmwareCheck()"/>
+          <if cond="!isFirmwareStarted() &amp;&amp; firmwareChecksRemain()">
+            <send event="firmware_starting.check" delayexpr="firmwareCheckDelay()">
               <param name="run" expr="live_run"/>
             </send>
           </if>
         </transition>
         <transition cond="isFirmwareStarted()" target="active">
           <send event="bot.activated" target="#_parent">
+            <content expr="emptyData()"/>
+          </send>
+        </transition>
+        <!-- The checks are used up and the firmware's session still does not
+             answer a snapshot: the activation fails on them, as on its
+             timeout. -->
+        <transition cond="firmwareChecksExhausted()" target="inactive">
+          <log label="floppy.diagnostic" expr="firmwareChecksExhaustedDiagnostic()"/>
+          <send event="bot.activating.failed" target="#_parent">
             <content expr="emptyData()"/>
           </send>
         </transition>
@@ -887,6 +913,17 @@
               <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
                 <content expr="_event.data"/>
               </send>
+            </transition>
+            <!-- The register answers a failed read with bot.ability.failed,
+                 whose message names no read: while a read is outstanding it
+                 is that read's answer, so the turn starts without the
+                 recent turns instead of waiting out the timeout. A failure
+                 from any other ability is no read's answer and falls
+                 through. -->
+            <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json"
+                        cond="isTurnReadFailure(_event)" target="deciding">
+              <assign location="turn_reads" expr="turnReadAnswered()"/>
+              <log label="floppy.diagnostic" expr="turnReadFailureDiagnostic(_event)"/>
             </transition>
             <transition event="reading_turns.after" target="deciding"/>
           </state>

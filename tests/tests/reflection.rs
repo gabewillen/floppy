@@ -608,9 +608,15 @@ fn stored(episode: &Json) -> Json {
     json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
 }
 
-/// The path the builder writes `GreetOnKnock`'s documents under, the row's
-/// source (decision D121).
+/// The source the change tests' seed stores the row under ([`SEED_STORED`]),
+/// the flat path builders before the staging build wrote: the row keeps it
+/// when its change fails, and the staged build never writes it.
 const GREET_PATH: &str = "../../behaviors/GreetOnKnock.scx";
+
+/// The path the build's done promotes `GreetOnKnock`'s documents to, the
+/// row's source of a successful revision (`<name>/<name>.scx`, decision
+/// D121's layout, the staging build's promotion).
+const GREET_LIVE_PATH: &str = "../../behaviors/GreetOnKnock/GreetOnKnock.scx";
 
 /// The behaviors directory of the layout whose harness is `harness`: where
 /// the builder writes, the run's files grant (`support::behaviors_grant`).
@@ -622,8 +628,8 @@ fn behaviors(harness: &Path) -> PathBuf {
         .join("behaviors")
 }
 
-/// A seed of one ACTIVE turn behavior named `GreetOnKnock` whose program the
-/// builder wrote ([`GREET_PATH`]).
+/// A seed of one ACTIVE turn behavior named `GreetOnKnock` whose program
+/// sits at [`GREET_PATH`].
 const SEED_STORED: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status) VALUES ('GreetOnKnock', '../../behaviors/GreetOnKnock.scx', 'Say hello.', 'ACTIVE')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
@@ -1150,7 +1156,7 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": GREET_PATH,
+            "name": "GreetOnKnock", "source": GREET_LIVE_PATH,
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "ACTIVE", "status_reason": "",
             "used_count": "0", "failed_count": "0", "triggers": ["environment.sound"],
@@ -1159,22 +1165,33 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     let behavior = &json_log(&records, "episodes")[0]["content"]["behavior"];
     assert_eq!(behavior["name"], "GreetOnKnock");
     assert_eq!(behavior["triggers"], json!(["environment.sound"]));
-    assert_eq!(behavior["source"], GREET_PATH);
-    // The row's source is the path of the documents the builder wrote
-    // under the intent's name (decision D121).
+    assert_eq!(behavior["source"], GREET_LIVE_PATH);
+    // The row's source is the path the build's done promoted the
+    // documents to, the behavior's own directory (decision D121), its IRP
+    // beside them; the staging directory is discarded on the done.
     let written = behaviors(&harness);
     assert_eq!(
-        std::fs::read_to_string(written.join("GreetOnKnock.scx")).expect("the chart is written"),
+        std::fs::read_to_string(written.join("GreetOnKnock/GreetOnKnock.scx"))
+            .expect("the chart is written"),
         BEHAVIOR
     );
     assert_eq!(
-        std::fs::read_to_string(written.join("GreetOnKnock.json"))
+        std::fs::read_to_string(written.join("GreetOnKnock/GreetOnKnock.json"))
             .expect("the schemas are written"),
         r#"{"$defs":{}}"#
     );
     assert_eq!(
-        std::fs::read_to_string(written.join("GreetOnKnock.js")).expect("the script is written"),
+        std::fs::read_to_string(written.join("GreetOnKnock/GreetOnKnock.js"))
+            .expect("the script is written"),
         ""
+    );
+    assert!(
+        written.join("GreetOnKnock/irp/manifest.xml").is_file(),
+        "the IRP is promoted beside the documents"
+    );
+    assert!(
+        !written.join("GreetOnKnock.draft").exists(),
+        "the staging directory is discarded on the done"
     );
     // The builder was asked once, with the intent, the DRAFT stub, and the
     // turn behavior contract.
@@ -1427,8 +1444,10 @@ fn a_build_that_stalls_fails_at_the_inactivity_bound() {
     );
 }
 
-/// A build that fails its checks drafts the rejected source as DRAFT with
-/// `status_reason` validation, and the turn fails with the abandon message
+/// A build that fails its checks leaves the create's DRAFT stub with
+/// `status_reason` validation, the row keeping its own source: the
+/// rejected draft was staged and discarded, so no live documents were
+/// written. The turn fails with the abandon message
 /// and the rendered report;
 /// the turn's episode is stored with no behavior (decision D97).
 #[test]
@@ -1460,18 +1479,24 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": GREET_PATH,
+            "name": "GreetOnKnock", "source": "",
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "DRAFT", "status_reason": "validation",
             "used_count": "0", "failed_count": "0",
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
-    assert_eq!(
-        std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.scx"))
-            .expect("the rejected draft is written"),
-        rejected_behavior(),
-        "the DRAFT row's path names the rejected draft"
+    // The rejected draft was the builder's staging directory, discarded on
+    // the failure: nothing was written at the flat path, and nothing was
+    // promoted, so the DRAFT row keeps its own (empty) source.
+    let written = behaviors(&harness);
+    assert!(
+        !written.join("GreetOnKnock.draft").exists(),
+        "the staging directory is discarded on the failure"
+    );
+    assert!(
+        !written.join("GreetOnKnock.scx").exists() && !written.join("GreetOnKnock").exists(),
+        "a failed build writes no live documents"
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
@@ -1479,7 +1504,8 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
 /// A change revises the stored program: reading reads its three documents
 /// back through the files service (decision D121), the builder is given
 /// them as the existing row's `scxml`, `schemas` and `script`, and the
-/// revision is written under the same name, so the row keeps its path.
+/// build's done promotes the revision to the behavior's own directory,
+/// whose path the row takes as its source.
 #[test]
 fn a_change_reads_the_stored_documents_back_for_the_builder() {
     let mock = Mock::start();
@@ -1517,20 +1543,26 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
     assert_eq!(prompt["name"], "GreetOnKnock", "{prompt}");
     assert_eq!(
         json_log(&records, "inventory")[0]["source"],
-        GREET_PATH,
-        "the revision keeps the row's path"
+        GREET_LIVE_PATH,
+        "the promoted documents' path is the row's source"
+    );
+    assert_eq!(
+        std::fs::read_to_string(stored_dir.join("GreetOnKnock/GreetOnKnock.scx"))
+            .expect("readable"),
+        BEHAVIOR,
+        "the revision is promoted to the behavior's directory"
     );
     assert_eq!(
         std::fs::read_to_string(stored_dir.join("GreetOnKnock.scx")).expect("readable"),
-        BEHAVIOR,
-        "the revision is written over the stored chart"
+        old,
+        "the staged build never wrote the stored documents' path"
     );
 }
 
 /// A failed change of an ACTIVE behavior keeps it (decision D224): the
-/// stored documents the builder's rejected drafts were written over are
-/// written back, the row stays ACTIVE on its path, and the turn fails
-/// with the abandon message.
+/// builder's staged drafts never wrote the stored documents' path, so
+/// there is nothing to write back — the row stays ACTIVE on its own
+/// source, and the turn fails with the abandon message.
 #[test]
 fn a_failed_change_of_an_active_behavior_keeps_it() {
     let mock = Mock::start();
@@ -1567,9 +1599,13 @@ fn a_failed_change_of_an_active_behavior_keeps_it() {
         assert_eq!(
             std::fs::read_to_string(stored_dir.join(file)).expect("readable"),
             text,
-            "{file} is the working program's again"
+            "{file} is the working program, which the staged build never wrote"
         );
     }
+    assert!(
+        !stored_dir.join("GreetOnKnock.draft").exists(),
+        "the staging directory is discarded on the failure"
+    );
 }
 
 /// A change call that fails without a draft to check (every generation

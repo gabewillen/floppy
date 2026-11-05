@@ -290,6 +290,7 @@ dependencies = [
 name = "floppy-autonomy"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -300,6 +301,7 @@ dependencies = [
 name = "floppy-behavior"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "quick-xml",
  "scxml-event-schema",
  "scxml-types",
@@ -312,6 +314,7 @@ dependencies = [
 name = "floppy-cognition"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -322,6 +325,7 @@ dependencies = [
 name = "floppy-conversation"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -332,6 +336,7 @@ dependencies = [
 name = "floppy-decision"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",
@@ -343,6 +348,7 @@ dependencies = [
 name = "floppy-device"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -350,9 +356,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-guest"
+version = "0.1.0"
+dependencies = [
+ "scxml-types",
+ "serde_json",
+]
+
+[[package]]
 name = "floppy-identity"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -363,6 +378,7 @@ dependencies = [
 name = "floppy-intuition"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",
@@ -374,6 +390,7 @@ dependencies = [
 name = "floppy-memory"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde",
@@ -385,6 +402,7 @@ dependencies = [
 name = "floppy-migration"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -395,6 +413,7 @@ dependencies = [
 name = "floppy-processing"
 version = "0.1.0"
 dependencies = [
+ "floppy-guest",
  "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",

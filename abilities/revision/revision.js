@@ -24,6 +24,17 @@ function revisionFailedMessage(detail) {
   return 'Reflection revision failed: ' + detail;
 }
 
+// The revision's failed answer: the failure message, with the builder
+// failure's coarse category when there is one (left out when there is
+// none, so the send never carries a null).
+function failedData() {
+  var data = {message: failure};
+  if (typeof category === 'string') {
+    data.category = category;
+  }
+  return data;
+}
+
 // reading
 
 // No program to read: an unknown row, or one with no source yet.
@@ -118,8 +129,12 @@ function hasCounterexample() {
 }
 
 // The live turn the builder runs a turn behavior on (the live-turn
-// check, decision D131): this turn, its behavior_input as autonomy builds it, and the
-// sessions its output names (a learned behavior names its targets, D104).
+// check, decision D131): this turn, its behavior_input as autonomy builds
+// it (its targets member names, for each event the turn's choices offer,
+// the session that receives it), and the sessions this turn's output and
+// choices name (a learned behavior names no target of its own; the
+// invoking stage resolves each selection's recipient from the input's
+// targets at send time).
 function liveTurn() {
   var live = {turn: turn, input: behavior_input, targets: turnTargets(), choices: turn_choices, handled: instruction === null || probing};
   if (hasCounterexample()) {
@@ -136,16 +151,35 @@ function turnTargets() {
   return cognition_output.concat(turn_choices).map(function (s) { return s.target; }).filter(function (t, i, a) { return typeof t === 'string' && t.length > 0 && a.indexOf(t) === i; }).slice(0, 32);
 }
 
+// The sessions the turn's choices offer, each offered event naming the
+// session that receives it: the first choice of an event wins, in the
+// choices' order. The map the behavior input carries and the live-turn
+// check resolves a selection's recipient against.
+function offeredTargets() {
+  var offered = {};
+  turn_choices.forEach(function (choice) {
+    if (typeof choice.event === 'string' && typeof choice.target === 'string' && offered[choice.event] === undefined) {
+      offered[choice.event] = choice.target;
+    }
+  });
+  return offered;
+}
+
+// The events the turn's choices offer.
+function offeredEvents() {
+  return Object.keys(offeredTargets());
+}
+
 function builderConstraints() {
   return [turnContract(), routineContract()];
 }
 
 // The turn behavior contract with the grounded triggers it is stored under
-// (autonomy matches them against the stimulus event), the targets this
-// turn's output names, and this turn's input (behavior_input, as autonomy
+// (autonomy matches them against the stimulus event), the events this
+// turn's choices offer, and this turn's input (behavior_input, as autonomy
 // builds it, in model-facing XML: decision D201).
 function turnContract() {
-  var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? turnTargets() : triggers); });
+  var contract = turn_contract.replace(/TRIGGERS|OFFERED|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'OFFERED' ? offeredEvents() : triggers); });
   return instruction === null ? contract : contract + ' ' + (probing ? probe_contract : lesson_contract);
 }
 
@@ -245,11 +279,45 @@ function builderFailedMessage(_event) {
   return revisionFailedMessage(String(Object(_event.data).reason) + (d === undefined ? '' : ': ' + d.message));
 }
 
+// The coarse category of a builder failure (learning's answer carries it,
+// so the bot can tell its teacher why the lesson did not take): the last
+// attempt's first diagnostic kind, else the failed reason. The closed set
+// is validation, simulation, timeout, unbuildable, unconfigured.
+function builderFailureCategory(_event) {
+  var data = Object(_event.data);
+  var kind = Array.isArray(data.diagnostics) && data.diagnostics.length > 0 ? data.diagnostics[0].kind : null;
+  if (kind === 'simulate' || kind === 'apply') {
+    return 'simulation';
+  }
+  if (kind === 'validate' || kind === 'lifetime' || kind === 'draft') {
+    return 'validation';
+  }
+  if (kind === 'timeout') {
+    return 'timeout';
+  }
+  return data.reason === 'unconfigured' ? 'unconfigured' : 'unbuildable';
+}
+
 // accepting
 
-// The evidence's trigger names: the turn's stimulus, then the prior episodes'.
+// Whether the row holds a stored program: a change revises one; a create's
+// stub holds an empty source and no triggers of its own (the intent's).
+function hasStoredProgram() {
+  return existing_behavior !== null && typeof existing_behavior === 'object' && typeof existing_behavior.source === 'string' && existing_behavior.source !== '';
+}
+
+// The triggers of the stored program, when the row holds one: evidence a
+// change may keep a trigger on (it is the behavior's own), though no
+// episode of the window named it.
+function storedTriggers() {
+  return hasStoredProgram() && Array.isArray(existing_behavior.triggers) ? existing_behavior.triggers : [];
+}
+
+// The evidence's trigger names: the turn's stimulus, then the prior
+// episodes', then the stored program's own triggers (a change that
+// preserves them grounds them whatever the window named).
 function evidenceStimulusNames() {
-  return [cognition_input.stimulus.event].concat(prior_episodes.map(function (e) { return e.stimulus_name; }));
+  return [cognition_input.stimulus.event].concat(prior_episodes.map(function (e) { return e.stimulus_name; })).concat(storedTriggers());
 }
 
 // evidence without empty or repeated names.
@@ -262,10 +330,13 @@ function intentTriggers() {
 }
 
 // The triggers grounded in the evidence: the intent's that the evidence
-// names, else the evidence's first name when the intent named any, else
-// none.
+// names; else, when the revision revises a stored program, that program's
+// own triggers (a change never strips a trigger the recent window did not
+// name, nor hijack the behavior onto this turn's stimulus alone); else,
+// for an intent that named any, the evidence's first name; an intent that
+// named none grounds none (acceptedTriggers keeps the stored ones).
 function groundedTriggers() {
-  return triggers.some(function (t) { return evidence.indexOf(t) >= 0; }) ? triggers.filter(function (t) { return evidence.indexOf(t) >= 0; }) : triggers.length === 0 ? [] : evidence.slice(0, 1);
+  return triggers.length === 0 ? [] : triggers.some(function (t) { return evidence.indexOf(t) >= 0; }) ? triggers.filter(function (t) { return evidence.indexOf(t) >= 0; }) : storedTriggers().length > 0 ? storedTriggers() : evidence.slice(0, 1);
 }
 
 // The grounded triggers, else the existing row's.

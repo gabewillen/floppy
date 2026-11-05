@@ -3,9 +3,10 @@
 `https://github.com/stateforward/floppy/namespaces/memory` (prefix
 `memory` by convention) as a Wasm executable-content extension component
 (`floppy_memory`): the JSON a conversation memory row holds, the
-contents of one statement's result of a memory select, and the two pure
-helpers of the short-term register: a turn's words
-cut at a whole word and a stimulus's bounded scalar projection. The memory ability
+contents of one statement's result of a memory select, the two pure
+helpers of the short-term register (a turn's words
+cut at a whole word and a stimulus's bounded scalar projection), and the
+associative recall scores of memory select's candidates. The memory ability
 ([`abilities/memory/memory.scx`](../../abilities/memory/memory.scx)) applies
 the statements through the sql service; these elements only build and read
 what it stores. They never send, and they do no I/O.
@@ -16,6 +17,7 @@ what it stores. They never send, and they do no I/O.
 | `<memory:contents location result>` | the result's JSON objects, in row order |
 | `<memory:cut_at_word location words>` | `{text, cut}`: a turn's words within 2048 UTF-8 bytes, cut at a whole word |
 | `<memory:stm_projection location data>` | the data's bounded scalar projection, what a stimulus record holds |
+| `<memory:scored_candidates location output cue weights>` | the candidates scored (decision D256): `{id, length, order, similarity, score}` each, best first, ties in row order |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/memory.xsd`](package/memory.xsd), whose digest the
@@ -26,7 +28,10 @@ it into the dev package cache. The conversation
 ([`abilities/conversation/conversation.scx`](../../abilities/conversation/conversation.scx))
 remembers its inputs with `to_json`; reasoning
 ([`abilities/reasoning/reasoning.scx`](../../abilities/reasoning/reasoning.scx))
-reads its prior episodes and standing directives with `contents`. The
+reads its prior episodes and standing directives with `contents` and scores
+its candidates select with `scored_candidates` (the cosine and recency the
+scoring takes are computed over the `i8:` compact vectors of
+`floppy-guest`, the internal crate the namespace components share). The
 short-term register
 ([`abilities/stm/stm.scx`](../../abilities/stm/stm.scx)) bounds every turn
 it is told with `cut_at_word`; the producers of its records and turns (the

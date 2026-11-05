@@ -13,7 +13,7 @@ struct FakeHost {
     fail_assign: bool,
 }
 
-impl MemoryHost for FakeHost {
+impl Host for FakeHost {
     type Error = &'static str;
 
     fn read(&mut self, expression: &str) -> Result<Result<Data, ()>, &'static str> {
@@ -497,4 +497,284 @@ fn malformed_stm_projection_raises_error_execution_and_assigns_nothing() {
         "memory:stm_projection data did not evaluate"
     );
     assert!(host.assigned.is_empty());
+}
+
+// scored_candidates
+
+/// The element's scores for `output`, `cue` and `weights`.
+fn scored(output: &Json, cue: &Json, weights: &Json) -> Result<Json, &'static str> {
+    let mut host = FakeHost {
+        values: BTreeMap::from([
+            ("output".to_owned(), data(output)),
+            ("cue".to_owned(), data(cue)),
+            ("weights".to_owned(), data(weights)),
+        ]),
+        ..FakeHost::default()
+    };
+    match execute(
+        "scored_candidates",
+        &[
+            attr("location", "scored"),
+            attr("output", "output"),
+            attr("cue", "cue"),
+            attr("weights", "weights"),
+        ],
+        &[],
+        &mut host,
+    ) {
+        Ok(Executed::Handled) => match host.assigned.as_slice() {
+            [(location, Data::JsonArray(text))] if location == "scored" => {
+                Ok(serde_json::from_str(text).expect("the scores are JSON"))
+            }
+            other => panic!("unexpected assignment {other:?}"),
+        },
+        Err(Failure::Execution(detail)) => Err(detail),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+/// The cue of the parity fixture: 256 exact binary fractions, so the Rust
+/// element and the JavaScript it replaced hold identical doubles.
+fn parity_cue() -> Json {
+    let components: Vec<Json> = (0..256)
+        .map(|i| {
+            Json::from(match i % 3 {
+                0 => 0.5,
+                1 => -0.25,
+                _ => 0.125,
+            })
+        })
+        .collect();
+    Json::Array(components)
+}
+
+/// The stored vectors of the parity fixture, as the JavaScript it replaced
+/// writes them (`quantize` there, the encoding namespaces/conversation
+/// ships).
+fn parity_vectors() -> [String; 4] {
+    ["QOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQOAQQA==",
+     "wSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwSDwwQ==",
+     "QBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQBDgQA==",
+     "TGY="]
+    .map(|body| format!("i8:{body}"))
+}
+
+/// The parity fixture's candidates output.
+fn parity_output() -> Json {
+    let vectors = parity_vectors();
+    json!({"results": [{"rowcount": 6, "rows": [
+        {"values": ["000b", "2026-01-02 03:04:05", 120, vectors[0]]},
+        {"values": ["000a", "2025-12-31 03:04:05.25", 340, vectors[1]]},
+        {"values": ["000c", "2026-01-01 12:00:00", 56, vectors[2]]},
+        {"values": ["000d", "2025-06-01 00:00:00", 8, vectors[3]]},
+        {"values": ["000e", "not-a-date", 8, null]},
+        {"values": ["000f", "2026-01-03T09:30:00.125", 8, "i8:AAA="]},
+    ]}]})
+}
+
+/// The scored candidates are exactly the ones the JavaScript the element
+/// replaces computes: the same doubles, so the recall log and the ranked
+/// ids do not move. One exception, asserted apart: `f64::powf` and
+/// `Math.pow` differ by one ulp on the extreme recency exponent of the
+/// unparsable-date row, whose score is 1e-33 either way.
+#[allow(
+    clippy::unreadable_literal,
+    reason = "the expected doubles are the JavaScript's full-precision values"
+)]
+#[test]
+fn scored_candidates_match_the_javascript_they_replaced() {
+    let weights = json!({"similarity": 1, "recency": 0.35, "recency_half_life_ms": 172_800_000});
+    let expected = json!([
+        {"id": "000b", "length": 120, "order": 0, "similarity": 5.304773793480734, "score": 5.530309421666898},
+        {"id": "000c", "length": 56, "order": 1, "similarity": 3.0514967518301184, "score": 3.2329298332247705},
+        {"id": "000f", "length": 8, "order": 2, "similarity": 0, "score": 0.35},
+        {"id": "000d", "length": 8, "order": 3, "similarity": 0, "score": 9.402632054978437e-34},
+        {"id": "000e", "length": 8, "order": 4, "similarity": 0, "score": 0},
+        {"id": "000a", "length": 340, "order": 5, "similarity": -5.304654209331108, "score": -5.191886282152478},
+    ]);
+    assert_eq!(
+        scored(&parity_output(), &parity_cue(), &weights).expect("scores"),
+        expected
+    );
+    // The one-ulp `Math.pow` difference, against the JavaScript value.
+    let scored = scored(&parity_output(), &parity_cue(), &weights).expect("scores");
+    let score = scored[3]["score"].as_f64().expect("a number");
+    let javascript = 9.402632054978435e-34_f64;
+    assert!((score - javascript).abs() / javascript < 1e-15, "{score}");
+}
+
+/// An episode without a vector, one of another space, and an all-zero
+/// vector score by recency alone; ties keep their row order.
+#[test]
+fn scored_candidates_score_without_a_vector_by_recency_alone() {
+    let weights = json!({"similarity": 1, "recency": 0.35, "recency_half_life_ms": 172_800_000});
+    let output = json!({"results": [{"rowcount": 3, "rows": [
+        {"values": ["a", "2026-01-03 00:00:00", 10, null]},
+        {"values": ["b", "2026-01-01 00:00:00", 10, "i8:TACa"]},
+        {"values": ["c", "2026-01-01 00:00:00", 10, "i8:AAA="]},
+    ]}]});
+    // A two-dimension cue: "b"'s stored vector is of another space (three
+    // dimensions), and "c"'s is all zero.
+    let scored = scored(&output, &json!([1.0, 0.0]), &weights).expect("scores");
+    let ids: Vec<&str> = scored
+        .as_array()
+        .expect("an array")
+        .iter()
+        .map(|row| row["id"].as_str().expect("an id"))
+        .collect();
+    assert_eq!(ids, ["a", "b", "c"], "newest first, ties in row order");
+    for row in scored.as_array().expect("an array") {
+        assert_eq!(row["similarity"], json!(0), "{row}");
+    }
+    assert_eq!(scored[0]["score"], json!(0.35), "{scored:?}");
+    assert_eq!(scored[1]["score"], scored[2]["score"], "the same recency");
+}
+
+/// A malformed output, cue or weights raises `error.execution` and assigns
+/// nothing.
+#[test]
+fn malformed_scored_candidates_inputs_raise_error_execution() {
+    let weights = json!({"similarity": 1, "recency": 0.35, "recency_half_life_ms": 172_800_000});
+    let cue = parity_cue();
+    for (output, cue, weights, detail) in [
+        (
+            json!({"results": []}),
+            cue.clone(),
+            weights.clone(),
+            "memory:scored_candidates output has no first result",
+        ),
+        (
+            json!({"results": [{"rowcount": 0}]}),
+            cue.clone(),
+            weights.clone(),
+            "memory:scored_candidates output has no first result",
+        ),
+        (
+            json!({"results": [{"rowcount": 0, "rows": [{}]}]}),
+            cue.clone(),
+            weights.clone(),
+            "memory:scored_candidates output has a row without a values array",
+        ),
+        (
+            json!({"results": [{"rowcount": 0, "rows": []}]}),
+            json!("not an array"),
+            weights.clone(),
+            "memory:scored_candidates cue is not an array of finite numbers",
+        ),
+        (
+            json!({"results": [{"rowcount": 0, "rows": []}]}),
+            json!([0.5, "x"]),
+            weights.clone(),
+            "memory:scored_candidates cue is not an array of finite numbers",
+        ),
+        (
+            json!({"results": [{"rowcount": 0, "rows": []}]}),
+            cue.clone(),
+            json!({"similarity": 1, "recency": 0.35}),
+            "memory:scored_candidates weights are not numbers with a positive half-life",
+        ),
+        (
+            json!({"results": [{"rowcount": 0, "rows": []}]}),
+            cue.clone(),
+            json!({"similarity": 1, "recency": 0.35, "recency_half_life_ms": 0}),
+            "memory:scored_candidates weights are not numbers with a positive half-life",
+        ),
+    ] {
+        assert_eq!(scored(&output, &cue, &weights), Err(detail), "{output}");
+    }
+}
+
+/// The element's attribute rules and the failures of its expressions.
+#[test]
+fn scored_candidates_element_rules() {
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execute(
+            "scored_candidates",
+            &[
+                attr("location", "scored"),
+                attr("output", "output"),
+                attr("cue", "cue"),
+                attr("weights", "weights"),
+                attr("extra", "1"),
+            ],
+            &[],
+            &mut host
+        ),
+        Err(Failure::Execution(
+            "memory:scored_candidates takes only the location, output, cue and weights attributes"
+        ))
+    );
+    assert_eq!(
+        execution(execute(
+            "scored_candidates",
+            &[attr("output", "output")],
+            &[],
+            &mut FakeHost::default()
+        )),
+        "memory:scored_candidates requires a location"
+    );
+    assert_eq!(
+        execution(execute(
+            "scored_candidates",
+            &[
+                attr("location", "scored"),
+                attr("output", "output"),
+                attr("cue", "cue"),
+                attr("weights", ""),
+            ],
+            &[],
+            &mut FakeHost::default()
+        )),
+        "memory:scored_candidates has an empty attribute"
+    );
+    assert_eq!(
+        execution(execute(
+            "scored_candidates",
+            &[
+                attr("location", "scored"),
+                attr("output", "nowhere"),
+                attr("cue", "cue"),
+                attr("weights", "weights"),
+            ],
+            &[],
+            &mut FakeHost::default()
+        )),
+        "memory:scored_candidates output did not evaluate"
+    );
+    assert!(host.assigned.is_empty());
+}
+
+/// A `created_at` of SQLite's and Postgres's UTC forms gives its
+/// milliseconds; a date alone, text of another form, or a missing cell is 0.
+#[allow(
+    clippy::unreadable_literal,
+    reason = "the expected double is the full-precision recency value"
+)]
+#[test]
+fn created_at_milliseconds_of_the_stored_forms() {
+    let weights = json!({"similarity": 0, "recency": 1, "recency_half_life_ms": 172_800_000});
+    let output = json!({"results": [{"rowcount": 4, "rows": [
+        // The newest: 2026-01-03 09:30:00.125 UTC.
+        {"values": ["t", "2026-01-03T09:30:00.125", 1, null]},
+        {"values": ["u", "2026-01-02 09:30:00.125", 1, null]},
+        {"values": ["v", "January 3 2026", 1, null]},
+        {"values": ["w", "2026-01-03 09:30:00", 1, null]},
+    ]}]});
+    let scored = scored(&output, &json!([]), &weights).expect("scores");
+    // The order: the newest (recency 1), then the whole-seconds row 125 ms
+    // older (recency just under 1), then 24 hours older (0.5^(1/2)), then
+    // the unparsable date (0: its age is unbounded).
+    let ids: Vec<&str> = scored
+        .as_array()
+        .expect("an array")
+        .iter()
+        .map(|row| row["id"].as_str().expect("an id"))
+        .collect();
+    assert_eq!(ids, ["t", "w", "u", "v"]);
+    assert_eq!(scored[0]["score"], json!(1));
+    assert_eq!(scored[1]["score"], json!(0.999999498591575));
+    let half = 0.5_f64.sqrt();
+    assert!((scored[2]["score"].as_f64().expect("a number") - half).abs() < 1e-12);
+    assert_eq!(scored[3]["score"], json!(0), "an unparsable date is 0");
 }
