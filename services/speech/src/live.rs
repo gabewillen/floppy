@@ -87,7 +87,7 @@ pub const MAX_VOICE_BYTES: usize = 128;
 /// The instructions without an `instructions` parameter: GPT-Live voices
 /// the conversation, and floppy decides what is said. `gpt-live-1`
 /// delegates when it generates `<|SpawnThinking|>`, so the instructions
-/// name that token (OpenAI's live prompting guide); asked only to
+/// name that token (`OpenAI`'s live prompting guide); asked only to
 /// "delegate to the backend", it answers simple questions itself and
 /// never delegates (the 2026-11-11 live run).
 pub const DEFAULT_INSTRUCTIONS: &str = "You are the voice of Floppy, a conversational agent \
