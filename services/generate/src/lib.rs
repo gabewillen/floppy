@@ -7,7 +7,9 @@
 //! leaving that state cancels it. The wire protocol is the
 //! `OpenAI`-compatible Chat Completions API (`POST {base}/chat/completions`),
 //! which `OpenAI`, `NVIDIA`'s `integrate.api.nvidia.com/v1`, vLLM (the
-//! maintainer's DGX Sparks), and other local servers all speak; the backend
+//! maintainer's DGX Sparks), and other local servers all speak, or, when
+//! the invocation asks (`api` `responses`), `OpenAI`'s Responses API
+//! (`POST {base}/responses`, see "The Responses API"); the backend
 //! is chosen by the run through the `baseurl` slot, never by the document or
 //! the component, and there is no default. Documents name [`SERVICE_URI`]:
 //!
@@ -22,6 +24,9 @@
 //! # Parameters (`<param>`)
 //!
 //! * `model` (required, a non-empty string): sent as `model`.
+//! * `api` (optional, `chat` or `responses`, `chat` without it): the wire
+//!   protocol of a conversation call ([`Api`]), Chat Completions or the
+//!   Responses API. An embeddings call takes none.
 //! * the conversation, exactly one of `prompt` (a non-empty string: one
 //!   `user` message, used exactly) or `messages` (a non-empty JSON array of
 //!   objects with exactly `role`, one of `system`, `user`, `assistant`, and
@@ -297,6 +302,46 @@
 //! admit, is a schema mismatch (checked only once the whole reply arrived),
 //! each with the [`Rejection`] of the first call refused.
 //!
+//! # The Responses API
+//!
+//! With `api` `responses` the call is `POST {base}/responses`
+//! ([`RESPONSES_PATH`]) with the same headers, slots and streaming, and a
+//! canonical body of the same parameters in the Responses API's terms
+//! ([`build_request`]):
+//!
+//! ```json
+//! {"input":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
+//!  "model":"…",
+//!  "reasoning":{"effort":"none"},
+//!  "store":false,
+//!  "tool_choice":"required",
+//!  "tools":[{"description":"…","name":"result","parameters":{…},"strict":false,"type":"function"}]}
+//! ```
+//!
+//! The messages are the `input` (parts as `input_text` and
+//! `input_image`, whose `image_url` is the image's `data:` URL; an
+//! assistant's text parts as `output_text`), `reasoning_effort` is
+//! `reasoning.effort` (any effort is admitted with a schema: the Responses
+//! API takes function tools at every effort), `max_completion_tokens` is
+//! `max_output_tokens`, the backend stores nothing (`store` `false`), and
+//! the function tool is flat and not strict (a strict tool refuses a schema
+//! with an optional property). A streamed request is `"stream": true` alone
+//! (the usage arrives on the stream's `response.completed`).
+//!
+//! The reply is read into the same [`Reply`] and answered as a completion
+//! is ([`response_reply`], [`response_stream_reply`]): the `message`
+//! items' `output_text` joined is the content, the `function_call` items
+//! are the calls (each `call_id` its `id`), a `reasoning` item is never
+//! part of it, and the `status` is the finish reason: `completed`, or
+//! `incomplete` for `max_output_tokens` (`truncated`) or `content_filter`
+//! (`filtered`). A streamed reply is its terminal `response.completed` or
+//! `response.incomplete` event's response (with the stream's
+//! `response.output_item.done` items when that response lists none);
+//! drafts read the first `function_call` item's
+//! `response.function_call_arguments.delta` events. A refusal part is a
+//! refusal, and an `error` or `response.failed` event, another status, an
+//! item of another type, or a stream without a terminal event is malformed.
+//!
 //! # Bounds
 //!
 //! The conversation's text bytes ([`MAX_CONVERSATION_BYTES`]), its message
@@ -353,6 +398,9 @@ pub const STREAM_SLOT: &str = "stream";
 pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
+/// The path appended to the base URL on the Responses API (`api`
+/// `responses`).
+pub const RESPONSES_PATH: &str = "/responses";
 /// The path appended to the base URL for embeddings (`input`).
 pub const EMBEDDINGS_PATH: &str = "/embeddings";
 /// Most inputs one embeddings call may carry (mosfet.py's Embedding's
@@ -592,11 +640,43 @@ pub struct Embeddings {
     pub dimensions: Option<u64>,
 }
 
+/// The wire protocol of a conversation call (`api`): `OpenAI`'s Chat
+/// Completions API or its Responses API.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Api {
+    /// `chat`: `POST {base}/chat/completions` (the default).
+    #[default]
+    Chat,
+    /// `responses`: `POST {base}/responses`.
+    Responses,
+}
+
+impl Api {
+    /// The parameter's value.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::Responses => "responses",
+        }
+    }
+
+    fn parse(name: &str) -> Option<Self> {
+        match name {
+            "chat" => Some(Self::Chat),
+            "responses" => Some(Self::Responses),
+            _ => None,
+        }
+    }
+}
+
 /// One validated generation request: what an invocation's parameters ask.
 #[derive(Debug)]
 pub struct Generation {
     /// The model name.
     pub model: String,
+    /// The wire protocol (`api`), [`Api::Chat`] without the parameter.
+    pub api: Api,
     /// The conversation, the system message first.
     pub messages: Vec<Message>,
     /// The one function tool, when the invocation gave a schema.
@@ -775,7 +855,10 @@ pub struct Usage {
 }
 
 impl Usage {
-    /// The counts of a Chat Completions `usage` object, when it has any.
+    /// The counts of a Chat Completions `usage` object, or a Responses API
+    /// one (`input_tokens`, `output_tokens`,
+    /// `output_tokens_details.reasoning_tokens`, `total_tokens`), when it
+    /// has any.
     #[must_use]
     pub fn read(usage: &Json) -> Option<Self> {
         let count = |path: &[&str]| {
@@ -784,9 +867,10 @@ impl Usage {
                 .and_then(Json::as_u64)
         };
         let read = Self {
-            input_tokens: count(&["prompt_tokens"]),
-            output_tokens: count(&["completion_tokens"]),
-            reasoning_tokens: count(&["completion_tokens_details", "reasoning_tokens"]),
+            input_tokens: count(&["prompt_tokens"]).or_else(|| count(&["input_tokens"])),
+            output_tokens: count(&["completion_tokens"]).or_else(|| count(&["output_tokens"])),
+            reasoning_tokens: count(&["completion_tokens_details", "reasoning_tokens"])
+                .or_else(|| count(&["output_tokens_details", "reasoning_tokens"])),
             total_tokens: count(&["total_tokens"]),
         };
         (read != Self::default()).then_some(read)
@@ -1172,17 +1256,21 @@ fn boolean_parameter(
 
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
 /// or [`DEFAULT_REASONING_EFFORT`] without the parameter. With a schema
-/// (`tools`): `none` without the parameter, and any
-/// other value is refused, since reasoning models reject function tools on
-/// Chat Completions unless the effort is `none`.
+/// (`tools`): `none` without the parameter, and on Chat Completions any
+/// other value is refused, since reasoning models reject function tools
+/// there unless the effort is `none` (the Responses API takes function
+/// tools at every effort).
 fn reasoning_effort_parameter(
     value: Option<&Data>,
     tools: bool,
+    api: Api,
 ) -> Result<&'static str, &'static str> {
     match value {
         None if tools => Ok(TOOLS_REASONING_EFFORT),
         None => Ok(DEFAULT_REASONING_EFFORT),
-        Some(Data::String(effort)) if tools && effort != TOOLS_REASONING_EFFORT => {
+        Some(Data::String(effort))
+            if tools && api == Api::Chat && effort != TOOLS_REASONING_EFFORT =>
+        {
             Err("generate reasoning_effort must be none with a schema")
         }
         Some(Data::String(effort)) => REASONING_EFFORTS
@@ -1190,6 +1278,17 @@ fn reasoning_effort_parameter(
             .find(|known| known == effort)
             .ok_or("generate reasoning_effort must be none, minimal, low, medium, high, or xhigh"),
         Some(_) => Err("generate reasoning_effort must be a string"),
+    }
+}
+
+/// `api`: absent ([`Api::Chat`]), `chat`, or `responses`.
+fn api_parameter(value: Option<&Data>) -> Result<Api, &'static str> {
+    match value {
+        None => Ok(Api::Chat),
+        Some(Data::String(name)) => {
+            Api::parse(name).ok_or("generate api must be chat or responses")
+        }
+        Some(_) => Err("generate api must be chat or responses"),
     }
 }
 
@@ -1220,6 +1319,10 @@ fn text_bytes(conversation: &[Message]) -> usize {
 /// A static detail for an unknown or repeated parameter, a missing or
 /// malformed one, an image that cannot be read, or a conversation or model
 /// outside its bound.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one table of the parameters and their checks"
+)]
 pub fn parse_parameters<'a>(
     parameters: impl IntoIterator<Item = (&'a str, &'a Data)>,
     mut read: impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
@@ -1239,6 +1342,7 @@ pub fn parse_parameters<'a>(
     let mut input = None;
     let mut dimensions = None;
     let mut drafts = None;
+    let mut api = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -1256,6 +1360,7 @@ pub fn parse_parameters<'a>(
             "input" => &mut input,
             "dimensions" => &mut dimensions,
             "drafts" => &mut drafts,
+            "api" => &mut api,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -1285,6 +1390,7 @@ pub fn parse_parameters<'a>(
             temperature,
             thinking_token_budget,
             drafts,
+            api,
         ];
         if conversation.iter().any(Option::is_some) {
             return Err("generate input takes only model and dimensions");
@@ -1294,9 +1400,10 @@ pub fn parse_parameters<'a>(
     if dimensions.is_some() {
         return Err("generate dimensions requires an input");
     }
+    let api = api_parameter(api)?;
     let conversation = conversation_parameter(system, prompt, messages, &mut read)?;
     let schema_name = schema_name_parameter(schema_name)?;
-    let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
+    let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some(), api)?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
     let max_completion_tokens = token_count_parameter(
         max_completion_tokens,
@@ -1314,6 +1421,7 @@ pub fn parse_parameters<'a>(
     }
     Ok(Generation {
         model,
+        api,
         messages: conversation,
         schema,
         reasoning_effort,
@@ -1349,6 +1457,7 @@ fn embeddings_generation(
 ) -> Result<Generation, &'static str> {
     Ok(Generation {
         model,
+        api: Api::Chat,
         messages: Vec::new(),
         schema: None,
         reasoning_effort: DEFAULT_REASONING_EFFORT,
@@ -1585,6 +1694,9 @@ pub fn build_request(
     if let Some(embeddings) = &generation.embeddings {
         return embeddings_request(base_url, api_key, &generation.model, embeddings);
     }
+    if generation.api == Api::Responses {
+        return responses_request(base_url, api_key, stream, generation);
+    }
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -1654,6 +1766,119 @@ pub fn build_request(
         body: canonical_json(&body).into_bytes(),
         stream: stream.filter(|_| !generation.stream),
         request_bytes,
+    }
+}
+
+/// The Responses API request: `POST {base}/responses` with the bearer key
+/// (none without one) and a canonical JSON body: `input` (the
+/// conversation's messages, each `{"role", "content"}`, parts as `input_text`
+/// and `input_image`, an assistant's text parts as `output_text`), `model`,
+/// `reasoning` (`{"effort": E}`), `store` (`false`: the backend keeps
+/// nothing), `max_output_tokens` (`max_completion_tokens`), `temperature`
+/// and `thinking_token_budget` when asked, `stream` (`true`) when streamed
+/// (its usage arrives on the stream's `response.completed`, so there is no
+/// `stream_options`), and, with a schema, `tools` (one function, `{"type":
+/// "function", "name", "description", "parameters", "strict": false}`: the
+/// Responses API's function tools are strict unless asked, and a strict
+/// tool refuses a schema with an optional property) and `tool_choice`.
+/// Its [`Request::request_bytes`] are the body's without `stream`.
+fn responses_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    stream: Option<u32>,
+    generation: &Generation,
+) -> Request {
+    let mut body = Map::new();
+    body.insert(
+        "input".into(),
+        generation
+            .messages
+            .iter()
+            .map(|message| {
+                serde_json::json!({
+                    "role": message.role.name(),
+                    "content": responses_content_json(message.role, &message.content),
+                })
+            })
+            .collect(),
+    );
+    body.insert("model".into(), generation.model.clone().into());
+    body.insert(
+        "reasoning".into(),
+        serde_json::json!({ "effort": generation.reasoning_effort }),
+    );
+    body.insert("store".into(), Json::Bool(false));
+    if let Some(tokens) = generation.max_completion_tokens {
+        body.insert("max_output_tokens".into(), tokens.into());
+    }
+    if let Some(temperature) = generation.temperature
+        && let Some(number) = serde_json::Number::from_f64(temperature.get())
+    {
+        body.insert("temperature".into(), number.into());
+    }
+    if let Some(budget) = generation.thinking_token_budget {
+        body.insert("thinking_token_budget".into(), budget.into());
+    }
+    if let Some(schema) = &generation.schema {
+        let mut function = Map::new();
+        function.insert("type".into(), "function".into());
+        function.insert("name".into(), schema.name.clone().into());
+        if let Some(description) = &schema.description {
+            function.insert("description".into(), description.clone().into());
+        }
+        function.insert("parameters".into(), schema.parameters.clone());
+        function.insert("strict".into(), Json::Bool(false));
+        body.insert("tools".into(), Json::Array(vec![Json::Object(function)]));
+        body.insert("tool_choice".into(), schema.tool_choice.into());
+    }
+    let mut body = Json::Object(body);
+    let request_bytes = canonical_json(&body).len();
+    if generation.stream
+        && let Json::Object(members) = &mut body
+    {
+        members.insert("stream".into(), Json::Bool(true));
+    }
+    Request {
+        url: vec![
+            Part::Reference(base_url),
+            Part::Literal(RESPONSES_PATH.into()),
+        ],
+        headers: headers(
+            api_key,
+            if generation.stream {
+                "text/event-stream"
+            } else if stream.is_some() {
+                "application/json, text/event-stream"
+            } else {
+                "application/json"
+            },
+        ),
+        body: canonical_json(&body).into_bytes(),
+        stream: stream.filter(|_| !generation.stream),
+        request_bytes,
+    }
+}
+
+/// A message's content on the Responses API: a string as itself, parts as
+/// input parts, `{"type": "input_text", "text": T}` (`output_text` in an
+/// assistant's message) and `{"type": "input_image", "image_url": "data:…"}`.
+fn responses_content_json(role: Role, content: &Content) -> Json {
+    let text_type = if role == Role::Assistant {
+        "output_text"
+    } else {
+        "input_text"
+    };
+    match content {
+        Content::Text(text) => Json::String(text.clone()),
+        Content::Parts(parts) => parts
+            .iter()
+            .map(|part| match part {
+                ContentPart::Text(text) => serde_json::json!({ "type": text_type, "text": text }),
+                ContentPart::Image(image) => {
+                    serde_json::json!({ "type": "input_image", "image_url": image.url })
+                }
+            })
+            .collect(),
     }
 }
 
@@ -2040,6 +2265,179 @@ pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
             .map(str::to_owned),
         usage: completion.get("usage").and_then(Usage::read),
     })
+}
+
+/// The reply of one Responses API `response` object: its `message` items'
+/// `output_text` joined in order as the content, its `function_call` items
+/// in order as the calls (each `call_id` the call's `id`), its `usage`, and
+/// a finish reason from its `status`: `completed` is `tool_calls` with a
+/// call and `stop` without one, and `incomplete` is `length` (its
+/// `incomplete_details.reason` `max_output_tokens`) or `content_filter`
+/// (`content_filter`). A `reasoning` item is never part of the reply.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] when the object is not such a response (an
+/// `error`, a `status` other than `completed` or `incomplete`, an
+/// `incomplete` one for another reason, no `output` list, an item of
+/// another type, a `message` whose content is not a list of `output_text`
+/// and `refusal` parts, or a `function_call` without a non-blank `call_id`
+/// and `name` and string `arguments`), and [`FailureCode::Refusal`] when a
+/// message carries a refusal.
+fn response_object_reply(response: &Json) -> Result<Reply, FailureCode> {
+    if !response.is_object() || response.get("error").is_some_and(|error| !error.is_null()) {
+        return Err(FailureCode::Malformed);
+    }
+    let incomplete = match response.get("status").and_then(Json::as_str) {
+        Some("completed") => None,
+        Some("incomplete") => Some(
+            match response
+                .pointer("/incomplete_details/reason")
+                .and_then(Json::as_str)
+            {
+                Some("max_output_tokens") => "length",
+                Some("content_filter") => "content_filter",
+                _ => return Err(FailureCode::Malformed),
+            },
+        ),
+        _ => return Err(FailureCode::Malformed),
+    };
+    let items = response
+        .get("output")
+        .and_then(Json::as_array)
+        .ok_or(FailureCode::Malformed)?;
+    let mut content = String::new();
+    let mut tool_calls = Vec::new();
+    for item in items {
+        match item.get("type").and_then(Json::as_str) {
+            Some("reasoning") => {}
+            Some("message") => {
+                let parts = item
+                    .get("content")
+                    .and_then(Json::as_array)
+                    .ok_or(FailureCode::Malformed)?;
+                for part in parts {
+                    match part.get("type").and_then(Json::as_str) {
+                        Some("output_text") => content.push_str(
+                            part.get("text")
+                                .and_then(Json::as_str)
+                                .ok_or(FailureCode::Malformed)?,
+                        ),
+                        Some("refusal") => return Err(FailureCode::Refusal),
+                        _ => return Err(FailureCode::Malformed),
+                    }
+                }
+            }
+            Some("function_call") => {
+                let text = |key: &str| item.get(key).and_then(Json::as_str).map(str::to_owned);
+                let (Some(id), Some(name), Some(arguments)) = (
+                    text("call_id").filter(|id| !id.trim().is_empty()),
+                    text("name").filter(|name| !name.trim().is_empty()),
+                    text("arguments"),
+                ) else {
+                    return Err(FailureCode::Malformed);
+                };
+                tool_calls.push(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                });
+            }
+            _ => return Err(FailureCode::Malformed),
+        }
+    }
+    let finish = incomplete.unwrap_or(if tool_calls.is_empty() {
+        "stop"
+    } else {
+        "tool_calls"
+    });
+    Ok(Reply {
+        content,
+        tool_calls,
+        finish_reason: Some(finish.to_owned()),
+        usage: response.get("usage").and_then(Usage::read),
+    })
+}
+
+/// The reply of a non-streamed Responses API result: the `response` object
+/// it is.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] when the body is not a JSON response object
+/// such a reply reads, and [`FailureCode::Refusal`] for a refusal.
+pub fn response_reply(body: &[u8]) -> Result<Reply, FailureCode> {
+    let response: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
+    response_object_reply(&response)
+}
+
+/// The reply of a streamed Responses API result: the `response` of its
+/// terminal event (`response.completed`, or `response.incomplete`), read as
+/// a non-streamed one is ([`response_reply`]); when that response
+/// lists no output, the items of the stream's `response.output_item.done`
+/// events, in `output_index` order, are its output. Every other event
+/// (`response.created`, the deltas, keep-alive comments) adds nothing.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] when the body is not such a stream (not
+/// UTF-8, an event that is not a JSON object, an `error` or
+/// `response.failed` event, or no terminal event), or its response is not
+/// one a reply reads, and [`FailureCode::Refusal`] for a refusal.
+pub fn response_stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
+    let text = std::str::from_utf8(body).map_err(|_| FailureCode::Malformed)?;
+    let mut items: std::collections::BTreeMap<u64, Json> = std::collections::BTreeMap::new();
+    let mut terminal: Option<Json> = None;
+    let mut data: Option<String> = None;
+    for line in text.split('\n').chain(std::iter::once("")) {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.is_empty() {
+            let Some(event) = data.take() else {
+                continue;
+            };
+            if event == "[DONE]" {
+                break;
+            }
+            let event: Json = serde_json::from_str(&event).map_err(|_| FailureCode::Malformed)?;
+            match event.get("type").and_then(Json::as_str) {
+                Some("error" | "response.failed") | None => return Err(FailureCode::Malformed),
+                Some("response.output_item.done") => {
+                    let index = event
+                        .get("output_index")
+                        .and_then(Json::as_u64)
+                        .ok_or(FailureCode::Malformed)?;
+                    let item = event.get("item").ok_or(FailureCode::Malformed)?;
+                    items.insert(index, item.clone());
+                }
+                Some("response.completed" | "response.incomplete") => {
+                    terminal = Some(event.get("response").ok_or(FailureCode::Malformed)?.clone());
+                    break;
+                }
+                Some(_) => {}
+            }
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("data:") {
+            let value = value.strip_prefix(' ').unwrap_or(value);
+            match &mut data {
+                Some(event) => {
+                    event.push('\n');
+                    event.push_str(value);
+                }
+                None => data = Some(value.to_owned()),
+            }
+        }
+    }
+    let mut response = terminal.ok_or(FailureCode::Malformed)?;
+    if let Some(members) = response.as_object_mut()
+        && members
+            .get("output")
+            .and_then(Json::as_array)
+            .is_none_or(Vec::is_empty)
+    {
+        members.insert("output".into(), items.into_values().collect());
+    }
+    response_object_reply(&response)
 }
 
 impl Reply {
@@ -2670,10 +3068,11 @@ pub fn outcome(
             Err(code) => Returned::failed(code),
         };
     }
-    let reply = if is_event_stream(&response.body) {
-        stream_reply(&response.body)
-    } else {
-        completion_reply(&response.body)
+    let reply = match (generation.api, is_event_stream(&response.body)) {
+        (Api::Chat, true) => stream_reply(&response.body),
+        (Api::Chat, false) => completion_reply(&response.body),
+        (Api::Responses, true) => response_stream_reply(&response.body),
+        (Api::Responses, false) => response_reply(&response.body),
     };
     let mut data = match reply
         .map_err(Failure::from)

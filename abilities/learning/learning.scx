@@ -79,6 +79,11 @@
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
+    <!-- The API of the calls on FLOPPY_BASE_URL (api) and on
+         FLOPPY_REFLECTION_BASE_URL (reflection_api): chat (Chat
+         Completions) or responses (OpenAI's Responses API). -->
+    <data id="api" expr="'chat'"/>
+    <data id="reflection_api" expr="'chat'"/>
     <data id="bounds" expr="({})"/>
     <!-- The select call's and the revision's inactivity bounds and their
          backstops (decision D101). -->
@@ -212,6 +217,7 @@
             env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="reflection_model ?? model"/>
+      <param name="api" expr="endpointApi()"/>
       <param name="system" expr="learn_instructions"/>
       <param name="prompt" expr="select_input"/>
       <param name="schema" expr="schema"/>
@@ -290,6 +296,8 @@
       <param name="memory" expr="memory"/>
       <param name="model" expr="model"/>
       <param name="reflection_model" expr="reflection_model"/>
+      <param name="api" expr="api"/>
+      <param name="reflection_api" expr="reflection_api"/>
       <param name="progress_target" expr="progressTarget()"/>
       <param name="intent" expr="intent"/>
       <param name="intent_event" expr="intentEvent()"/>

@@ -125,6 +125,10 @@
          (decision D260): a reflection model given by the invoking
          revision; null keeps them on FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
+    <!-- The API of the generate calls' endpoint: chat (Chat Completions)
+         or responses (OpenAI's Responses API), given by the invoking
+         revision. -->
+    <data id="api" expr="'chat'"/>
     <!-- A generation's inactivity bound (a streamed reply's progress starts
          it over) and its backstop (decision D101). -->
     <data id="generate_timeout_ms" expr="30000"/>
@@ -320,6 +324,7 @@
             env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
+      <param name="api" expr="api"/>
       <param name="system" expr="design_system"/>
       <param name="prompt" expr="request"/>
       <param name="schema" expr="plan_schema"/>
@@ -406,6 +411,7 @@
             env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
+      <param name="api" expr="api"/>
       <param name="system" expr="authorSystem()"/>
       <param name="prompt" expr="request"/>
       <param name="schema" expr="draft_schema"/>
