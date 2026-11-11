@@ -57,6 +57,16 @@ and `FLOPPY_REFLECTION_API_KEY`. Each of those documents carries
 `FLOPPY_BASE_URL`; the environment's `reflection_model` `<param>` overrides
 the bot's.
 
+The API those calls speak is the floppy bot's `api` `<data>` for the calls
+on `FLOPPY_BASE_URL` (reasoning and the intuition tier, and reflection,
+learning, revision and the builder when `reflection_model` is null) and its
+`reflection_api` `<data>` for the calls on `FLOPPY_REFLECTION_BASE_URL`:
+each is `chat` (Chat Completions, `POST {base}/chat/completions`), and
+`responses` puts that endpoint on `OpenAI`'s Responses API
+(`POST {base}/responses`). The cognition passes both down the same way as
+`reflection_model`, revision gives the builder its endpoint's as `api`, and
+the environment's `api` and `reflection_api` `<param>`s override the bot's.
+
 A bot composes the chat intuition tier only when its environment gives an
 `intuition_model` `<param>` (none by default; decision D144): the cognition
 then asks that chat model for the turn before reasoning.
