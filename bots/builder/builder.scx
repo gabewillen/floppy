@@ -129,6 +129,10 @@
          or responses (OpenAI's Responses API), given by the invoking
          revision. -->
     <data id="api" expr="'chat'"/>
+    <!-- The generate calls' reasoning effort, given by the invoking
+         revision: null is the service's default (none with a schema on
+         Chat Completions, low on the Responses API). -->
+    <data id="reasoning_effort" expr="null"/>
     <!-- A generation's inactivity bound (a streamed reply's progress starts
          it over) and its backstop (decision D101). -->
     <data id="generate_timeout_ms" expr="30000"/>
@@ -330,6 +334,7 @@
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="api" expr="api"/>
+      <param name="reasoning_effort" expr="reasoning_effort"/>
       <param name="system" expr="design_system"/>
       <param name="prompt" expr="request"/>
       <param name="schema" expr="plan_schema"/>
@@ -417,6 +422,7 @@
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="api" expr="api"/>
+      <param name="reasoning_effort" expr="reasoning_effort"/>
       <param name="system" expr="authorSystem()"/>
       <param name="prompt" expr="request"/>
       <param name="schema" expr="draft_schema"/>

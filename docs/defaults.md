@@ -67,6 +67,16 @@ each is `chat` (Chat Completions, `POST {base}/chat/completions`), and
 `reflection_model`, revision gives the builder its endpoint's as `api`, and
 the environment's `api` and `reflection_api` `<param>`s override the bot's.
 
+Their reasoning effort is the bot's `reasoning_effort` (calls on
+`FLOPPY_BASE_URL`) and `reflection_reasoning_effort` (calls on
+`FLOPPY_REFLECTION_BASE_URL`), both `null`, passed down the same way:
+`null` is the generate service's default, `none` for a schema call on Chat
+Completions (which refuses function tools at any other effort) and `low` on
+the Responses API. Every one of these calls has a schema, so an endpoint on
+Chat Completions does not reason, and a reasoning model such as
+`gpt-6-luna` belongs on the Responses API (`api` or `reflection_api`
+`responses`), where it reasons at `low` or the effort these name.
+
 A bot composes the chat intuition tier only when its environment gives an
 `intuition_model` `<param>` (none by default; decision D144): the cognition
 then asks that chat model for the turn before reasoning.

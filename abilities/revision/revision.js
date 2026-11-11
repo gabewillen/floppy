@@ -322,3 +322,9 @@ function isMemoryReply(name) {
 function endpointApi() {
   return reflection_model === null ? api : reflection_api;
 }
+
+// The reasoning effort of this document's model calls: the reflection
+// endpoint's when a reflection_model puts them on it, else FLOPPY_BASE_URL's.
+function endpointEffort() {
+  return reflection_model === null ? reasoning_effort : reflection_reasoning_effort;
+}

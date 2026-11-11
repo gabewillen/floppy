@@ -2097,9 +2097,11 @@ fn a_responses_schema_is_one_function_tool_that_is_not_strict() {
         ("schema", text(SCHEMA)),
         ("schemaname", text("dispatch")),
     ]);
-    assert_eq!(generation.reasoning_effort, TOOLS_REASONING_EFFORT);
+    // A schema call on the Responses API reasons by default.
+    assert_eq!(generation.reasoning_effort, DEFAULT_REASONING_EFFORT);
     let body: Json =
         serde_json::from_slice(&build_request(2, None, None, &generation).body).expect("JSON");
+    assert_eq!(body["reasoning"], serde_json::json!({"effort": "low"}));
     assert_eq!(
         body["tools"],
         serde_json::json!([{
@@ -2334,4 +2336,26 @@ fn a_streamed_responses_reply_is_its_terminal_response() {
         outcome(&generation, 0, ok(response_stream(&events))),
         Returned::failed(FailureCode::Truncated)
     );
+}
+
+/// `reasoning_effort` `null` is the default on both APIs: `none` for a
+/// schema call on Chat Completions, `low` otherwise.
+#[test]
+fn a_null_reasoning_effort_is_the_default() {
+    let with = |api: &str, schema: bool| {
+        let mut parameters = vec![
+            ("model", text("m")),
+            ("prompt", text("p")),
+            ("api", text(api)),
+            ("reasoning_effort", Data::Null),
+        ];
+        if schema {
+            parameters.push(("schema", text(SCHEMA)));
+        }
+        parse(&parameters).expect("valid").reasoning_effort
+    };
+    assert_eq!(with("chat", true), TOOLS_REASONING_EFFORT);
+    assert_eq!(with("chat", false), DEFAULT_REASONING_EFFORT);
+    assert_eq!(with("responses", true), DEFAULT_REASONING_EFFORT);
+    assert_eq!(with("responses", false), DEFAULT_REASONING_EFFORT);
 }

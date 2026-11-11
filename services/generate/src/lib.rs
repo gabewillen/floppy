@@ -60,11 +60,13 @@
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
 //!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
-//!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
-//!   [`DEFAULT_REASONING_EFFORT`] without it. With a schema only `none` is
-//!   admitted and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it:
-//!   reasoning models reject function tools on Chat Completions with any
-//!   other effort.
+//!   `medium`, `high`, `xhigh`, or `null`, which is the same as giving
+//!   none): sent as `reasoning_effort`, and [`DEFAULT_REASONING_EFFORT`]
+//!   without it. With a schema on Chat Completions only `none` is admitted
+//!   and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it: reasoning
+//!   models reject function tools on Chat Completions with any other
+//!   effort. On the Responses API a schema call admits every effort and
+//!   reasons at [`DEFAULT_REASONING_EFFORT`] without one.
 //! * `stream` (optional, a boolean, `false` without it): `true` asks for a
 //!   streamed reply (`"stream": true`, server-sent events); without it the
 //!   call is one non-streamed completion.
@@ -312,7 +314,7 @@
 //! ```json
 //! {"input":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
-//!  "reasoning":{"effort":"none"},
+//!  "reasoning":{"effort":"low"},
 //!  "store":false,
 //!  "tool_choice":"required",
 //!  "tools":[{"description":"…","name":"result","parameters":{…},"strict":false,"type":"function"}]}
@@ -321,8 +323,8 @@
 //! The messages are the `input` (parts as `input_text` and
 //! `input_image`, whose `image_url` is the image's `data:` URL; an
 //! assistant's text parts as `output_text`), `reasoning_effort` is
-//! `reasoning.effort` (any effort is admitted with a schema: the Responses
-//! API takes function tools at every effort), `max_completion_tokens` is
+//! `reasoning.effort` (any effort is admitted with a schema, `low` without
+//! one: the Responses API takes function tools at every effort), `max_completion_tokens` is
 //! `max_output_tokens`, the backend stores nothing (`store` `false`), and
 //! the function tool is flat and not strict (a strict tool refuses a schema
 //! with an optional property). A streamed request is `"stream": true` alone
@@ -1255,19 +1257,20 @@ fn boolean_parameter(
 }
 
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
-/// or [`DEFAULT_REASONING_EFFORT`] without the parameter. With a schema
-/// (`tools`): `none` without the parameter, and on Chat Completions any
-/// other value is refused, since reasoning models reject function tools
-/// there unless the effort is `none` (the Responses API takes function
-/// tools at every effort).
+/// or [`DEFAULT_REASONING_EFFORT`] without the parameter (or with `null`).
+/// With a schema (`tools`) on Chat Completions: `none` without the
+/// parameter, and any other value is refused, since reasoning models
+/// reject function tools there unless the effort is `none`. The Responses
+/// API takes function tools at every effort, so a schema call there
+/// reasons at [`DEFAULT_REASONING_EFFORT`] without the parameter.
 fn reasoning_effort_parameter(
     value: Option<&Data>,
     tools: bool,
     api: Api,
 ) -> Result<&'static str, &'static str> {
     match value {
-        None if tools => Ok(TOOLS_REASONING_EFFORT),
-        None => Ok(DEFAULT_REASONING_EFFORT),
+        None | Some(Data::Null) if tools && api == Api::Chat => Ok(TOOLS_REASONING_EFFORT),
+        None | Some(Data::Null) => Ok(DEFAULT_REASONING_EFFORT),
         Some(Data::String(effort))
             if tools && api == Api::Chat && effort != TOOLS_REASONING_EFFORT =>
         {

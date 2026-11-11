@@ -15,7 +15,8 @@
 
   Joining (decision D107): the environment's <invoke> attaches the
   body. Its <param>s are the activation settings (model,
-  intuition_model, reflection_model, api, reflection_api, bounds, traits, database, environment: the environment's
+  intuition_model, reflection_model, api, reflection_api, reasoning_effort,
+  reflection_reasoning_effort, bounds, traits, database, environment: the environment's
   id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
@@ -308,6 +309,14 @@
          FLOPPY_REFLECTION_BASE_URL's (reflection_api). -->
     <data id="api" expr="'chat'"/>
     <data id="reflection_api" expr="'chat'"/>
+    <!-- The reasoning effort of FLOPPY_BASE_URL's model calls
+         (reasoning_effort) and of FLOPPY_REFLECTION_BASE_URL's
+         (reflection_reasoning_effort): null is the generate service's
+         default (none for a schema call on Chat Completions, low on the
+         Responses API); another effort with a schema needs the Responses
+         API. -->
+    <data id="reasoning_effort" expr="null"/>
+    <data id="reflection_reasoning_effort" expr="null"/>
     <!-- The time bounds for the cognition (its stages' inactivity and
          backstop, and reflection's revising; decision D101): each absent one
          is the ability's own default. -->
@@ -430,6 +439,8 @@
       <param name="reflection_model" expr="reflection_model"/>
       <param name="api" expr="api"/>
       <param name="reflection_api" expr="reflection_api"/>
+      <param name="reasoning_effort" expr="reasoning_effort"/>
+      <param name="reflection_reasoning_effort" expr="reflection_reasoning_effort"/>
       <param name="bounds" expr="bounds"/>
       <param name="memory" expr="memoryAddress()"/>
       <param name="embedding" expr="embeddingAddress()"/>
