@@ -60,3 +60,19 @@ function sensitivityTimedOut() {
 function productParticipants(_event) {
   return _event.data.participants || [];
 }
+
+// A GPT-Live mouth (decision D285)
+
+function hasEnvironment() {
+  return environment !== null;
+}
+
+function environmentTarget() {
+  return '#_scxml_' + environment;
+}
+
+// A chunk GPT-Live said, as the mouth's sound.
+function liveSound(chunk) {
+  return ({audio: chunk.audio, media_type: chunk.media_type, sample_rate_hz: chunk.sample_rate_hz,
+    channels: chunk.channels, source: 'live'});
+}

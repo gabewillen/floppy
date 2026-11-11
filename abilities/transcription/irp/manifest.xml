@@ -59,4 +59,10 @@
       <start uri="170/test170.scxml"/>
     </test>
   </assert>
+  <assert id="transcription-9" specnum="9" specid="#transcription-9">
+    <![CDATA[With `provider` `live` GPT-Live is the mouth too (decision D285): each `bot.ability.live.audio` chunk its session returns goes to the parent as the efference copy `bot.ability.speaking.efference` `{mouth: "live", duration, ...}` of the audio still to play, then as the chunk itself; the parent's `bot.ability.live.answer` goes to the session.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+  </assert>
 </assertions>

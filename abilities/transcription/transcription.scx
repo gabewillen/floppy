@@ -40,8 +40,7 @@
   key, with live_model gpt-live-1, live_voice and live_instructions, null
   for the API's and the service's defaults), which speaks the same
   hearing contract: GPT-Live hears the sounds, and each turn it delegates
-  to its backend ends a turn here. GPT-Live's own speech is dropped (no
-  output), so the bot still answers in its own voice. The session is the
+  to its backend ends a turn here. The session is the
   Connection region's: Choosing enters Speech (invoke "stream") or Live
   (invoke "live"), and the Session region (Opening, Hearing) sends to
   whichever it is. Opening waits for the session's
@@ -91,6 +90,20 @@
   turn without words is let go. What is heard from then on is the next
   turn's.
 
+  The mouth (provider "live", decision D285): GPT-Live says what the bot
+  says, its backchannels while the bot thinks included. The session
+  writes its audio to live_output (chunked as floppy-live.<n>.pcm), and
+  each bot.ability.live.audio chunk goes to the parent twice, in order:
+  as the efference copy bot.ability.speaking.efference {mouth: live_mouth
+  "live", duration, media_type, sample_rate_hz, channels}, duration the
+  seconds of GPT-Live's audio still to play (chunks arrive faster than
+  they play, so the playout is tracked as live_until_ms, the wall-clock
+  time the queued audio ends), then the chunk itself, which the listening
+  puts into the environment as the mouth's sound. The bot's reply arrives
+  from the parent as bot.ability.live.answer {words} and goes to the
+  session, which gives it to GPT-Live for the turn it delegated last.
+  Both are taken anywhere in Streaming; outside it they are dropped.
+
   Not yet: the overlap fact (another voice sustained while the bot
   produces; the session's overlap is dropped), and one session per sound
   source (one session hears every source).
@@ -119,6 +132,11 @@
     <data id="live_model" expr="'gpt-live-1'"/>
     <data id="live_voice" expr="null"/>
     <data id="live_instructions" expr="null"/>
+    <!-- Where GPT-Live's audio is written, the mouth it is said from, and
+         when the audio queued so far ends (ms since the epoch). -->
+    <data id="live_output" expr="'media/floppy-live.pcm'"/>
+    <data id="live_mouth" expr="'live'"/>
+    <data id="live_until_ms" expr="0"/>
     <data id="product_threshold_db" expr="3.0"/>
     <data id="open_timeout_ms" expr="30000"/>
     <data id="first_backoff_ms" expr="1000"/>
@@ -166,6 +184,25 @@
       <log label="transcription" expr="lostLog(_event)"/>
     </transition>
 
+    <!-- What GPT-Live says: the copy, then the chunk, to the parent; and
+         the bot's reply, to the session (decision D285). -->
+    <transition event="bot.ability.live.audio" event:schema="../schemas/bot.ability.live.audio.json">
+      <assign location="live_until_ms" expr="liveUntil(_event.data)"/>
+      <send event="bot.ability.speaking.efference" target="#_parent">
+        <content expr="liveCopy(_event.data)"/>
+      </send>
+      <send event="bot.ability.live.audio" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.live.answer" event:schema="../schemas/bot.ability.live.answer.json">
+      <if cond="isLive()">
+        <send event="bot.ability.live.answer" target="#_live">
+          <content expr="_event.data"/>
+        </send>
+      </if>
+    </transition>
+
     <!-- The connection: the speech backend's stream, or a GPT-Live
          session, held while Streaming is. -->
     <state id="Connection" initial="Choosing">
@@ -188,6 +225,7 @@
           <param name="model" expr="live_model"/>
           <param name="voice" expr="live_voice"/>
           <param name="instructions" expr="live_instructions"/>
+          <param name="output" expr="live_output"/>
         </invoke>
       </state>
     </state>

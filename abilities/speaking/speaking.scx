@@ -129,6 +129,13 @@
   error.execution in the sender (scxml.rs session.accepts-event-data).
   vocal's events are checked where vocal creates them.
 
+  GPT-Live (speech_provider "live", decision D285): an utterance is not
+  encoded; delegating sends its words to the parent as
+  bot.ability.live.answer {words} (which reaches the listening's live
+  session, where GPT-Live says them in its own words), logs floppy.say,
+  and records them as spoken whole (outcome "completed"). Drafts are
+  dropped: GPT-Live is given the whole reply.
+
   Drafts (decision D262, mosfet.py's speaking drafts): a reply can be
   said while it is still being written. bot.ability.speaking.draft {part,
   words, offset, expression?} in idle opens a drafted utterance: its text
@@ -169,6 +176,9 @@
     <!-- The mouth: the efference copy's mouth and the sound's source, so
          the listening can tell its own voice apart. -->
     <data id="mouth" expr="'speaking'"/>
+    <!-- Who says the reply (the communication's <param>): null, vocal and
+         this mouth; "live", GPT-Live (decision D285). -->
+    <data id="speech_provider" expr="null"/>
     <data id="encoding_timeout_ms" expr="30000"/>
     <!-- How long a drafted reply may go without a draft before its whole
          arrives (decision D262, mosfet.py's draft_timeout). -->
@@ -263,6 +273,15 @@
           <param name="message" expr="'A reply must say something: every part needs words, a sound or a pause, and the words must not be blank.'"/>
         </send>
       </transition>
+      <!-- GPT-Live says the reply (decision D285). -->
+      <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
+                  cond="isLive()" target="delegating">
+        <assign location="parts" expr="_event.data.parts"/>
+        <assign location="text" expr="said(parts)"/>
+        <assign location="utterance_id" expr="utteranceId(_event)"/>
+        <assign location="drafted" expr="false"/>
+        <assign location="drafts" expr="[]"/>
+      </transition>
       <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                   target="encoding">
         <assign location="parts" expr="_event.data.parts"/>
@@ -271,6 +290,9 @@
         <assign location="drafted" expr="false"/>
         <assign location="drafts" expr="[]"/>
       </transition>
+      <!-- GPT-Live is given the whole reply only (decision D285). -->
+      <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json"
+                  cond="isLive()"/>
       <!-- A reply still being written: a drafted utterance (decision D262). -->
       <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json"
                   target="encoding">
@@ -684,6 +706,21 @@
             </transition>
           </state>
         </state>
+      </state>
+
+      <!-- GPT-Live says the reply (decision D285): its words go to the
+           live session through the parent, and are recorded as said. -->
+      <state id="delegating">
+        <onentry>
+          <assign location="operation" expr="nextOperation()"/>
+          <assign location="spoken" expr="text"/>
+          <assign location="unspoken" expr="''"/>
+          <send event="bot.ability.live.answer" target="#_parent">
+            <param name="words" expr="text"/>
+          </send>
+          <log label="floppy.say" expr="text"/>
+        </onentry>
+        <transition target="recording"/>
       </state>
 
       <!-- The words go into the conversation's exchange. -->

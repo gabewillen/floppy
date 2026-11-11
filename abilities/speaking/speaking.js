@@ -312,3 +312,8 @@ function recordingTimedOutLog() {
 function recordingFailure(_event) {
   return 'Conversation history recording failed (' + _event.name + ').';
 }
+
+// GPT-Live says the reply (decision D285).
+function isLive() {
+  return speech_provider === 'live';
+}
