@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 139] = [
+const ABILITY_EVENTS: [&str; 142] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -195,6 +195,10 @@ const ABILITY_EVENTS: [&str; 139] = [
     "bot.ability.listening.sensitivity.failed",
     // The transcription's turns, handed to the interpretation (D270).
     "bot.ability.listening.transcription.turn",
+    // A GPT-Live session's mouth (D285).
+    "bot.ability.live.answer",
+    "bot.ability.live.audio",
+    "bot.ability.live.said",
     // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",

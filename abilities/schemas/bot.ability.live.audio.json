@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.live.audio",
+  "description": "[floppy name] A chunk of what GPT-Live says, returned by a live speech session as it arrives (decision D285): a reference to the chunk's audio, its number, and its sound fields, as an encoding's chunk carries them.",
+  "properties": {
+    "audio": {
+      "description": "Reference (a URI reference) to this chunk's audio, a file of its own: the session's output reference with .<sequence> before its extension [floppy field].",
+      "examples": [
+        "media/live.0.pcm"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Audio",
+      "type": "string"
+    },
+    "sequence": {
+      "description": "The chunk's number, from 0, in the order the session returns its chunks [floppy field].",
+      "examples": [
+        0,
+        3
+      ],
+      "minimum": 0,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "media_type": {
+      "description": "The chunk's media type: raw PCM.",
+      "enum": [
+        "audio/pcm"
+      ],
+      "examples": [
+        "audio/pcm"
+      ],
+      "title": "Media Type",
+      "type": "string"
+    },
+    "sample_rate_hz": {
+      "description": "Sample rate of the chunk's PCM in hertz.",
+      "examples": [
+        16000
+      ],
+      "minimum": 1,
+      "title": "Sample Rate Hz",
+      "type": "integer"
+    },
+    "channels": {
+      "description": "Channel count of the chunk's PCM.",
+      "examples": [
+        1
+      ],
+      "minimum": 1,
+      "title": "Channels",
+      "type": "integer"
+    },
+    "duration": {
+      "description": "The chunk's seconds of sound.",
+      "examples": [
+        0.1
+      ],
+      "minimum": 0,
+      "title": "Duration",
+      "type": "number"
+    }
+  },
+  "required": [
+    "audio",
+    "sequence",
+    "media_type",
+    "sample_rate_hz",
+    "channels",
+    "duration"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "audio": "media/live.0.pcm",
+      "sequence": 0,
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 16000,
+      "channels": 1,
+      "duration": 0.1
+    }
+  ]
+}

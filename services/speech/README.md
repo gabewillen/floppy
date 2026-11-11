@@ -19,6 +19,7 @@ telemetry.
 | `decode` | `speech_decoding` | `POST {base}/audio/transcriptions`, or with `provider` `gemini` `POST {base}/interactions` | `bot.ability.hearing.speech.decoding.output {text}` |
 | `encode` | `vocal` | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its streaming `text-to-speech/{voice}/stream` API, or with `gemini` `POST {base}/interactions` (`audio/pcm` or `audio/wav`) | each `bot.ability.vocal.speech.encoding.chunk {audio, sequence, media_type, sample_rate_hz, channels, duration}` as it is encoded, then `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
 | `stream` | `transcription` | WebSocket `GET {base}/audio/stream?sample_rate=16000&language=L&chunk=C&turns=1`, held for the whole invocation | `bot.ability.hearing.speech.stream.ready`, then as the server hears them `voice_started`, `voice_ended`, `partial`, `transcript`, `turn_ended` and `overlap`; `failed {kind}` when it is lost |
+| `live` | `transcription` (`provider` `live`) | WebSocket `GET {base}/live/sessions` (OpenAI's GPT-Live, `gpt-live-1`), opened with `session.start` (client delegation, 16 kHz PCM both ways) and held for the whole invocation | the `stream` operation's `ready`, `voice_started`, `partial`, `voice_ended`, `transcript` and `turn_ended` (one turn per delegation); with `output`, `bot.ability.live.audio` and `bot.ability.live.said`; `failed {kind}` when it is lost |
 | `detect` | `voice_detection` | `POST {base}/vad` | `bot.ability.hearing.voice.detection.output` |
 | `diarize` | `voice_diarization` | `POST {base}/audio/diarization` | `bot.ability.hearing.voice.diarization.output` |
 | `identify` | `voice_identification` | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |
@@ -126,3 +127,33 @@ reads of every size; `-- --ignored live_speech_round_trip_through_an_env_file`
 encodes and decodes a sentence on the backend `FLOPPY_LIVE_ENV_FILE` names.
 The voice operations are tested in the crate ([src/voice/tests.rs](src/voice/tests.rs))
 and through the listening (`--test listening`).
+
+## Live speech
+
+`live` is a GPT-Live session (decision D285): OpenAI's full-duplex
+speech-to-speech model as the ear, the mouth and the turn-taking, with
+every task delegated to floppy (`delegation: {type: "client"}`). The
+`baseurl` slot names `https://api.openai.com/v1` (its `wss` form is
+used) and the key goes as `authorization: Bearer <apikey>`; the
+Transcription binds them as `FLOPPY_LIVE_BASE_URL` and
+`FLOPPY_LIVE_API_KEY`. Parameters: `model` (required, `gpt-live-1`),
+`voice` (optional), `instructions` (optional; by default GPT-Live is told
+to delegate every turn and say what the backend's commentary says) and
+`output` (optional: where GPT-Live's audio is chunked to).
+
+It speaks the `stream` operation's hearing contract, so the
+Transcription hears through it unchanged: each
+`bot.ability.hearing.speech.stream.audio` is a `session.input_audio.append`
+(16 kHz mono 16-bit PCM, held until `session.started`, at most 2 s of
+it), `session.started` is `ready`, the person's transcript deltas
+(`session.input_transcript.delta`) open a turn with `voice_started` and
+return its words so far as `partial`, and each `session.delegation.created`
+ends a turn with words with `voice_ended`, `transcript` and
+`turn_ended {text}` (the delegation carries no text). The mouth:
+`bot.ability.live.answer {words}` is sent as `session.commentary.append`
+for the last delegation, which GPT-Live says in its own words; with
+`output`, GPT-Live's audio returns as `bot.ability.live.audio` chunks
+(`media/live.pcm` is chunked as `media/live.0.pcm`, …, 16 kHz mono PCM)
+and its words as `bot.ability.live.said {text}`. An `error` event or
+`session.closed` answers `failed {kind: "unavailable"}`. Leaving the
+invoking state sends `session.close` and closes the connection.
