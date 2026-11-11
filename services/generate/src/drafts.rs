@@ -837,14 +837,20 @@ const fn is_literal(character: char) -> bool {
     )
 }
 
-/// The arguments of a streamed reply's first tool call (`index` 0) as
-/// they arrive: each read of the body gives the fragments of
-/// `delta.tool_calls[0].function.arguments` its complete `data:` lines
-/// carry, in order. Lines that are not JSON chunks are skipped; the whole
-/// reply is still read and checked by [`crate::stream_reply`].
+/// The arguments of a streamed reply's first tool call as they arrive:
+/// each read of the body gives the fragments its complete `data:` lines
+/// carry, in order. On Chat Completions they are
+/// `delta.tool_calls[0].function.arguments` (`index` 0); on the Responses
+/// API, the `delta` of each `response.function_call_arguments.delta` event
+/// of the output item the first `response.output_item.added` of a
+/// `function_call` opened (its `output_index`). Lines that are not JSON
+/// chunks are skipped; the whole reply is still read and checked by
+/// [`crate::stream_reply`] or [`crate::response_stream_reply`].
 #[derive(Debug, Default)]
 pub struct Arguments {
     scanned: usize,
+    /// The `output_index` of a Responses stream's first `function_call`.
+    first_call: Option<u64>,
 }
 
 impl Arguments {
@@ -862,9 +868,13 @@ impl Arguments {
             let Some(data) = line.strip_prefix(b"data:") else {
                 continue;
             };
-            let Ok(chunk) = serde_json::from_slice::<Json>(data) else {
+            let Ok(chunk) = serde_json::from_slice::<Json>(data.trim_ascii()) else {
                 continue;
             };
+            if let Some(kind) = chunk.get("type").and_then(Json::as_str) {
+                self.responses_event(kind, &chunk, &mut fragments);
+                continue;
+            }
             for choice in chunk
                 .get("choices")
                 .and_then(Json::as_array)
@@ -889,6 +899,29 @@ impl Arguments {
         }
         self.scanned = start;
         fragments
+    }
+
+    /// One Responses API stream event: the first `function_call` item's
+    /// argument deltas.
+    fn responses_event(&mut self, kind: &str, event: &Json, fragments: &mut String) {
+        let index = event.get("output_index").and_then(Json::as_u64);
+        match kind {
+            "response.output_item.added"
+                if self.first_call.is_none()
+                    && event.pointer("/item/type").and_then(Json::as_str)
+                        == Some("function_call") =>
+            {
+                self.first_call = index;
+            }
+            "response.function_call_arguments.delta"
+                if index.is_some() && index == self.first_call =>
+            {
+                if let Some(delta) = event.get("delta").and_then(Json::as_str) {
+                    fragments.push_str(delta);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1328,6 +1361,29 @@ mod tests {
             "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"other\"}}]}}]}\n",
             "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ents\\\"\"}}]}}]}\n",
             "data: [DONE]\n",
+        )
+        .as_bytes();
+        let cut = body.len() - 30;
+        let mut arguments = Arguments::default();
+        let mut read = arguments.read(&body[..cut]);
+        read.push_str(&arguments.read(body));
+        assert_eq!(read, "{\"events\"");
+    }
+
+    /// On the Responses API the first `function_call` item's argument
+    /// deltas are the arguments; a reasoning item's deltas and a later
+    /// call's are not.
+    #[test]
+    fn a_responses_streams_first_call_arguments_are_read() {
+        let body = concat!(
+            "event: response.output_item.added\n",
+            "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"reasoning\"}}\n\n",
+            "data: {\"type\":\"response.reasoning_summary_text.delta\",\"output_index\":0,\"delta\":\"hmm\"}\n\n",
+            "data: {\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"function_call\",\"arguments\":\"\"}}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":1,\"delta\":\"{\\\"ev\"}\n\n",
+            "data: {\"type\":\"response.output_item.added\",\"output_index\":2,\"item\":{\"type\":\"function_call\",\"arguments\":\"\"}}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":2,\"delta\":\"other\"}\n\n",
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"output_index\":1,\"delta\":\"ents\\\"\"}\n\n",
         )
         .as_bytes();
         let cut = body.len() - 30;

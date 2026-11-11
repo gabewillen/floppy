@@ -1,10 +1,26 @@
 # generate
 
 The `generate` invoked service: one model generation per `<invoke>` on the
-`OpenAI`-compatible Chat Completions API, as a Wasm component
+`OpenAI`-compatible Chat Completions API, or `OpenAI`'s Responses API when
+the invocation asks (`<param name="api" expr="'responses'"/>`), as a Wasm component
 (`https://github.com/stateforward/floppy/services/generate`). Its crate
 documentation ([src/lib.rs](src/lib.rs)) is the full contract: parameters,
 events, the request, the reply, bounds, and telemetry.
+
+## The Responses API
+
+`api` is `chat` (Chat Completions, `POST {base}/chat/completions`, the
+default) or `responses` (`POST {base}/responses`). Every other parameter
+means the same on both: on the Responses API the messages are the `input`,
+`reasoning_effort` is `reasoning.effort` (any effort is admitted with a
+schema), `max_completion_tokens` is `max_output_tokens`, the one function
+tool is sent flat with `"strict": false`, and `"store": false` keeps the
+backend from storing the call. The reply, streamed or not, becomes the same
+`generate.result` or `generate.failed`: the `message` items' text is the
+content, the `function_call` items are the calls (their `call_id` the call's
+`id`), and an `incomplete` response is `truncated` (`max_output_tokens`) or
+`filtered` (`content_filter`). Drafts read the first function call's
+`response.function_call_arguments.delta` events.
 
 ## Events
 

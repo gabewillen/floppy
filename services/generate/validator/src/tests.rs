@@ -250,6 +250,30 @@ fn the_tool_choice_and_the_sampling_parameters_are_checked() {
     let repaired = fixed(&source, &found[0]);
     assert!(repaired.contains(r#"expr="'none'""#), "{repaired}");
     assert!(findings_of(&repaired).is_empty());
+    // The Responses API takes function tools at every effort, and an
+    // expression may name it.
+    for api in ["'responses'", "api"] {
+        let (_, found) = findings(&invoke(&format!(
+            r#"{MODEL}{PROMPT}{SCHEMA}<param name="api" expr="{api}"/><param name="reasoning_effort" expr="'high'"/>"#
+        )));
+        assert!(found.is_empty(), "{api}");
+    }
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}{SCHEMA}<param name="api" expr="'chat'"/><param name="reasoning_effort" expr="'high'"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
+    // An api the service does not speak, with a fix to the closest.
+    let (source, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="api" expr="'response'"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
+    let repaired = fixed(&source, &found[0]);
+    assert!(repaired.contains(r#"expr="'responses'""#), "{repaired}");
+    assert!(findings_of(&repaired).is_empty());
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="api" expr="true"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
     let bounds = invoke(&format!(
         r#"{MODEL}{PROMPT}<param name="temperature" expr="2"/><param name="max_completion_tokens" expr="1048576"/><param name="thinking_token_budget" expr="1e3"/>"#
     ));
@@ -376,6 +400,13 @@ fn the_contract_is_the_service_s_own() {
     .map(|code| code.name())
     .collect();
     assert_eq!(codes, FAILURE_CODES);
+    assert_eq!(
+        [
+            floppy_service_generate::Api::Chat.name(),
+            floppy_service_generate::Api::Responses.name()
+        ],
+        super::APIS
+    );
     // No image is read here.
     let no_files = |_: &str, _: usize| Err(ImageReadFailure::Unreadable);
     // Every listed parameter is one the service takes: given twice, it is
