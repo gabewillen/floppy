@@ -16,7 +16,9 @@
   (abilities/interpretation/interpretation.scx, the slow half) and
   <invoke id="transcription"> (abilities/transcription/transcription.scx,
   the streaming hearing path, mosfet.py's Transcription; the <data>
-  streams, true, is its <param> enabled). Each is ready when it
+  streams, true, is its <param> enabled, and stream_provider, null, its
+  <param> provider: "live" hears through a GPT-Live session, decision
+  D285). Each is ready when it
   sends bot.ability.ready; initializing waits for the sensitivity and the
   interpretation only, so a streaming session that is slow to open (or
   never opens) never holds the listening back.
@@ -103,6 +105,10 @@
          streaming session ends, the interpretation hears every scored
          sound. -->
     <data id="streams" expr="true"/>
+    <!-- Whom the transcription streams to (its <param> provider): null,
+         the speech backend's stream; "live", a GPT-Live session (decision
+         D285, FLOPPY_LIVE_BASE_URL and FLOPPY_LIVE_API_KEY). -->
+    <data id="stream_provider" expr="null"/>
     <data id="transcribing" expr="false"/>
     <!-- Whether its streaming session may still open (it is neither ready
          nor ended), and the scored sounds held for it meanwhile. -->
@@ -124,6 +130,7 @@
     </invoke>
     <invoke id="transcription" type="scxml" src="../transcription/transcription.scx">
       <param name="enabled" expr="streams"/>
+      <param name="provider" expr="stream_provider"/>
     </invoke>
 
     <!-- A child's readiness, once (decision D242), named by its invoke id. -->

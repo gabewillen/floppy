@@ -34,10 +34,12 @@
 //!   request (`"stream": true`) as its server-sent-event stream
 //!   ([`support::answer_as_asked`]). With `"websocket": [SESSION, ...]`
 //!   it also accepts WebSocket upgrades (a streaming hearing session,
-//!   `GET .../audio/stream`), each connection taking the next SESSION (the
+//!   `GET .../audio/stream`, or a GPT-Live session, `GET .../live/sessions`),
+//!   each connection taking the next SESSION (the
 //!   last one repeats), a list of rounds of text frames: the first round
-//!   is sent once it opens, and round `n` once its `n`th binary frame
-//!   arrives (none after the last); without it an upgrade is answered 404.
+//!   is sent once it opens, and round `n` once its `n`th sound arrives (a
+//!   binary frame, or a `session.input_audio.append` text frame; none
+//!   after the last); without it an upgrade is answered 404.
 //!   Every service's base URL points at it;
 //! * `irp/sources/<id>/logs.json` (optional), `{LABEL: [TEXT, ...]}`:
 //!   the run's logs of each label are exactly those texts, in order;
@@ -156,7 +158,8 @@ struct Backend {
 }
 
 /// One scripted WebSocket session's rounds: the text frames sent on
-/// opening, then after each binary frame.
+/// opening, then after each sound it hears (a binary frame, or a GPT-Live
+/// `session.input_audio.append`, decision D285).
 type Rounds = Vec<Vec<Json>>;
 
 /// A case's scripted WebSocket sessions, and how many have opened.
@@ -212,6 +215,14 @@ fn serve_socket(mut stream: TcpStream, key: &str, rounds: &Rounds) {
     while let Some((opcode, payload)) = read_frame(&mut stream) {
         match opcode {
             2 => {
+                heard += 1;
+                if !say(&mut stream, heard) {
+                    return;
+                }
+            }
+            1 if serde_json::from_slice::<Json>(&payload)
+                .is_ok_and(|frame| frame["type"] == "session.input_audio.append") =>
+            {
                 heard += 1;
                 if !say(&mut stream, heard) {
                     return;
@@ -396,7 +407,7 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\nFLOPPY_EMOTION_BASE_URL={origin}/v1\nFLOPPY_EMBEDDING_BASE_URL={origin}/v1\nFLOPPY_REFLECTION_BASE_URL={origin}/v1\n{stream}",
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_LIVE_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\nFLOPPY_EMOTION_BASE_URL={origin}/v1\nFLOPPY_EMBEDDING_BASE_URL={origin}/v1\nFLOPPY_REFLECTION_BASE_URL={origin}/v1\n{stream}",
             origin = backend.origin,
             stream = if streams { "FLOPPY_STREAM=true\n" } else { "" },
         ),

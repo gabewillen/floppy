@@ -178,3 +178,11 @@ function endedTurn(_event) {
 function hasWords(heard) {
   return heard.text !== '' && heard.frames.length > 0 && heard.sensed !== null;
 }
+
+// Connection
+
+// The session is a GPT-Live session (decision D285), not the speech
+// backend's stream.
+function isLive() {
+  return provider === 'live';
+}

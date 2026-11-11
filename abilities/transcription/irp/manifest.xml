@@ -53,4 +53,10 @@
       <start uri="160/test160.scxml"/>
     </test>
   </assert>
+  <assert id="transcription-8" specnum="8" specid="#transcription-8">
+    <![CDATA[With `provider` `live` it opens a GPT-Live session (the speech service's operation `live`, decision D285) instead, which speaks the same hearing contract: the person's transcript deltas make the turn, and the turn GPT-Live delegates to its backend ends it, handed on as `bot.ability.listening.transcription.turn` with its words.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
 </assertions>
