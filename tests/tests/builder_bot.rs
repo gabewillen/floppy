@@ -503,6 +503,44 @@ fn ampersand_draft(into: &str) -> String {
     ))
 }
 
+/// The names [`large_script_draft`]'s document calls: as many as its green
+/// state logs.
+const LARGE_CALLS: usize = 60;
+
+/// [`scripted_draft`] whose green state also logs `probe0()` to
+/// `probe59()`, all declared in its script with 190 more functions nothing
+/// calls, as reflection's 13th revision of one behavior was (#169):
+/// `over` pads the script past the builder's 16384-character bound
+/// (`script-too-large`), and otherwise it stays just under it, which is
+/// still enough that a declared-name scan per called name (60 x 250 matches
+/// over about 16 KB in one evaluation) filled scxml.rs's 64 MiB data model
+/// store and ended the run as `machine-platform`.
+fn large_script_draft(over: bool) -> String {
+    let mut draft: Json = serde_json::from_str(&scripted_draft()).expect("the draft is JSON");
+    let logs: String = (0..LARGE_CALLS)
+        .map(|i| format!(r#"<log label="probe" expr="probe{i}()"/>"#))
+        .collect();
+    let scxml = draft["scxml"].as_str().expect("scxml is text").replacen(
+        r##"<onentry><send target="#_parent" event="light.green"/>"##,
+        &format!(r##"<onentry>{logs}<send target="#_parent" event="light.green"/>"##),
+        1,
+    );
+    let pad = if over { 48 } else { 34 };
+    let mut script = SCRIPT.to_owned();
+    for i in 0..LARGE_CALLS {
+        script.push_str(&format!("function probe{i}() {{\n  return {i};\n}}\n"));
+    }
+    for i in 0..190 {
+        script.push_str(&format!(
+            "function unused{i}() {{\n  return '{}';\n}}\n",
+            "x".repeat(pad)
+        ));
+    }
+    draft["scxml"] = scxml.into();
+    draft["script"] = script.into();
+    draft.to_string()
+}
+
 /// [`scripted_draft`] without its root `<script src>`, as the 2026-10-20
 /// live `PingPongReply` draft was (`script-not-loaded`), or without its
 /// script (`undeclared-function`).
@@ -873,6 +911,7 @@ fn answers_plan(path: &str) -> bool {
             | "/again/v1/chat/completions"
             | "/changed/v1/chat/completions"
             | "/unloaded/v1/chat/completions"
+            | "/large/v1/chat/completions"
             | "/throwing/v1/chat/completions"
             | "/nested/v1/chat/completions"
     )
@@ -970,6 +1009,9 @@ fn mock_reply(
                 2 => unloaded_script_draft(false),
                 _ => scripted_draft(),
             }))
+        }
+        ("/large/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&large_script_draft(authors == 1)))
         }
         ("/throwing/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&throwing_route_draft(authors)))
@@ -2596,6 +2638,43 @@ fn a_draft_whose_script_is_not_loaded_or_not_declared_is_repaired_before_its_sim
     assert_eq!(
         simulated, 1,
         "only the whole draft is simulated: {records:?}"
+    );
+}
+
+/// A draft whose script is longer than the builder's bound is told so
+/// before its script is scanned, and one just under it is checked in one
+/// evaluation without ending the run (#169): `/large/v1` answers
+/// [`large_script_draft`] over the bound, then under it, which ends in done.
+#[test]
+fn a_draft_with_a_large_script_is_bounded_and_checked_without_ending_the_run() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "large",
+        "large",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let script = done["script"].as_str().expect("the script");
+    assert!(
+        (15_000..=16_384).contains(&script.len()),
+        "the accepted script is just under the bound: {}",
+        script.len()
+    );
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 1, "{done}");
+    assert_eq!(history[0]["diagnostics"][0]["code"], "script-too-large");
+    let message = history[0]["diagnostics"][0]["message"]
+        .as_str()
+        .expect("the message");
+    assert!(
+        message.contains("more than the 16384 a draft may hold")
+            && message.contains("calls only mayGo, probe0, ")
+            && !message.contains("unused"),
+        "{message}"
     );
 }
 

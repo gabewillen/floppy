@@ -436,6 +436,9 @@ function testsOutOfBoundsDiagnostics() {
 // there, not only the simulated child.
 function scriptErrors() {
   var errors = [];
+  if (draft.script.length > max_script_chars) {
+    return [scriptTooLargeDiagnostic()];
+  }
   if (draft.script.trim() !== '' && scxml_text.indexOf('src="' + draftFile('.js') + '"') < 0) {
     errors.push({kind: 'draft', code: 'script-not-loaded', message: 'script is not empty, but the document has no <script src="' + draftFile('.js') + '"/> as the first child of its root after datamodel, so none of its functions is defined'});
   }
@@ -449,6 +452,16 @@ function scriptErrors() {
     errors.push({kind: 'draft', code: 'undeclared-function', message: 'the document calls ' + undeclared.join(', ') + ', which script does not declare: declare each as a function in script, or call none'});
   }
   return errors;
+}
+
+// A script over max_script_chars (#169): its scans are not run, as each
+// costs scxml.rs's data model memory in proportion to the script's length
+// times its matches. The diagnostic names what the document calls, which a
+// revision that folded lesson after lesson into one behavior keeps, beside
+// the functions nothing calls any more.
+function scriptTooLargeDiagnostic() {
+  var called = calledFunctions().filter(function (name) { return ECMASCRIPT_GLOBALS.indexOf(name) < 0; });
+  return {kind: 'draft', code: 'script-too-large', message: 'script is ' + draft.script.length + ' characters, more than the ' + max_script_chars + ' a draft may hold: the document calls only ' + (called.length > 0 ? called.join(', ') : 'none of its functions') + ', so keep those and what they use, remove every other function and variable, and shorten what is left'};
 }
 
 var ECMASCRIPT_GLOBALS = ['In', 'Array', 'Boolean', 'Date', 'Error', 'Number', 'Object', 'RegExp', 'String', 'decodeURIComponent', 'encodeURIComponent', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
