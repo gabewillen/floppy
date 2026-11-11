@@ -10,6 +10,8 @@
 # last entry winning (`.env:.env.cpa`): the hosted gateway (FLOPPY_REFLECTION_* when
 # set, else FLOPPY_BASE_URL / FLOPPY_API_KEY) and TYPESAFE_* are all floppy uses.
 # FLOPPY_CARC_MODEL (default gpt-6-luna) is every model floppy calls.
+# For OpenAI directly: FLOPPY_CARC_GATEWAY=OPENAI FLOPPY_CARC_BASE_URL=https://api.openai.com/v1
+# with OPENAI_API_KEY in an env file.
 # FLOPPY_CARC_CONFIG (default arc1-smoke) and FLOPPY_CARC_SEED (default 0).
 set -eu
 ROOT=$(pwd)

@@ -215,11 +215,13 @@ def reply_words(text: str) -> list[str] | None:
 class Floppy:
     """One running environment with floppy in it."""
 
-    def __init__(self, layout: Path, memory: Path, media: Path, env_files: list[Path], scx: str, log: Path):
+    def __init__(self, layout: Path, memory: Path, media: Path, env_files: list[Path], scx: str, log: Path,
+                 env: dict[str, str] | None = None):
         command = [
             scx, "run", "--offline",
             "--cache-dir", str(ROOT / "target/components/package-cache"),
             *[arg for env_file in env_files for arg in ("--env-file", str(env_file))],
+            *[arg for name, value in (env or {}).items() for arg in ("--env", f"{name}={value}")],
             "--dir", f"{SERVICES}/sql={memory}::/memory",
             "--wasi", f"{SERVICES}/pgsql=inherit-network",
             *[arg for service in ("generate", "speech", "vision")
@@ -289,8 +291,14 @@ class FloppyLearner(BaseLearner):
         # endpoint's when an env file sets it, else FLOPPY_BASE_URL's (an env file such as .env.cpa).
         self.gateway = os.environ.get("FLOPPY_CARC_GATEWAY") or (
             "FLOPPY_REFLECTION" if "FLOPPY_REFLECTION_BASE_URL" in names else "FLOPPY")
-        if f"{self.gateway}_BASE_URL" not in names:
+        # FLOPPY_CARC_BASE_URL names the gateway's endpoint when no env file does, such as OpenAI's
+        # (FLOPPY_CARC_GATEWAY=OPENAI, FLOPPY_CARC_BASE_URL=https://api.openai.com/v1, the key an env
+        # file's OPENAI_API_KEY): scx gets it as --env, since a URL is no secret.
+        self.base_url = os.environ.get("FLOPPY_CARC_BASE_URL") or None
+        if self.base_url is None and f"{self.gateway}_BASE_URL" not in names:
             raise RuntimeError(f"no env file sets {self.gateway}_BASE_URL (the hosted gateway)")
+        if f"{self.gateway}_API_KEY" not in names:
+            raise RuntimeError(f"no env file sets {self.gateway}_API_KEY (the hosted gateway's key)")
         self.model = model or os.environ.get("FLOPPY_CARC_MODEL") or "gpt-6-luna"
         self.scx = scx or os.environ.get("FLOPPY_CARC_SCX") or shutil.which("scx") or "scx"
         self.start_timeout_s = start_timeout_s
@@ -350,7 +358,8 @@ class FloppyLearner(BaseLearner):
         for directory in (self.memory, self.layout / "behaviors", self.work / "media"):
             directory.mkdir(parents=True, exist_ok=True)
         self.floppy = Floppy(self.layout, self.memory, self.work / "media", self.env_files, self.scx,
-                             self.work / "floppy.log")
+                             self.work / "floppy.log",
+                             {f"{self.gateway}_BASE_URL": self.base_url} if self.base_url else None)
         self.turns = (self.work / "turns.jsonl").open("a")
         deadline = time.monotonic() + self.start_timeout_s
         while True:
