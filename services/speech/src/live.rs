@@ -85,10 +85,16 @@ pub const MAX_TURN_BYTES: usize = crate::stream::MAX_TEXT_BYTES;
 pub const MAX_VOICE_BYTES: usize = 128;
 
 /// The instructions without an `instructions` parameter: GPT-Live voices
-/// the conversation, and floppy decides what is said.
-pub const DEFAULT_INSTRUCTIONS: &str = "You are the voice of a conversational agent. \
-Delegate every turn the person takes to your backend, then say what the backend's commentary \
-says, in its words, briefly. Do not answer from your own knowledge.";
+/// the conversation, and floppy decides what is said. `gpt-live-1`
+/// delegates when it generates `<|SpawnThinking|>`, so the instructions
+/// name that token (OpenAI's live prompting guide); asked only to
+/// "delegate to the backend", it answers simple questions itself and
+/// never delegates (the 2026-11-11 live run).
+pub const DEFAULT_INSTRUCTIONS: &str = "You are the voice of Floppy, a conversational agent \
+whose backend decides everything it says. Backend tools: the backend answers every turn the \
+person takes. Generate <|SpawnThinking|> when: the person finishes saying anything at all, \
+every turn, without exception. Do not answer from your own knowledge, and do not guess the \
+result while waiting. When the backend's commentary arrives, say it in its words, briefly.";
 
 /// A validated `live` invocation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -465,6 +471,8 @@ mod tests {
                 r#"{{"session":{{"audio":{{"format":{{"rate":16000,"type":"audio/pcm"}},"output":{{"voice":"marin"}}}},"delegation":{{"type":"client"}},"instructions":"{DEFAULT_INSTRUCTIONS}","model":"gpt-live-1"}},"type":"session.start"}}"#
             )
         );
+        // gpt-live-1 delegates only when it generates this token.
+        assert!(DEFAULT_INSTRUCTIONS.contains("Generate <|SpawnThinking|> when:"));
         let bare = living("gpt-live-1".into(), None, Some("Be brief."), None).expect("valid");
         assert!(
             start_message(&bare)
