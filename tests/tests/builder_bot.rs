@@ -34,6 +34,7 @@
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -503,6 +504,18 @@ fn ampersand_draft(into: &str) -> String {
     ))
 }
 
+/// The drafts `/unloaded/v1` and `/large/v1` answer, by author call:
+/// [`unloaded_script_draft`] and [`large_script_draft`] first, then the
+/// scripted draft or the large one under the bound.
+fn script_check_draft(path: &str, authors: usize) -> String {
+    match (path.starts_with("/large/"), authors) {
+        (true, _) => large_script_draft(authors == 1),
+        (false, 1) => unloaded_script_draft(true),
+        (false, 2) => unloaded_script_draft(false),
+        (false, _) => scripted_draft(),
+    }
+}
+
 /// The names [`large_script_draft`]'s document calls: as many as its green
 /// state logs.
 const LARGE_CALLS: usize = 60;
@@ -517,9 +530,10 @@ const LARGE_CALLS: usize = 60;
 /// store and ended the run as `machine-platform`.
 fn large_script_draft(over: bool) -> String {
     let mut draft: Json = serde_json::from_str(&scripted_draft()).expect("the draft is JSON");
-    let logs: String = (0..LARGE_CALLS)
-        .map(|i| format!(r#"<log label="probe" expr="probe{i}()"/>"#))
-        .collect();
+    let mut logs = String::new();
+    for i in 0..LARGE_CALLS {
+        write!(logs, r#"<log label="probe" expr="probe{i}()"/>"#).expect("a String takes writes");
+    }
     let scxml = draft["scxml"].as_str().expect("scxml is text").replacen(
         r##"<onentry><send target="#_parent" event="light.green"/>"##,
         &format!(r##"<onentry>{logs}<send target="#_parent" event="light.green"/>"##),
@@ -528,13 +542,16 @@ fn large_script_draft(over: bool) -> String {
     let pad = if over { 48 } else { 34 };
     let mut script = SCRIPT.to_owned();
     for i in 0..LARGE_CALLS {
-        script.push_str(&format!("function probe{i}() {{\n  return {i};\n}}\n"));
+        write!(script, "function probe{i}() {{\n  return {i};\n}}\n")
+            .expect("a String takes writes");
     }
     for i in 0..190 {
-        script.push_str(&format!(
-            "function unused{i}() {{\n  return '{}';\n}}\n",
-            "x".repeat(pad)
-        ));
+        let padding = "x".repeat(pad);
+        write!(
+            script,
+            "function unused{i}() {{\n  return '{padding}';\n}}\n"
+        )
+        .expect("a String takes writes");
     }
     draft["scxml"] = scxml.into();
     draft["script"] = script.into();
@@ -1003,15 +1020,10 @@ fn mock_reply(
             | "/changed/v1/chat/completions",
             Some("scxml_draft"),
         ) => Some(completion(&diagnostics_route_draft(path, authors))),
-        ("/unloaded/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&match authors {
-                1 => unloaded_script_draft(true),
-                2 => unloaded_script_draft(false),
-                _ => scripted_draft(),
-            }))
-        }
-        ("/large/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&large_script_draft(authors == 1)))
+        (_, Some("scxml_draft"))
+            if path.starts_with("/unloaded/") || path.starts_with("/large/") =>
+        {
+            Some(completion(&script_check_draft(path, authors)))
         }
         ("/throwing/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&throwing_route_draft(authors)))
@@ -2672,7 +2684,8 @@ fn a_draft_with_a_large_script_is_bounded_and_checked_without_ending_the_run() {
         .expect("the message");
     assert!(
         message.contains("more than the 16384 a draft may hold")
-            && message.contains("calls only mayGo, probe0, ")
+            && message.contains("calls only probe0, probe1, ")
+            && message.contains("probe59, mayGo, so keep those")
             && !message.contains("unused"),
         "{message}"
     );
