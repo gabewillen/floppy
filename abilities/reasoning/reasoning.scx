@@ -200,6 +200,9 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- The API of the call on FLOPPY_BASE_URL: chat (Chat Completions)
+         or responses (OpenAI's Responses API). -->
+    <data id="api" expr="'chat'"/>
     <!-- Whether the call asks for a streamed reply itself (decision D262:
          on by default, so a reply can be said while it is written); false
          leaves it to the run's FLOPPY_STREAM (decision D101). -->
@@ -513,6 +516,7 @@
     <invoke idlocation="generate" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
+      <param name="api" expr="api"/>
       <param name="messages" expr="messages()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>

@@ -11,7 +11,7 @@ Last updated: 2026-11-11.
 
 ## Current state (2026-10-09) — resume here
 
-- **GPT-Live speech to speech (2026-11-11, D285, D286, #164):** the
+- **GPT-Live speech to speech (2026-11-11, D285, D287, #164):** the
   body's `speech_provider` `"live"` makes OpenAI's `gpt-live-1` floppy's
   ear, mouth and turn-taking, every turn delegated to floppy's cognition
   (the speech service's operation `live`, `FLOPPY_LIVE_BASE_URL`

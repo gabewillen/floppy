@@ -199,3 +199,9 @@ function learningOutput(learned) {
 function isMemoryReply(name) {
   return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }
+
+// The API of this document's model calls: the reflection endpoint's when a
+// reflection_model puts them on it, else FLOPPY_BASE_URL's.
+function endpointApi() {
+  return reflection_model === null ? api : reflection_api;
+}

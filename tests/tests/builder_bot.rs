@@ -34,6 +34,7 @@
 mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -503,6 +504,60 @@ fn ampersand_draft(into: &str) -> String {
     ))
 }
 
+/// The drafts `/unloaded/v1` and `/large/v1` answer, by author call:
+/// [`unloaded_script_draft`] and [`large_script_draft`] first, then the
+/// scripted draft or the large one under the bound.
+fn script_check_draft(path: &str, authors: usize) -> String {
+    match (path.starts_with("/large/"), authors) {
+        (true, _) => large_script_draft(authors == 1),
+        (false, 1) => unloaded_script_draft(true),
+        (false, 2) => unloaded_script_draft(false),
+        (false, _) => scripted_draft(),
+    }
+}
+
+/// The names [`large_script_draft`]'s document calls: as many as its green
+/// state logs.
+const LARGE_CALLS: usize = 60;
+
+/// [`scripted_draft`] whose green state also logs `probe0()` to
+/// `probe59()`, all declared in its script with 190 more functions nothing
+/// calls, as reflection's 13th revision of one behavior was (#169):
+/// `over` pads the script past the builder's 16384-character bound
+/// (`script-too-large`), and otherwise it stays just under it, which is
+/// still enough that a declared-name scan per called name (60 x 250 matches
+/// over about 16 KB in one evaluation) filled scxml.rs's 64 MiB data model
+/// store and ended the run as `machine-platform`.
+fn large_script_draft(over: bool) -> String {
+    let mut draft: Json = serde_json::from_str(&scripted_draft()).expect("the draft is JSON");
+    let mut logs = String::new();
+    for i in 0..LARGE_CALLS {
+        write!(logs, r#"<log label="probe" expr="probe{i}()"/>"#).expect("a String takes writes");
+    }
+    let scxml = draft["scxml"].as_str().expect("scxml is text").replacen(
+        r##"<onentry><send target="#_parent" event="light.green"/>"##,
+        &format!(r##"<onentry>{logs}<send target="#_parent" event="light.green"/>"##),
+        1,
+    );
+    let pad = if over { 48 } else { 34 };
+    let mut script = SCRIPT.to_owned();
+    for i in 0..LARGE_CALLS {
+        write!(script, "function probe{i}() {{\n  return {i};\n}}\n")
+            .expect("a String takes writes");
+    }
+    for i in 0..190 {
+        let padding = "x".repeat(pad);
+        write!(
+            script,
+            "function unused{i}() {{\n  return '{padding}';\n}}\n"
+        )
+        .expect("a String takes writes");
+    }
+    draft["scxml"] = scxml.into();
+    draft["script"] = script.into();
+    draft.to_string()
+}
+
 /// [`scripted_draft`] without its root `<script src>`, as the 2026-10-20
 /// live `PingPongReply` draft was (`script-not-loaded`), or without its
 /// script (`undeclared-function`).
@@ -873,6 +928,7 @@ fn answers_plan(path: &str) -> bool {
             | "/again/v1/chat/completions"
             | "/changed/v1/chat/completions"
             | "/unloaded/v1/chat/completions"
+            | "/large/v1/chat/completions"
             | "/throwing/v1/chat/completions"
             | "/nested/v1/chat/completions"
     )
@@ -964,12 +1020,10 @@ fn mock_reply(
             | "/changed/v1/chat/completions",
             Some("scxml_draft"),
         ) => Some(completion(&diagnostics_route_draft(path, authors))),
-        ("/unloaded/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&match authors {
-                1 => unloaded_script_draft(true),
-                2 => unloaded_script_draft(false),
-                _ => scripted_draft(),
-            }))
+        (_, Some("scxml_draft"))
+            if path.starts_with("/unloaded/") || path.starts_with("/large/") =>
+        {
+            Some(completion(&script_check_draft(path, authors)))
         }
         ("/throwing/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&throwing_route_draft(authors)))
@@ -2596,6 +2650,44 @@ fn a_draft_whose_script_is_not_loaded_or_not_declared_is_repaired_before_its_sim
     assert_eq!(
         simulated, 1,
         "only the whole draft is simulated: {records:?}"
+    );
+}
+
+/// A draft whose script is longer than the builder's bound is told so
+/// before its script is scanned, and one just under it is checked in one
+/// evaluation without ending the run (#169): `/large/v1` answers
+/// [`large_script_draft`] over the bound, then under it, which ends in done.
+#[test]
+fn a_draft_with_a_large_script_is_bounded_and_checked_without_ending_the_run() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "large",
+        "large",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let script = done["script"].as_str().expect("the script");
+    assert!(
+        (15_000..=16_384).contains(&script.len()),
+        "the accepted script is just under the bound: {}",
+        script.len()
+    );
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 1, "{done}");
+    assert_eq!(history[0]["diagnostics"][0]["code"], "script-too-large");
+    let message = history[0]["diagnostics"][0]["message"]
+        .as_str()
+        .expect("the message");
+    assert!(
+        message.contains("more than the 16384 a draft may hold")
+            && message.contains("calls only probe0, probe1, ")
+            && message.contains("probe59, mayGo, so keep those")
+            && !message.contains("unused"),
+        "{message}"
     );
 }
 
