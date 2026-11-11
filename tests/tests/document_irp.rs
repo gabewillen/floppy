@@ -392,6 +392,10 @@ fn expected_logs(case: &Path) -> Vec<(String, Vec<String>)> {
 }
 
 /// Runs one case; returns why it did not pass, if it did not.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one case's backend, environment, grants and run, in order"
+)]
 fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     let start = case.join(format!("test{test}.scxml"));
     if !start.is_file() {
