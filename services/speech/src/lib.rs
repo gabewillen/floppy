@@ -44,7 +44,8 @@
 //!
 //! * `operation` (required): `decode` (speech to text), `encode`
 //!   (text to speech), `stream` (speech to words while the person talks,
-//!   [`stream`]), or one of the voice operations `detect`, `diarize`,
+//!   [`stream`]), `live` (a GPT-Live speech-to-speech session, [`live`]),
+//!   or one of the voice operations `detect`, `diarize`,
 //!   `identify`, `classify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
 //! * `model` (required for decode and encode, optional for the backend
@@ -70,6 +71,13 @@
 //!   and `chunk_seconds` (optional, one of the server's decoding chunks
 //!   [`stream::CHUNKS`], `0.56` without it), and nothing else: its audio
 //!   arrives as events ([`stream`]).
+//! * live: `model` (required, `gpt-live-1` for `OpenAI`'s), `voice`
+//!   (optional, `[A-Za-z0-9_.-]{1,128}`, the API's default without it),
+//!   `instructions` (optional, not blank: the conversation's instructions,
+//!   [`live::DEFAULT_INSTRUCTIONS`] without them), and `output` (optional,
+//!   the reference GPT-Live's audio is chunked to; without it what GPT-Live
+//!   says is dropped), and nothing else: its audio arrives and its turns
+//!   return as the stream's events do ([`live`]).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
 //! parameter given twice, one the operation does
@@ -185,8 +193,9 @@
 //! * [`FAILED_EVENT`] `{"message": M}`, `M` one closed message per
 //!   [`FailureCode`] and direction.
 //!
-//! Only a drafted encoding reads events (see "Drafts"); every other
-//! operation drops the event stream `invoke` receives.
+//! Only a drafted encoding (see "Drafts"), a stream ([`stream`]) and a
+//! live session ([`live`]) read events; every other operation drops the
+//! event stream `invoke` receives.
 //!
 //! # Bounds
 //!
@@ -224,6 +233,7 @@ use std::io::Read as _;
 pub mod chunks;
 pub mod drafting;
 pub mod gemini;
+pub mod live;
 pub mod stream;
 pub mod voice;
 
@@ -539,6 +549,8 @@ pub enum Operation {
     Clip(voice::Clipping),
     /// `stream` (a streaming hearing session, [`stream`]).
     Stream(stream::Streaming),
+    /// `live` (a GPT-Live session, [`live`]).
+    Live(live::Living),
 }
 
 impl Operation {
@@ -556,6 +568,7 @@ impl Operation {
             Self::Append(_) => "Open speech",
             Self::Clip(_) => "Voice segment clipping",
             Self::Stream(_) => "Speech streaming",
+            Self::Live(_) => "Live speech",
         }
     }
 
@@ -786,6 +799,55 @@ fn stream_operation(
     stream::streaming(language, chunk_seconds).map(Operation::Stream)
 }
 
+/// A `live` invocation of its `model`, `voice`, `instructions` and
+/// `output`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "every parameter slot, so the ones live refuses are refused"
+)]
+fn live_operation(
+    model: Option<&Data>,
+    voice: Option<&Data>,
+    instructions: Option<&Data>,
+    output: Option<&Data>,
+    audio: Option<&Data>,
+    media_type: Option<&Data>,
+    parts: Option<&Data>,
+    provider: Option<&Data>,
+    given: &voice::Given<'_>,
+) -> Result<Operation, &'static str> {
+    if audio.is_some()
+        || media_type.is_some()
+        || parts.is_some()
+        || provider.is_some()
+        || !given.names().is_empty()
+    {
+        return Err("speech live takes model, voice, instructions, and output only");
+    }
+    let model = model
+        .ok_or("speech requires a model parameter")
+        .and_then(|model| text_parameter(model, "speech model must be a non-empty string"))?
+        .trim()
+        .to_owned();
+    if exceeds_wasm_bound(model.len(), MAX_MODEL_BYTES) {
+        return Err("speech model exceeds its bound");
+    }
+    let voice = match voice {
+        None => None,
+        Some(Data::String(voice)) => Some(voice.as_str()),
+        Some(_) => return Err("speech live voice must be a string"),
+    };
+    let instructions = match instructions {
+        None => None,
+        Some(Data::String(text)) => Some(text.as_str()),
+        Some(_) => return Err("speech live instructions must be a string"),
+    };
+    let output = output
+        .map(|output| media_parameter(output, "speech output must be a file reference"))
+        .transpose()?;
+    live::living(model, voice, instructions, output).map(Operation::Live)
+}
+
 /// Parses one voice operation's parameters.
 type VoiceParser = fn(&voice::Given<'_>) -> Result<Operation, &'static str>;
 
@@ -813,6 +875,7 @@ pub fn parse_parameters<'a>(
     let mut provider = None;
     let mut language = None;
     let mut chunk_seconds = None;
+    let mut instructions = None;
     let mut given = voice::Given::default();
     for (name, value) in parameters {
         // A null value is a parameter not given (an invoker passes its
@@ -831,6 +894,7 @@ pub fn parse_parameters<'a>(
             "provider" => &mut provider,
             "language" => &mut language,
             "chunk_seconds" => &mut chunk_seconds,
+            "instructions" => &mut instructions,
             "sample_rate_hz" => &mut given.sample_rate_hz,
             "channels" => &mut given.channels,
             "frames" => &mut given.frames,
@@ -861,6 +925,22 @@ pub fn parse_parameters<'a>(
     }
     if language.is_some() || chunk_seconds.is_some() {
         return Err("speech takes language and chunk_seconds only to stream");
+    }
+    if matches!(operation, Data::String(name) if name == "live") {
+        return live_operation(
+            model,
+            voice,
+            instructions,
+            output,
+            audio,
+            media_type,
+            parts,
+            provider,
+            &given,
+        );
+    }
+    if instructions.is_some() {
+        return Err("speech takes instructions only to go live");
     }
     let model = model
         .map(|model| {
@@ -1872,6 +1952,10 @@ mod guest {
                 let events = events?;
                 return stream(streaming, base_url, api_key, events, returned).await;
             }
+            Operation::Live(living) => {
+                let events = events?;
+                return live(living, base_url, api_key, events, returned).await;
+            }
             _ => return Some(run_voice(&operation, base_url, api_key).await),
         }))
     }
@@ -2021,6 +2105,178 @@ mod guest {
                         while let Some(pcm) = unready.pop_front() {
                             if outgoing.write_one(Message::Binary(pcm)).await.is_some() {
                                 return lost(Lost::Unavailable);
+                            }
+                        }
+                    }
+                }
+                Woke::Server(Some(Message::Binary(_)), _) => {
+                    return lost(Lost::InvalidResponse);
+                }
+                Woke::Server(None, _) => {
+                    let code = match end.await {
+                        Ok(Some(frame)) => Some(frame.code),
+                        _ => None,
+                    };
+                    return lost(Lost::closed(code));
+                }
+            }
+        }
+    }
+
+    /// A GPT-Live session ([`super::live`]): `None` when the invoking
+    /// session stopped reading or sending, else how it was lost.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one loop over the session's and the server's messages"
+    )]
+    async fn live(
+        living: &super::live::Living,
+        base_url: u32,
+        api_key: Option<u32>,
+        events: wit_bindgen::StreamReader<Event>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<super::Finished> {
+        use super::live::{
+            ANSWER_EVENT, CLOSE_MESSAGE, LIVE_PATH, Said, Session, answer_messages, audio_message,
+            audio_returned, start_message,
+        };
+        use super::stream::{AUDIO_EVENT, Lost, READY_EVENT};
+        let lost = |lost: Lost| {
+            Some(super::Finished::event(Returned {
+                name: super::stream::FAILED_EVENT,
+                data: lost.data(),
+            }))
+        };
+        let request = WebsocketRequest {
+            url: vec![
+                TextPart::Reference(base_url),
+                TextPart::Literal(LIVE_PATH.into()),
+            ],
+            headers: super::bearer(api_key)
+                .map(|(name, value)| WebsocketHeader {
+                    name,
+                    value: text_parts(&value),
+                })
+                .into_iter()
+                .collect(),
+            protocols: Vec::new(),
+        };
+        let (mut outgoing, outgoing_reader) = wit_stream::new::<Message>();
+        let Ok((_, incoming, end)) = outbound_websocket::connect(request, outgoing_reader).await
+        else {
+            return lost(Lost::Unavailable);
+        };
+        if outgoing
+            .write_one(Message::Text(start_message(living)))
+            .await
+            .is_some()
+        {
+            return lost(Lost::Unavailable);
+        }
+        let mut session = Session::new(living.output.is_some());
+        let mut sequence = 0_u32;
+        let mut ready = false;
+        let mut unready: std::collections::VecDeque<Vec<u8>> = std::collections::VecDeque::new();
+        let mut held = 0_usize;
+        let mut from_session = Some(next_event(events));
+        let mut from_server = Some(next_message(incoming));
+        loop {
+            let woke = std::future::poll_fn(|cx| {
+                if let Some(next) = from_session.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_session = None;
+                    return std::task::Poll::Ready(Woke::Session(item, reader));
+                }
+                if let Some(next) = from_server.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_server = None;
+                    return std::task::Poll::Ready(Woke::Server(item, reader));
+                }
+                std::task::Poll::Pending
+            })
+            .await;
+            match woke {
+                Woke::Session(None, _) => {
+                    // The invoking session stopped sending: end the session.
+                    let _ = outgoing
+                        .write_one(Message::Text(CLOSE_MESSAGE.into()))
+                        .await;
+                    return None;
+                }
+                Woke::Session(Some(sent), reader) => {
+                    from_session = Some(next_event(reader));
+                    let Ok(scxml_types::DataValue::JsonObject(object)) = native_value(sent.data)
+                    else {
+                        continue;
+                    };
+                    let data =
+                        serde_json::from_str::<serde_json::Value>(&object).unwrap_or_default();
+                    let messages = match sent.name.as_str() {
+                        AUDIO_EVENT => match heard_audio(&data) {
+                            Some(pcm) if ready => vec![audio_message(&pcm)],
+                            Some(pcm) => {
+                                held += pcm.len();
+                                unready.push_back(pcm);
+                                while held > MAX_UNREADY_BYTES {
+                                    held -= unready.pop_front().map_or(held, |old| old.len());
+                                }
+                                continue;
+                            }
+                            None => continue,
+                        },
+                        ANSWER_EVENT => answer_messages(&data, session.delegation()),
+                        _ => continue,
+                    };
+                    for message in messages {
+                        if outgoing.write_one(Message::Text(message)).await.is_some() {
+                            return lost(Lost::Unavailable);
+                        }
+                    }
+                }
+                Woke::Server(Some(Message::Text(text)), reader) => {
+                    from_server = Some(next_message(reader));
+                    let said = match session.decode(&text) {
+                        Ok(said) => said,
+                        Err(failure) => return lost(failure),
+                    };
+                    for each in said {
+                        let reply = match each {
+                            Said::Event(heard) => Returned {
+                                name: heard.name,
+                                data: heard.data,
+                            },
+                            Said::Audio(pcm) => {
+                                let Some(output) = &living.output else {
+                                    continue;
+                                };
+                                let Ok(media) = super::chunks::chunk_media(output, sequence) else {
+                                    return lost(Lost::InvalidInput);
+                                };
+                                if super::write_audio(&media.path, &pcm).is_err() {
+                                    return lost(Lost::InvalidInput);
+                                }
+                                let reply = audio_returned(&media, sequence, pcm.len());
+                                sequence = sequence.saturating_add(1);
+                                reply
+                            }
+                        };
+                        let became_ready = reply.name == READY_EVENT && !ready;
+                        if returned.write_one(event(&reply)).await.is_some() {
+                            return None;
+                        }
+                        if became_ready {
+                            ready = true;
+                            held = 0;
+                            while let Some(pcm) = unready.pop_front() {
+                                if outgoing
+                                    .write_one(Message::Text(audio_message(&pcm)))
+                                    .await
+                                    .is_some()
+                                {
+                                    return lost(Lost::Unavailable);
+                                }
                             }
                         }
                     }
@@ -2670,12 +2926,13 @@ mod guest {
             ),
             ComponentError,
         > {
-            // Only a drafted encoding and a stream read events; any other
+            // Only a drafted encoding, a stream and a live session read
+            // events; any other
             // drops its input stream.
             let (operation, endpoint) = observed(Op::Start, || plan(request))?;
             let events = match &operation {
                 Operation::Encode(encoding) if encoding.drafted => Some(events),
-                Operation::Stream(_) => Some(events),
+                Operation::Stream(_) | Operation::Live(_) => Some(events),
                 _ => None,
             };
             let (mut returned, returned_reader) = wit_stream::new::<Event>();

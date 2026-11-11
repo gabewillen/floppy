@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 139] = [
+const ABILITY_EVENTS: [&str; 142] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -195,6 +195,10 @@ const ABILITY_EVENTS: [&str; 139] = [
     "bot.ability.listening.sensitivity.failed",
     // The transcription's turns, handed to the interpretation (D270).
     "bot.ability.listening.transcription.turn",
+    // A GPT-Live session's mouth (D285).
+    "bot.ability.live.answer",
+    "bot.ability.live.audio",
+    "bot.ability.live.said",
     // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
@@ -635,10 +639,13 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
         BTreeSet::from([
             "bot.ability.learning.lesson".to_owned(),
             "bot.ability.listening.transcription.turn".to_owned(),
+            "bot.ability.live.answer".to_owned(),
+            "bot.ability.live.audio".to_owned(),
+            "bot.ability.live.said".to_owned(),
             "bot.ability.migration.output".to_owned(),
             "bot.ability.ready".to_owned()
         ]),
-        "the floppy-only events: an ability's readiness, the migration ability's output, the learning's lesson and the transcription's turn"
+        "the floppy-only events: an ability's readiness, the migration ability's output, the learning's lesson, the transcription's turn and a GPT-Live session's mouth"
     );
     for event in schemas.keys() {
         assert!(

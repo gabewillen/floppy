@@ -15,7 +15,8 @@
 
   Joining (decision D107): the environment's <invoke> attaches the
   body. Its <param>s are the activation settings (model,
-  intuition_model, reflection_model, api, reflection_api, bounds, traits, database, environment: the environment's
+  intuition_model, reflection_model, api, reflection_api, reasoning_effort,
+  reflection_reasoning_effort, bounds, traits, database, environment: the environment's
   id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
@@ -110,6 +111,15 @@
   environment whose id the body passes it (decision D103, amended
   2026-10-15: the copy reaches the listening first), and the sound comes
   back to the body as any sound there does (the bot hears itself).
+
+  GPT-Live (decision D285): with speech_provider "live" the listening
+  hears through a GPT-Live session (its stream_provider) and GPT-Live
+  says the bot's replies, its backchannels included: speaking hands each
+  reply on as bot.ability.live.answer {words}, which the communication
+  relays here and the body sends to the listening; the listening puts
+  GPT-Live's sound into the environment (the body passes it the
+  environment's id too). FLOPPY_LIVE_BASE_URL and FLOPPY_LIVE_API_KEY
+  bind the session.
 
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
@@ -299,6 +309,14 @@
          FLOPPY_REFLECTION_BASE_URL's (reflection_api). -->
     <data id="api" expr="'chat'"/>
     <data id="reflection_api" expr="'chat'"/>
+    <!-- The reasoning effort of FLOPPY_BASE_URL's model calls
+         (reasoning_effort) and of FLOPPY_REFLECTION_BASE_URL's
+         (reflection_reasoning_effort): null is the generate service's
+         default (none for a schema call on Chat Completions, low on the
+         Responses API); another effort with a schema needs the Responses
+         API. -->
+    <data id="reasoning_effort" expr="null"/>
+    <data id="reflection_reasoning_effort" expr="null"/>
     <!-- The time bounds for the cognition (its stages' inactivity and
          backstop, and reflection's revising; decision D101): each absent one
          is the ability's own default. -->
@@ -366,6 +384,9 @@
     <!-- The Listening abilities that receive speaking's efference copy
          (as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
+    <!-- Who hears and says the bot's speech: null, its own hearing and
+         voice; "live", a GPT-Live session (decision D285). -->
+    <data id="speech_provider" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <!-- What reached the body while it was busy, in arrival order, for the
@@ -418,6 +439,8 @@
       <param name="reflection_model" expr="reflection_model"/>
       <param name="api" expr="api"/>
       <param name="reflection_api" expr="reflection_api"/>
+      <param name="reasoning_effort" expr="reasoning_effort"/>
+      <param name="reflection_reasoning_effort" expr="reflection_reasoning_effort"/>
       <param name="bounds" expr="bounds"/>
       <param name="memory" expr="memoryAddress()"/>
       <param name="embedding" expr="embeddingAddress()"/>
@@ -425,6 +448,7 @@
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="memory" expr="memoryAddress()"/>
       <param name="environment" expr="environment"/>
+      <param name="speech_provider" expr="speech_provider"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="memory" expr="memoryAddress()"/>
@@ -432,6 +456,8 @@
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx">
       <param name="memory" expr="memoryAddress()"/>
+      <param name="environment" expr="environment"/>
+      <param name="stream_provider" expr="speech_provider"/>
     </invoke>
     <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
       <param name="memory" expr="memoryAddress()"/>
@@ -689,6 +715,13 @@
               <content expr="_event.data"/>
             </send>
           </foreach>
+        </transition>
+        <!-- A reply GPT-Live says (decision D285): to the listening, which
+             holds the live session. -->
+        <transition event="bot.ability.live.answer" event:schema="../../abilities/schemas/bot.ability.live.answer.json">
+          <send event="bot.ability.live.answer" target="#_listening">
+            <content expr="_event.data"/>
+          </send>
         </transition>
         <!-- What the communication said, and its failures. -->
         <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">

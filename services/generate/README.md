@@ -13,7 +13,8 @@ events, the request, the reply, bounds, and telemetry.
 default) or `responses` (`POST {base}/responses`). Every other parameter
 means the same on both: on the Responses API the messages are the `input`,
 `reasoning_effort` is `reasoning.effort` (any effort is admitted with a
-schema), `max_completion_tokens` is `max_output_tokens`, the one function
+schema, and a schema call reasons at `low` without one, where Chat
+Completions sends `none`), `max_completion_tokens` is `max_output_tokens`, the one function
 tool is sent flat with `"strict": false`, and `"store": false` keeps the
 backend from storing the call. The reply, streamed or not, becomes the same
 `generate.result` or `generate.failed`: the `message` items' text is the

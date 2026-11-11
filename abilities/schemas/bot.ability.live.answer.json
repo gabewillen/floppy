@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.live.answer",
+  "description": "[floppy name] What GPT-Live is to say for its backend, floppy (decision D285): sent to a live speech session, which gives it to GPT-Live as commentary for the last turn it delegated, and GPT-Live says it in its own words.",
+  "properties": {
+    "words": {
+      "description": "The answer's words, said as GPT-Live paraphrases them.",
+      "examples": [
+        "The capital of France is Paris."
+      ],
+      "minLength": 1,
+      "maxLength": 65536,
+      "title": "Words",
+      "type": "string"
+    }
+  },
+  "required": [
+    "words"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "words": "The capital of France is Paris."
+    }
+  ]
+}

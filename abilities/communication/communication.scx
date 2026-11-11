@@ -100,6 +100,10 @@
   puts the sound into the environment, after the copy has left for the
   body, so the copy reaches the listening first).
 
+  GPT-Live (speech_provider "live", decision D285): speaking hands each
+  reply on as bot.ability.live.answer {words}, which goes to the body,
+  which hands it to the listening's live session.
+
   Short-term memory: the conversation's bot.ability.memory.stm.turn (each
   message it commits with words, heard or said) goes on to the body
   unchanged, whatever the state.
@@ -135,6 +139,10 @@
     <data id="response_timeout_ms" expr="36000"/>
     <!-- Speaking's encoding bound, passed to it (decision D98). -->
     <data id="encoding_timeout_ms" expr="30000"/>
+    <!-- Who says the bot's replies (the body's <param>, passed to
+         speaking): null, speaking's own voice; "live", GPT-Live (decision
+         D285). -->
+    <data id="speech_provider" expr="null"/>
     <!-- The address of the bot's memory, for the conversation (null:
          no memory). -->
     <data id="memory" expr="null"/>
@@ -182,6 +190,7 @@
     </invoke>
     <invoke id="speaking" type="scxml" src="../speaking/speaking.scx">
       <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
+      <param name="speech_provider" expr="speech_provider"/>
     </invoke>
 
     <!-- A child's readiness, once (decision D242), named by its invoke id. -->
@@ -244,6 +253,13 @@
     </transition>
     <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
       <send event="bot.ability.speaking.efference" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- A reply GPT-Live says (decision D285): to the body, which hands it
+         to the listening's live session. -->
+    <transition event="bot.ability.live.answer" event:schema="../schemas/bot.ability.live.answer.json">
+      <send event="bot.ability.live.answer" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>

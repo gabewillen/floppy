@@ -7,10 +7,25 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-30.
+Last updated: 2026-11-11.
 
 ## Current state (2026-10-09) — resume here
 
+- **GPT-Live speech to speech (2026-11-11, D285, D287, #164):** the
+  body's `speech_provider` `"live"` makes OpenAI's `gpt-live-1` floppy's
+  ear, mouth and turn-taking, every turn delegated to floppy's cognition
+  (the speech service's operation `live`, `FLOPPY_LIVE_BASE_URL`
+  `https://api.openai.com/v1` and `FLOPPY_LIVE_API_KEY`). GPT-Live
+  delegates only when its instructions name `<|SpawnThinking|>`; it
+  backchannels while floppy thinks (Gabe wants them kept) and says
+  floppy's replies nearly verbatim. Live runs on Gabe's Mac with hosted
+  models (`scripts/talk-live.py`, GPT-Live playing the person): every
+  turn delegated 0 to 1.2 s after the last word, a backchannel 0.2 s
+  after, the answer 3.7 to 4.0 s after, all of it one reasoning call
+  (gpt-6-luna, effort none, 0 reasoning tokens) because intuition
+  abstained every turn. Next: why intuition abstains on simple turns,
+  drafts to GPT-Live as they are written, and a fallback to floppy's own
+  voice when the session never opens.
 - **The builder writes and runs an IRP (2026-10-30, D278):** a learned
   behavior is `behaviors/<name>/<name>.scx` (`.json`, `.js` beside it)
   with its IRP in `<name>/irp/` (README statement, `manifest.xml`, one

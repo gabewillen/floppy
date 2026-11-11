@@ -46,6 +46,8 @@ S.statement(4, "A turn without words is let go; what is heard from then on is th
 S.statement(5, "A session lost before its first ready (here, a backend that does not stream) ends the transcription in its final state `unavailable`, logged (`transcription`), so the parent hears through the interpretation; so does `enabled` false, at once and unlogged, and a session that does not open within `open_timeout_ms`.")
 S.statement(6, "A session lost after it was ready is logged, and after the backoff (`first_backoff_ms`, doubling up to `last_backoff_ms`) a new one is opened, with no second `bot.ability.ready`; the turn it was hearing is lost.")
 S.statement(7, "Until the turn's voice starts (a `voice_started`) only its last `lead_frames` sounds are kept, and its voice spans are measured from its first kept sound, each sound taken as an equal share of the turn's time; past `max_turn_frames` its oldest sounds are let go.")
+S.statement(8, "With `provider` `live` it opens a GPT-Live session (the speech service's operation `live`, decision D285) instead, which speaks the same hearing contract: the person's transcript deltas make the turn, and the turn GPT-Live delegates to its backend ends it, handed on as `bot.ability.listening.transcription.turn` with its words.")
+S.statement(9, "With `provider` `live` GPT-Live is the mouth too (decision D285): each `bot.ability.live.audio` chunk its session returns goes to the parent as the efference copy `bot.ability.speaking.efference` `{mouth: \"live\", duration, ...}` of the audio still to play, then as the chunk itself; the parent's `bot.ability.live.answer` goes to the session.")
 
 S.case(100, 1, "the transcription is ready once its session is.", [READY], backend=[], websocket=[[[READY_FRAME]]])
 
@@ -92,3 +94,26 @@ S.case(160, 7, "sounds heard before the voice starts are let go past lead_frames
                      " && Math.abs(_event.data.voice_detection.segments[0].end_seconds - 0.1) < 1e-9")],
        params=[("lead_frames", "1")], backend=[],
        websocket=[[[READY_FRAME], [], [], said("late", 0.2, 0.3)]])
+
+LIVE_READY = {"type": "session.started", "session": {"id": "sess_1"}}
+S.case(170, 8, "with provider live, a GPT-Live session's delegated turn is handed on as the turn's words.",
+       [READY, scored("voiced.wav"),
+        expect(TURN, "_event.data.text === 'what is the weather' && _event.data.confidence === null"
+                     " && _event.data.frames.length === 1 && _event.data.frames[0].audio === 'media/floppy-heard-0.pcm'"
+                     " && _event.data.sensed.sound.audio === 'media/voiced.wav'")],
+       params=[("provider", "'live'")], backend=[],
+       websocket=[[[LIVE_READY],
+                   [{"type": "session.input_transcript.delta", "delta": "what is", "start_ms": 0, "end_ms": 50},
+                    {"type": "session.input_transcript.delta", "delta": " the weather", "start_ms": 50, "end_ms": 100},
+                    {"type": "session.delegation.created", "offset_ms": 100,
+                     "delegation": {"id": "item_1", "type": "delegation", "target": "client"}}]]])
+
+S.case(180, 9, "with provider live, what GPT-Live says goes to the parent as its copy, then its chunk.",
+       [READY, scored("voiced.wav"),
+        expect("bot.ability.speaking.efference", "_event.data.mouth === 'live' && _event.data.duration > 0"
+                                                 " && _event.data.duration <= 0.1 && _event.data.sample_rate_hz === 16000"),
+        expect("bot.ability.live.audio", "_event.data.audio === 'media/floppy-live.0.pcm' && _event.data.sequence === 0"
+                                         " && _event.data.duration === 0.1 && _event.data.media_type === 'audio/pcm'")],
+       ignore=[TURN], params=[("provider", "'live'")], backend=[],
+       websocket=[[[LIVE_READY],
+                   [{"type": "session.output_audio.delta", "delta": "A" * 4267 + "="}]]])

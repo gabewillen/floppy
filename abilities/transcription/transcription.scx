@@ -11,8 +11,10 @@
   "transcription" and hands it each scored sound while it streams.
 
     initializing -> Streaming | unavailable
-    Streaming { Opening -ready-> Hearing } -lost-> Reconnecting -backoff-> Streaming
-    Streaming.Opening -lost before the first ready-> unavailable (final)
+    Streaming ( Connection { Choosing -> Speech | Live }
+              || Session { Opening -ready-> Hearing } )
+      -lost-> Reconnecting -backoff-> Streaming
+    Streaming -lost before the first ready-> unavailable (final)
 
   Configuration (as <data>): enabled (true; the listening's <param>:
   false ends it in unavailable at once, so the listening hears through the
@@ -31,7 +33,17 @@
   Session: Streaming invokes the speech service (operation stream,
   env:baseurl FLOPPY_SPEECH_BASE_URL and env:apikey
   FLOPPY_SPEECH_API_KEY, as speech decoding binds them) and keeps it
-  while it is active. Opening waits for the session's
+  while it is active. With provider "live" (the listening's <param>; null
+  by default) it invokes a GPT-Live session instead (the speech service's
+  operation live, decision D285: env:baseurl FLOPPY_LIVE_BASE_URL and
+  env:apikey FLOPPY_LIVE_API_KEY, https://api.openai.com/v1 and a project
+  key, with live_model gpt-live-1, live_voice and live_instructions, null
+  for the API's and the service's defaults), which speaks the same
+  hearing contract: GPT-Live hears the sounds, and each turn it delegates
+  to its backend ends a turn here. The session is the
+  Connection region's: Choosing enters Speech (invoke "stream") or Live
+  (invoke "live"), and the Session region (Opening, Hearing) sends to
+  whichever it is. Opening waits for the session's
   bot.ability.hearing.speech.stream.ready, bounded by open_timeout_ms;
   scored sounds that arrive meanwhile are held by <event:defer/> and
   streamed once it is ready. The first ready sends bot.ability.ready to
@@ -78,6 +90,20 @@
   turn without words is let go. What is heard from then on is the next
   turn's.
 
+  The mouth (provider "live", decision D285): GPT-Live says what the bot
+  says, its backchannels while the bot thinks included. The session
+  writes its audio to live_output (chunked as floppy-live.<n>.pcm), and
+  each bot.ability.live.audio chunk goes to the parent twice, in order:
+  as the efference copy bot.ability.speaking.efference {mouth: live_mouth
+  "live", duration, media_type, sample_rate_hz, channels}, duration the
+  seconds of GPT-Live's audio still to play (chunks arrive faster than
+  they play, so the playout is tracked as live_until_ms, the wall-clock
+  time the queued audio ends), then the chunk itself, which the listening
+  puts into the environment as the mouth's sound. The bot's reply arrives
+  from the parent as bot.ability.live.answer {words} and goes to the
+  session, which gives it to GPT-Live for the turn it delegated last.
+  Both are taken anywhere in Streaming; outside it they are dropped.
+
   Not yet: the overlap fact (another voice sustained while the bot
   produces; the session's overlap is dropped), and one session per sound
   source (one session hears every source).
@@ -99,6 +125,18 @@
     <data id="enabled" expr="true"/>
     <data id="language" expr="'en'"/>
     <data id="chunk_seconds" expr="0.56"/>
+    <!-- The session's provider: null, the speech backend's stream; "live",
+         a GPT-Live session (decision D285), its model, voice (null: the
+         API's) and instructions (null: the service's). -->
+    <data id="provider" expr="null"/>
+    <data id="live_model" expr="'gpt-live-1'"/>
+    <data id="live_voice" expr="null"/>
+    <data id="live_instructions" expr="null"/>
+    <!-- Where GPT-Live's audio is written, the mouth it is said from, and
+         when the audio queued so far ends (ms since the epoch). -->
+    <data id="live_output" expr="'media/floppy-live.pcm'"/>
+    <data id="live_mouth" expr="'live'"/>
+    <data id="live_until_ms" expr="0"/>
     <data id="product_threshold_db" expr="3.0"/>
     <data id="open_timeout_ms" expr="30000"/>
     <data id="first_backoff_ms" expr="1000"/>
@@ -130,106 +168,156 @@
     <transition target="unavailable"/>
   </state>
 
-  <state id="Streaming" initial="Opening">
-    <invoke id="stream" type="https://github.com/stateforward/floppy/services/speech"
-            env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">
-      <param name="operation" expr="'stream'"/>
-      <param name="language" expr="language"/>
-      <param name="chunk_seconds" expr="chunk_seconds"/>
-    </invoke>
+  <parallel id="Streaming">
     <onentry>
       <assign location="producing_told" expr="null"/>
     </onentry>
 
     <!-- The session is lost: before its first ready, the stream is not
          to be had; after it, a new session is opened. -->
-    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream bot.ability.failed error.*"
+    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream done.invoke.live bot.ability.failed error.*"
                 cond="!announced" target="unavailable">
       <log label="transcription" expr="unavailableLog(_event)"/>
     </transition>
-    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream bot.ability.failed error.*"
+    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream done.invoke.live bot.ability.failed error.*"
                 target="Reconnecting">
       <log label="transcription" expr="lostLog(_event)"/>
     </transition>
 
-    <state id="Opening">
-      <onentry>
-        <send id="open-timer" event="Opening.after" delayexpr="delay(open_timeout_ms)"/>
-      </onentry>
-      <onexit>
-        <cancel sendid="open-timer"/>
-      </onexit>
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
-        <event:defer/>
-      </transition>
-      <transition event="bot.ability.hearing.speech.stream.ready" event:schema="../schemas/bot.ability.hearing.speech.stream.ready.json" target="Hearing">
-        <assign location="backoff_ms" expr="first_backoff_ms"/>
-        <if cond="!announced">
-          <assign location="announced" expr="true"/>
-          <send event="bot.ability.ready" target="#_parent"/>
-        </if>
-      </transition>
-      <transition event="Opening.after" cond="!announced" target="unavailable">
-        <log label="transcription" expr="'the streaming session did not open in time'"/>
-      </transition>
-      <transition event="Opening.after" target="Reconnecting">
-        <log label="transcription" expr="'the streaming session did not open in time'"/>
-      </transition>
+    <!-- What GPT-Live says: the copy, then the chunk, to the parent; and
+         the bot's reply, to the session (decision D285). -->
+    <transition event="bot.ability.live.audio" event:schema="../schemas/bot.ability.live.audio.json">
+      <assign location="live_until_ms" expr="liveUntil(_event.data)"/>
+      <send event="bot.ability.speaking.efference" target="#_parent">
+        <content expr="liveCopy(_event.data)"/>
+      </send>
+      <send event="bot.ability.live.audio" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.live.answer" event:schema="../schemas/bot.ability.live.answer.json">
+      <if cond="isLive()">
+        <send event="bot.ability.live.answer" target="#_live">
+          <content expr="_event.data"/>
+        </send>
+      </if>
+    </transition>
+
+    <!-- The connection: the speech backend's stream, or a GPT-Live
+         session, held while Streaming is. -->
+    <state id="Connection" initial="Choosing">
+      <state id="Choosing">
+        <transition cond="isLive()" target="Live"/>
+        <transition target="Speech"/>
+      </state>
+      <state id="Speech">
+        <invoke id="stream" type="https://github.com/stateforward/floppy/services/speech"
+                env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">
+          <param name="operation" expr="'stream'"/>
+          <param name="language" expr="language"/>
+          <param name="chunk_seconds" expr="chunk_seconds"/>
+        </invoke>
+      </state>
+      <state id="Live">
+        <invoke id="live" type="https://github.com/stateforward/floppy/services/speech"
+                env:baseurl="FLOPPY_LIVE_BASE_URL" env:apikey="FLOPPY_LIVE_API_KEY">
+          <param name="operation" expr="'live'"/>
+          <param name="model" expr="live_model"/>
+          <param name="voice" expr="live_voice"/>
+          <param name="instructions" expr="live_instructions"/>
+          <param name="output" expr="live_output"/>
+        </invoke>
+      </state>
     </state>
 
-    <state id="Hearing">
-      <!-- The bot's own voice arriving as predicted is not streamed. -->
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
-                  cond="isPredictedOwnVoice(_event.data)"/>
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
-        <if cond="isProducingChange(_event.data)">
-          <assign location="producing_told" expr="_event.data.producing === true"/>
-          <send event="bot.ability.hearing.speech.stream.producing" target="#_stream">
-            <param name="producing" expr="producing_told"/>
-          </send>
-        </if>
-        <send event="bot.ability.hearing.speech.stream.audio" target="#_stream">
-          <content expr="streamedAudio(_event.data.sound)"/>
-        </send>
-        <assign location="frames" expr="framesWith(_event.data.sound)"/>
-        <assign location="heard_count" expr="heard_count + 1"/>
-        <if cond="isLouder(_event.data)">
-          <assign location="loudest" expr="_event.data"/>
-        </if>
-        <foreach array="soundParticipants(_event.data)" item="participant">
-          <if cond="isNewParticipant(participant)">
-            <assign location="participants[participants.length]" expr="participant"/>
+    <state id="Session" initial="Opening">
+      <state id="Opening">
+        <onentry>
+          <send id="open-timer" event="Opening.after" delayexpr="delay(open_timeout_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="open-timer"/>
+        </onexit>
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+          <event:defer/>
+        </transition>
+        <transition event="bot.ability.hearing.speech.stream.ready" event:schema="../schemas/bot.ability.hearing.speech.stream.ready.json" target="Hearing">
+          <assign location="backoff_ms" expr="first_backoff_ms"/>
+          <if cond="!announced">
+            <assign location="announced" expr="true"/>
+            <send event="bot.ability.ready" target="#_parent"/>
           </if>
-        </foreach>
-      </transition>
-      <transition event="bot.ability.hearing.speech.stream.transcript" event:schema="../schemas/bot.ability.hearing.speech.stream.transcript.json" cond="isTranscript(_event)">
-        <assign location="transcripts[transcripts.length]" expr="heardTranscript(_event)"/>
-      </transition>
-      <transition event="bot.ability.hearing.speech.stream.voice_started" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_started.json" cond="isAt(_event)">
-        <assign location="spans" expr="spansStarted(_event.data.at_seconds)"/>
-      </transition>
-      <transition event="bot.ability.hearing.speech.stream.voice_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_ended.json" cond="isAt(_event)">
-        <assign location="spans" expr="spansEnded(_event.data.at_seconds)"/>
-      </transition>
-      <!-- The hearing model's end of the turn: a turn with words goes on. -->
-      <transition event="bot.ability.hearing.speech.stream.turn_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.turn_ended.json" cond="isAt(_event)">
-        <assign location="turn" expr="endedTurn(_event)"/>
-        <if cond="hasWords(turn)">
-          <send event="bot.ability.listening.transcription.turn" target="#_parent">
-            <content expr="turn"/>
-          </send>
-        </if>
-        <assign location="turn_started_at" expr="_event.data.at_seconds"/>
-        <assign location="turn_heard_from" expr="heard_count"/>
-        <assign location="frames" expr="[]"/>
-        <assign location="loudest" expr="null"/>
-        <assign location="participants" expr="[]"/>
-        <assign location="transcripts" expr="[]"/>
-        <assign location="spans" expr="openSpans()"/>
-        <assign location="turn" expr="null"/>
-      </transition>
+        </transition>
+        <transition event="Opening.after" cond="!announced" target="unavailable">
+          <log label="transcription" expr="'the streaming session did not open in time'"/>
+        </transition>
+        <transition event="Opening.after" target="Reconnecting">
+          <log label="transcription" expr="'the streaming session did not open in time'"/>
+        </transition>
+      </state>
+
+      <state id="Hearing">
+        <!-- The bot's own voice arriving as predicted is not streamed. -->
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
+                    cond="isPredictedOwnVoice(_event.data)"/>
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+          <if cond="isProducingChange(_event.data)">
+            <assign location="producing_told" expr="_event.data.producing === true"/>
+            <if cond="!isLive()">
+              <send event="bot.ability.hearing.speech.stream.producing" target="#_stream">
+                <param name="producing" expr="producing_told"/>
+              </send>
+            </if>
+          </if>
+          <if cond="isLive()">
+            <send event="bot.ability.hearing.speech.stream.audio" target="#_live">
+              <content expr="streamedAudio(_event.data.sound)"/>
+            </send>
+          <else/>
+            <send event="bot.ability.hearing.speech.stream.audio" target="#_stream">
+              <content expr="streamedAudio(_event.data.sound)"/>
+            </send>
+          </if>
+          <assign location="frames" expr="framesWith(_event.data.sound)"/>
+          <assign location="heard_count" expr="heard_count + 1"/>
+          <if cond="isLouder(_event.data)">
+            <assign location="loudest" expr="_event.data"/>
+          </if>
+          <foreach array="soundParticipants(_event.data)" item="participant">
+            <if cond="isNewParticipant(participant)">
+              <assign location="participants[participants.length]" expr="participant"/>
+            </if>
+          </foreach>
+        </transition>
+        <transition event="bot.ability.hearing.speech.stream.transcript" event:schema="../schemas/bot.ability.hearing.speech.stream.transcript.json" cond="isTranscript(_event)">
+          <assign location="transcripts[transcripts.length]" expr="heardTranscript(_event)"/>
+        </transition>
+        <transition event="bot.ability.hearing.speech.stream.voice_started" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_started.json" cond="isAt(_event)">
+          <assign location="spans" expr="spansStarted(_event.data.at_seconds)"/>
+        </transition>
+        <transition event="bot.ability.hearing.speech.stream.voice_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_ended.json" cond="isAt(_event)">
+          <assign location="spans" expr="spansEnded(_event.data.at_seconds)"/>
+        </transition>
+        <!-- The hearing model's end of the turn: a turn with words goes on. -->
+        <transition event="bot.ability.hearing.speech.stream.turn_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.turn_ended.json" cond="isAt(_event)">
+          <assign location="turn" expr="endedTurn(_event)"/>
+          <if cond="hasWords(turn)">
+            <send event="bot.ability.listening.transcription.turn" target="#_parent">
+              <content expr="turn"/>
+            </send>
+          </if>
+          <assign location="turn_started_at" expr="_event.data.at_seconds"/>
+          <assign location="turn_heard_from" expr="heard_count"/>
+          <assign location="frames" expr="[]"/>
+          <assign location="loudest" expr="null"/>
+          <assign location="participants" expr="[]"/>
+          <assign location="transcripts" expr="[]"/>
+          <assign location="spans" expr="openSpans()"/>
+          <assign location="turn" expr="null"/>
+        </transition>
+      </state>
     </state>
-  </state>
+  </parallel>
 
   <!-- The turn being heard is lost; sounds wait for no session. -->
   <state id="Reconnecting">

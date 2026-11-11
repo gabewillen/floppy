@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.live.said",
+  "description": "[floppy name] Words GPT-Live says, returned by a live speech session as GPT-Live says them (decision D285): its output transcript, a piece at a time.",
+  "properties": {
+    "text": {
+      "description": "The words said since the last, exactly as GPT-Live transcribes them.",
+      "examples": [
+        "It's Paris."
+      ],
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "text": "It's Paris."
+    }
+  ]
+}

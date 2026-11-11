@@ -178,3 +178,23 @@ function endedTurn(_event) {
 function hasWords(heard) {
   return heard.text !== '' && heard.frames.length > 0 && heard.sensed !== null;
 }
+
+// Connection
+
+// The session is a GPT-Live session (decision D285), not the speech
+// backend's stream.
+function isLive() {
+  return provider === 'live';
+}
+
+// When GPT-Live's queued audio ends once this chunk is queued after it.
+function liveUntil(chunk) {
+  return Math.max(Date.now(), live_until_ms) + chunk.duration * 1000;
+}
+
+// The efference copy of GPT-Live's audio still to play, as the mouth
+// live_mouth.
+function liveCopy(chunk) {
+  return ({mouth: live_mouth, duration: Math.max(0, live_until_ms - Date.now()) / 1000,
+    media_type: chunk.media_type, sample_rate_hz: chunk.sample_rate_hz, channels: chunk.channels});
+}

@@ -279,3 +279,11 @@ def copy_without_audio(duration):
 S.case(210, 13, "a played-out utterance's last copy carries its audio.",
        [READY, say("hi"), copy_without_audio("0.1"), completed_copy(1), output("hi")],
        ignore=[PROGRESS, SOUND, APPEND], params=PATIENT, backend=[PCM])
+
+S.statement(14, "With `speech_provider` `live` (decision D285) an utterance is not encoded: its words go to the parent as `bot.ability.live.answer` `{words}` (for GPT-Live to say), and it is recorded as said whole (`outcome` `completed`); a draft is dropped, as GPT-Live is given the whole reply.")
+
+LIVE = [("speech_provider", "'live'")]
+S.case(220, 14, "with speech_provider live, a reply goes to the parent as GPT-Live's answer and is recorded as said; its draft is dropped.",
+       [READY, send("bot.ability.speaking.draft", js({"part": 0, "words": "hi ", "offset": 0})), say("hi there"),
+        expect("bot.ability.live.answer", "_event.data.words === 'hi there'"), appended("hi there", 1), output("hi there")],
+       params=LIVE, backend=[])

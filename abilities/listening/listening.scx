@@ -16,7 +16,9 @@
   (abilities/interpretation/interpretation.scx, the slow half) and
   <invoke id="transcription"> (abilities/transcription/transcription.scx,
   the streaming hearing path, mosfet.py's Transcription; the <data>
-  streams, true, is its <param> enabled). Each is ready when it
+  streams, true, is its <param> enabled, and stream_provider, null, its
+  <param> provider: "live" hears through a GPT-Live session, decision
+  D285). Each is ready when it
   sends bot.ability.ready; initializing waits for the sensitivity and the
   interpretation only, so a streaming session that is slow to open (or
   never opens) never holds the listening back.
@@ -73,6 +75,17 @@
   The copy goes to the interpretation too, which learns the bot's own
   voice from the audio a completed utterance's copy carries.
 
+  A GPT-Live mouth (stream_provider "live", decision D285): the
+  transcription's session says what the bot says. Its copy,
+  bot.ability.speaking.efference from the transcription, is taken as the
+  body's is (to the sensitivity), and each chunk it then sends,
+  bot.ability.live.audio, goes into the environment as environment.sound
+  {audio, media_type, sample_rate_hz, channels, source: "live"} at
+  #_scxml_ + the <data> environment (the body's <param>), as the
+  communication puts speaking's sound there. The bot's reply,
+  bot.ability.live.answer {words} from the body, goes to the
+  transcription.
+
   Readiness: the entry into Perceiving sends bot.ability.ready to the
   body (decision D242); it offers nothing (the
   listening's input is not a tool event).
@@ -103,6 +116,13 @@
          streaming session ends, the interpretation hears every scored
          sound. -->
     <data id="streams" expr="true"/>
+    <!-- Whom the transcription streams to (its <param> provider): null,
+         the speech backend's stream; "live", a GPT-Live session (decision
+         D285, FLOPPY_LIVE_BASE_URL and FLOPPY_LIVE_API_KEY). -->
+    <data id="stream_provider" expr="null"/>
+    <!-- The environment's session id (the body's <param>), where a GPT-Live
+         mouth's sound goes; null: none. -->
+    <data id="environment" expr="null"/>
     <data id="transcribing" expr="false"/>
     <!-- Whether its streaming session may still open (it is neither ready
          nor ended), and the scored sounds held for it meanwhile. -->
@@ -124,6 +144,7 @@
     </invoke>
     <invoke id="transcription" type="scxml" src="../transcription/transcription.scx">
       <param name="enabled" expr="streams"/>
+      <param name="provider" expr="stream_provider"/>
     </invoke>
 
     <!-- A child's readiness, once (decision D242), named by its invoke id. -->
@@ -213,6 +234,22 @@
       </transition>
       <transition event="bot.ability.listening.failed" event:schema="../schemas/bot.ability.listening.failed.json">
         <send event="bot.ability.listening.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <!-- A GPT-Live mouth (decision D285): the transcription's copy came
+           first (above, as the body's does); its chunk goes into the
+           environment as the mouth's sound, and the bot's reply goes to the
+           transcription. -->
+      <transition event="bot.ability.live.audio" event:schema="../schemas/bot.ability.live.audio.json">
+        <if cond="hasEnvironment()">
+          <send event="environment.sound" targetexpr="environmentTarget()">
+            <content expr="liveSound(_event.data)"/>
+          </send>
+        </if>
+      </transition>
+      <transition event="bot.ability.live.answer" event:schema="../schemas/bot.ability.live.answer.json">
+        <send event="bot.ability.live.answer" target="#_transcription">
           <content expr="_event.data"/>
         </send>
       </transition>

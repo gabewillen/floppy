@@ -84,6 +84,12 @@
          Completions) or responses (OpenAI's Responses API). -->
     <data id="api" expr="'chat'"/>
     <data id="reflection_api" expr="'chat'"/>
+    <!-- The reasoning effort of the calls on FLOPPY_BASE_URL and on
+         FLOPPY_REFLECTION_BASE_URL: null is the generate service's default
+         (none for a schema call on Chat Completions, low on the Responses
+         API). -->
+    <data id="reasoning_effort" expr="null"/>
+    <data id="reflection_reasoning_effort" expr="null"/>
     <data id="bounds" expr="({})"/>
     <!-- The select call's and the revision's inactivity bounds and their
          backstops (decision D101). -->
@@ -218,6 +224,7 @@
             env:stream="FLOPPY_STREAM">
       <param name="model" expr="reflection_model ?? model"/>
       <param name="api" expr="endpointApi()"/>
+      <param name="reasoning_effort" expr="endpointEffort()"/>
       <param name="system" expr="learn_instructions"/>
       <param name="prompt" expr="select_input"/>
       <param name="schema" expr="schema"/>
@@ -298,6 +305,8 @@
       <param name="reflection_model" expr="reflection_model"/>
       <param name="api" expr="api"/>
       <param name="reflection_api" expr="reflection_api"/>
+      <param name="reasoning_effort" expr="reasoning_effort"/>
+      <param name="reflection_reasoning_effort" expr="reflection_reasoning_effort"/>
       <param name="progress_target" expr="progressTarget()"/>
       <param name="intent" expr="intent"/>
       <param name="intent_event" expr="intentEvent()"/>
