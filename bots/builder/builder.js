@@ -439,7 +439,12 @@ function scriptErrors() {
   if (draft.script.trim() !== '' && scxml_text.indexOf('src="' + draftFile('.js') + '"') < 0) {
     errors.push({kind: 'draft', code: 'script-not-loaded', message: 'script is not empty, but the document has no <script src="' + draftFile('.js') + '"/> as the first child of its root after datamodel, so none of its functions is defined'});
   }
-  var undeclared = calledFunctions().filter(function (name) { return declaredFunctions().indexOf(name) < 0 && ECMASCRIPT_GLOBALS.indexOf(name) < 0; });
+  // The declared names once: each scan is a global regex over the whole
+  // script, and scxml.rs's data model holds what every match retains until
+  // the evaluation ends, so a scan per called name filled its 64 MiB store
+  // on a 34.7 KB script and ended the run as machine-platform (#169).
+  var declared = declaredFunctions();
+  var undeclared = calledFunctions().filter(function (name) { return declared.indexOf(name) < 0 && ECMASCRIPT_GLOBALS.indexOf(name) < 0; });
   if (undeclared.length > 0) {
     errors.push({kind: 'draft', code: 'undeclared-function', message: 'the document calls ' + undeclared.join(', ') + ', which script does not declare: declare each as a function in script, or call none'});
   }
