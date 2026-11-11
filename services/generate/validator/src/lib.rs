@@ -20,7 +20,9 @@
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
 //!   machine-applicable fix to the one strictly closest within two edits)
-//!   or, with a `schema`, is not [`TOOLS_REASONING_EFFORT`] (a fix to it), a
+//!   or, with a `schema` on Chat Completions (no `api`, or a literal
+//!   `chat`), is not [`TOOLS_REASONING_EFFORT`] (a fix to it), an `api`
+//!   that is not one of [`APIS`] (with the same fix), a
 //!   `tool_choice` that is not one of [`TOOL_CHOICES`] (with the same fix),
 //!   a `stream` that is not `true` or `false`, a `temperature` that is not
 //!   a number from 0 to 2, a `max_completion_tokens` or
@@ -59,8 +61,9 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 15] = [
+pub const PARAMETERS: [&str; 16] = [
     "model",
+    "api",
     "prompt",
     "messages",
     "system",
@@ -76,6 +79,9 @@ pub const PARAMETERS: [&str; 15] = [
     "dimensions",
     "drafts",
 ];
+/// The `api` values the service accepts: Chat Completions or the Responses
+/// API.
+pub const APIS: [&str; 2] = ["chat", "responses"];
 /// The `tool_choice` values the service accepts.
 pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
 /// The only `reasoning_effort` the service accepts with a `schema`.
@@ -331,6 +337,9 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
     let mut seen: Vec<&str> = Vec::new();
     let mut required_choice = false;
     let mut effort = None;
+    // Whether the call is on Chat Completions: no `api`, or a literal
+    // `chat` (an expression may name the Responses API).
+    let mut chat = true;
     for param in children(document, invoke).filter(|child| child.is("param")) {
         let Some(name) = param.attribute("name") else {
             continue;
@@ -340,6 +349,9 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             value(&name.value, expr, findings);
             required_choice |=
                 name.value == "tool_choice" && literal(&expr.value) == Literal::String("required");
+            if name.value == "api" {
+                chat = literal(&expr.value) == Literal::String("chat");
+            }
             if name.value == "reasoning_effort"
                 && let Literal::String(given) = literal(&expr.value)
                 && given != TOOLS_REASONING_EFFORT
@@ -401,28 +413,37 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
         }
     }
     if has("schema")
+        && chat
         && let Some((given, span)) = effort
     {
-        findings.push(Finding {
-            code: "invalid_value",
-            severity: Severity::Error,
-            message: format!("reasoning_effort `{given}` is refused with a `schema`"),
-            primary: (span, "the service rejects this value".to_owned()),
-            secondary: Vec::new(),
-            help: Some(format!(
-                "a call is asked for with reasoning_effort `{TOOLS_REASONING_EFFORT}`"
-            )),
-            fix: Some(Fix {
-                message: format!("use `{TOOLS_REASONING_EFFORT}`"),
-                span,
-                replacement: format!("expr=\"'{TOOLS_REASONING_EFFORT}'\""),
-            }),
-        });
+        findings.push(effort_refused(given, span));
     }
     Given {
         schema: has("schema"),
         tool_choice: has("tool_choice") && !required_choice,
         input: has("input"),
+    }
+}
+
+/// A `reasoning_effort` (`given`, at `span`) that Chat Completions refuses
+/// with a `schema`, with a fix to [`TOOLS_REASONING_EFFORT`].
+fn effort_refused(given: &str, span: Span) -> Finding {
+    Finding {
+        code: "invalid_value",
+        severity: Severity::Error,
+        message: format!(
+            "reasoning_effort `{given}` is refused with a `schema` on Chat Completions"
+        ),
+        primary: (span, "the service rejects this value".to_owned()),
+        secondary: Vec::new(),
+        help: Some(format!(
+            "a call is asked for with reasoning_effort `{TOOLS_REASONING_EFFORT}`"
+        )),
+        fix: Some(Fix {
+            message: format!("use `{TOOLS_REASONING_EFFORT}`"),
+            span,
+            replacement: format!("expr=\"'{TOOLS_REASONING_EFFORT}'\""),
+        }),
     }
 }
 
@@ -482,47 +503,45 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
         help: Some(help),
         fix,
     };
+    // A string that is not one of `known`, with a fix to the closest; a
+    // literal that is not a string at all.
+    let not_one_of = |given: &str, known: &[&str]| {
+        let suggestion = closest(given, known);
+        invalid(
+            format!("`{given}` is not a {name} value the generate service accepts"),
+            suggestion.map_or_else(
+                || format!("use one of {}", known.join(", ")),
+                |known| format!("did you mean `{known}`?"),
+            ),
+            suggestion.map(|known| Fix {
+                message: format!("use `{known}`"),
+                span: expr.span,
+                replacement: format!("expr=\"'{known}'\""),
+            }),
+        )
+    };
+    let not_a_string = |known: &[&str]| {
+        invalid(
+            format!("{name} must be a string"),
+            format!("use one of {}", known.join(", ")),
+            None,
+        )
+    };
     match (name, literal) {
+        ("api", Literal::String(api)) if !APIS.contains(&api) => {
+            findings.push(not_one_of(api, &APIS));
+        }
         ("reasoning_effort", Literal::String(effort)) if !REASONING_EFFORTS.contains(&effort) => {
-            let suggestion = closest(effort, &REASONING_EFFORTS);
-            findings.push(invalid(
-                format!("`{effort}` is not a reasoning_effort the generate service accepts"),
-                suggestion.map_or_else(
-                    || format!("use one of {}", REASONING_EFFORTS.join(", ")),
-                    |known| format!("did you mean `{known}`?"),
-                ),
-                suggestion.map(|known| Fix {
-                    message: format!("use `{known}`"),
-                    span: expr.span,
-                    replacement: format!("expr=\"'{known}'\""),
-                }),
-            ));
+            findings.push(not_one_of(effort, &REASONING_EFFORTS));
         }
-        ("reasoning_effort", Literal::Bool) => findings.push(invalid(
-            "reasoning_effort must be a string".to_owned(),
-            format!("use one of {}", REASONING_EFFORTS.join(", ")),
-            None,
-        )),
         ("tool_choice", Literal::String(choice)) if !TOOL_CHOICES.contains(&choice) => {
-            let suggestion = closest(choice, &TOOL_CHOICES);
-            findings.push(invalid(
-                format!("`{choice}` is not a tool_choice the generate service accepts"),
-                suggestion.map_or_else(
-                    || format!("use one of {}", TOOL_CHOICES.join(", ")),
-                    |known| format!("did you mean `{known}`?"),
-                ),
-                suggestion.map(|known| Fix {
-                    message: format!("use `{known}`"),
-                    span: expr.span,
-                    replacement: format!("expr=\"'{known}'\""),
-                }),
-            ));
+            findings.push(not_one_of(choice, &TOOL_CHOICES));
         }
-        ("tool_choice", Literal::Bool | Literal::Number(_)) => findings.push(invalid(
-            "tool_choice must be a string".to_owned(),
-            format!("use one of {}", TOOL_CHOICES.join(", ")),
-            None,
-        )),
+        ("api", Literal::Bool | Literal::Number(_)) => findings.push(not_a_string(&APIS)),
+        ("reasoning_effort", Literal::Bool) => findings.push(not_a_string(&REASONING_EFFORTS)),
+        ("tool_choice", Literal::Bool | Literal::Number(_)) => {
+            findings.push(not_a_string(&TOOL_CHOICES));
+        }
         (
             "temperature" | "max_completion_tokens" | "thinking_token_budget" | "dimensions",
             Literal::String(_) | Literal::Bool,

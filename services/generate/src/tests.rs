@@ -1988,3 +1988,350 @@ fn an_embeddings_reply_is_one_unit_vector_per_input_in_order() {
         );
     }
 }
+
+/// `parameters` with `api` `responses`.
+fn parse_responses(parameters: &[(&str, Data)]) -> Generation {
+    let mut parameters = parameters.to_vec();
+    parameters.push(("api", text("responses")));
+    parse(&parameters).expect("valid parameters")
+}
+
+/// A Responses API `response` of `output` with `status`.
+fn response_object(status: &str, output: &Json) -> Json {
+    serde_json::json!({
+        "id": "resp_1",
+        "object": "response",
+        "status": status,
+        "error": null,
+        "output": output,
+        "usage": {
+            "input_tokens": 291,
+            "output_tokens": 99,
+            "output_tokens_details": {"reasoning_tokens": 7},
+            "total_tokens": 390
+        }
+    })
+}
+
+/// A Responses API stream of `events`, each as its `event:` and `data:`
+/// lines.
+fn response_stream(events: &[Json]) -> Vec<u8> {
+    let mut body = String::new();
+    for event in events {
+        let kind = event.get("type").and_then(Json::as_str).unwrap_or_default();
+        for piece in ["event: ", kind, "\ndata: ", &event.to_string(), "\n\n"] {
+            body.push_str(piece);
+        }
+    }
+    body.into_bytes()
+}
+
+#[test]
+fn the_api_is_chat_completions_unless_responses_is_asked() {
+    let chat = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    assert_eq!(chat.api, Api::Chat);
+    let named = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("api", text("chat")),
+    ])
+    .expect("valid");
+    assert_eq!(named.api, Api::Chat);
+    assert_eq!(
+        build_request(2, Some(1), None, &named).body,
+        build_request(2, Some(1), None, &chat).body
+    );
+    for value in [text("completions"), text(""), Data::Bool(true)] {
+        assert_eq!(
+            parse(&[("model", text("m")), ("prompt", text("p")), ("api", value)])
+                .map(|_| ())
+                .expect_err("an unknown api is refused"),
+            "generate api must be chat or responses"
+        );
+    }
+    assert_eq!(
+        parse(&[
+            ("model", text("m")),
+            ("input", text("i")),
+            ("api", text("responses"))
+        ])
+        .map(|_| ())
+        .expect_err("embeddings take no api"),
+        "generate input takes only model and dimensions"
+    );
+}
+
+#[test]
+fn a_responses_call_builds_the_canonical_responses_request() {
+    let generation = parse_responses(&[
+        ("model", text("gpt-6-luna")),
+        ("system", text("Be brief.")),
+        ("prompt", text("Say hello.")),
+        ("max_completion_tokens", number(64.0)),
+        ("temperature", number(0.0)),
+    ]);
+    let request = build_request(2, Some(1), None, &generation);
+    assert_eq!(
+        request.url,
+        [Part::Reference(2), Part::Literal(RESPONSES_PATH.into())]
+    );
+    assert_eq!(
+        String::from_utf8(request.body.clone()).expect("UTF-8"),
+        r#"{"input":[{"content":"Be brief.","role":"system"},{"content":"Say hello.","role":"user"}],"max_output_tokens":64,"model":"gpt-6-luna","reasoning":{"effort":"low"},"store":false,"temperature":0.0}"#
+    );
+    assert_eq!(request.request_bytes, request.body.len());
+    assert_eq!(
+        request.headers[2],
+        (
+            "accept".to_owned(),
+            vec![Part::Literal("application/json".into())]
+        )
+    );
+}
+
+#[test]
+fn a_responses_schema_is_one_function_tool_that_is_not_strict() {
+    let generation = parse_responses(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+        ("schemaname", text("dispatch")),
+    ]);
+    assert_eq!(generation.reasoning_effort, TOOLS_REASONING_EFFORT);
+    let body: Json =
+        serde_json::from_slice(&build_request(2, None, None, &generation).body).expect("JSON");
+    assert_eq!(
+        body["tools"],
+        serde_json::json!([{
+            "type": "function",
+            "name": "dispatch",
+            "parameters": serde_json::from_str::<Json>(SCHEMA).expect("JSON"),
+            "strict": false
+        }])
+    );
+    assert_eq!(body["tool_choice"], "required");
+    // The Responses API takes function tools at every effort.
+    let effort = parse_responses(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+        ("reasoning_effort", text("medium")),
+    ]);
+    let body: Json =
+        serde_json::from_slice(&build_request(2, None, None, &effort).body).expect("JSON");
+    assert_eq!(body["reasoning"], serde_json::json!({"effort": "medium"}));
+}
+
+#[test]
+fn a_streamed_responses_call_asks_for_events_without_stream_options() {
+    let generation = parse_responses(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("stream", Data::Bool(true)),
+    ]);
+    let request = build_request(2, Some(1), None, &generation);
+    let body = String::from_utf8(request.body.clone()).expect("UTF-8");
+    assert_eq!(
+        body,
+        r#"{"input":[{"content":"p","role":"user"}],"model":"m","reasoning":{"effort":"low"},"store":false,"stream":true}"#
+    );
+    assert_eq!(
+        request.request_bytes,
+        body.len() - r#","stream":true"#.len()
+    );
+    assert_eq!(
+        request.headers[2],
+        (
+            "accept".to_owned(),
+            vec![Part::Literal("text/event-stream".into())]
+        )
+    );
+    // The run's stream slot decides the member of a call that does not ask.
+    let plain = parse_responses(&[("model", text("m")), ("prompt", text("p"))]);
+    let slotted = build_request(2, Some(1), Some(3), &plain);
+    assert_eq!(slotted.stream, Some(3));
+    assert_eq!(
+        slotted.body_parts().get(1),
+        Some(&Part::Reference(3)),
+        "the slot's reference is the stream member"
+    );
+}
+
+#[test]
+fn a_responses_image_part_is_an_input_image() {
+    let mut parameters = vec![
+        ("model", text("m")),
+        user_parts(
+            r#"[{"kind":"text","content":"Read it."},{"kind":"image","content":"media/a.png"}]"#,
+        ),
+    ];
+    parameters.push(("api", text("responses")));
+    let generation =
+        parse_with_files(&parameters, &[("/media/a.png", png(b"ab"))]).expect("valid parameters");
+    assert_eq!(
+        String::from_utf8(build_request(0, None, None, &generation).body).expect("UTF-8"),
+        r#"{"input":[{"content":[{"text":"Read it.","type":"input_text"},{"image_url":"data:image/png;base64,iVBORw0KGgphYg==","type":"input_image"}],"role":"user"}],"model":"m","reasoning":{"effort":"low"},"store":false}"#,
+    );
+}
+
+#[test]
+fn a_responses_reply_is_read_as_a_completion_is() {
+    let text_call = parse_responses(&[("model", text("m")), ("prompt", text("p"))]);
+    let message = serde_json::json!([
+        {"type": "reasoning", "summary": [{"type": "summary_text", "text": "thinking"}]},
+        {"type": "message", "role": "assistant", "content": [
+            {"type": "output_text", "text": "hello ", "annotations": []},
+            {"type": "output_text", "text": "there", "annotations": []}
+        ]}
+    ]);
+    let body = response_object("completed", &message)
+        .to_string()
+        .into_bytes();
+    assert_eq!(
+        outcome(&text_call, 5, ok(body)),
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"content":"hello there","request_bytes":5,"tool_calls":[],"usage":{"input_tokens":291,"output_tokens":99,"reasoning_tokens":7,"total_tokens":390}}"#.into()
+        }
+    );
+    let tool_call = parse_responses(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+        ("schemaname", text("dispatch")),
+    ]);
+    let calls = serde_json::json!([
+        {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "dispatch",
+         "arguments": "{\"answer\":\"yes\",\"score\":3}", "status": "completed"}
+    ]);
+    let body = response_object("completed", &calls)
+        .to_string()
+        .into_bytes();
+    let returned = outcome(&tool_call, 0, ok(body));
+    assert_eq!(returned.name, RESULT_EVENT);
+    let data: Json = serde_json::from_str(&returned.data).expect("JSON");
+    assert_eq!(
+        data["tool_calls"],
+        serde_json::json!([{"id": "call_1", "name": "dispatch", "args": {"answer": "yes", "score": 3}}])
+    );
+    // A text reply where a call is required is malformed, as on Chat
+    // Completions.
+    let body = response_object("completed", &message)
+        .to_string()
+        .into_bytes();
+    assert_eq!(
+        outcome(&tool_call, 0, ok(body)),
+        Returned::failed(FailureCode::Malformed)
+    );
+}
+
+#[test]
+fn a_responses_reply_that_is_cut_refused_or_failed_has_its_code() {
+    let generation = parse_responses(&[("model", text("m")), ("prompt", text("p"))]);
+    let text_item = serde_json::json!([{"type": "message", "role": "assistant",
+        "content": [{"type": "output_text", "text": "par"}]}]);
+    let incomplete = |reason: &str| {
+        let mut response = response_object("incomplete", &text_item);
+        response["incomplete_details"] = serde_json::json!({ "reason": reason });
+        response.to_string().into_bytes()
+    };
+    let refusal = response_object(
+        "completed",
+        &serde_json::json!([{"type": "message", "role": "assistant",
+            "content": [{"type": "refusal", "refusal": "no"}]}]),
+    );
+    let mut errored = response_object("failed", &serde_json::json!([]));
+    errored["error"] = serde_json::json!({"code": "server_error", "message": "boom"});
+    let cases = [
+        (incomplete("max_output_tokens"), FailureCode::Truncated),
+        (incomplete("content_filter"), FailureCode::Filtered),
+        (incomplete("other"), FailureCode::Malformed),
+        (refusal.to_string().into_bytes(), FailureCode::Refusal),
+        (errored.to_string().into_bytes(), FailureCode::Malformed),
+        (
+            response_object("in_progress", &text_item)
+                .to_string()
+                .into_bytes(),
+            FailureCode::Malformed,
+        ),
+        (
+            response_object("completed", &serde_json::json!([{"type": "web_search_call"}]))
+                .to_string()
+                .into_bytes(),
+            FailureCode::Malformed,
+        ),
+        (
+            response_object(
+                "completed",
+                &serde_json::json!([{"type": "function_call", "call_id": " ", "name": "f", "arguments": "{}"}]),
+            )
+            .to_string()
+            .into_bytes(),
+            FailureCode::Malformed,
+        ),
+        // A Chat Completions reply is not a response.
+        (completion("hi", "stop"), FailureCode::Malformed),
+    ];
+    for (body, code) in cases {
+        assert_eq!(outcome(&generation, 0, ok(body)), Returned::failed(code));
+    }
+}
+
+/// A streamed Responses reply, shaped as the CPA gateway's: the terminal
+/// `response.completed` carries the output, and a stream whose terminal
+/// response lists none takes its items from `response.output_item.done`.
+#[test]
+fn a_streamed_responses_reply_is_its_terminal_response() {
+    let generation = parse_responses(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+        ("schemaname", text("dispatch")),
+        ("stream", Data::Bool(true)),
+    ]);
+    let call = serde_json::json!({"type": "function_call", "id": "fc_1", "call_id": "call_1",
+        "name": "dispatch", "arguments": "{\"answer\":\"hi\",\"score\":1}", "status": "completed"});
+    let reasoning = serde_json::json!({"type": "reasoning", "summary": []});
+    let opening = [
+        serde_json::json!({"type": "response.created", "response": response_object("in_progress", &serde_json::json!([]))}),
+        serde_json::json!({"type": "response.output_item.added", "output_index": 0, "item": reasoning}),
+        serde_json::json!({"type": "response.reasoning_summary_text.delta", "output_index": 0, "delta": "hm"}),
+        serde_json::json!({"type": "response.output_item.done", "output_index": 0, "item": reasoning}),
+        serde_json::json!({"type": "response.output_item.added", "output_index": 1,
+            "item": {"type": "function_call", "call_id": "call_1", "name": "dispatch", "arguments": ""}}),
+        serde_json::json!({"type": "response.function_call_arguments.delta", "output_index": 1, "delta": "{\"answer\""}),
+        serde_json::json!({"type": "response.output_item.done", "output_index": 1, "item": call}),
+    ];
+    let expected = r#"[{"args":{"answer":"hi","score":1},"id":"call_1","name":"dispatch"}]"#;
+    for terminal_output in [serde_json::json!([reasoning, call]), serde_json::json!([])] {
+        let mut events = opening.to_vec();
+        events.push(serde_json::json!({"type": "response.completed",
+            "response": response_object("completed", &terminal_output)}));
+        let body = [b": keep-alive\n\n".as_slice(), &response_stream(&events)].concat();
+        let returned = outcome(&generation, 0, ok(body));
+        assert_eq!(returned.name, RESULT_EVENT, "{}", returned.data);
+        let data: Json = serde_json::from_str(&returned.data).expect("JSON");
+        assert_eq!(canonical_json(&data["tool_calls"]), expected);
+        assert_eq!(data["usage"]["total_tokens"], 390);
+    }
+    // No terminal event, an error event, or a failed response is malformed.
+    let mut failed = opening.to_vec();
+    failed.push(serde_json::json!({"type": "response.failed", "response": response_object("failed", &serde_json::json!([]))}));
+    let mut errored = opening.to_vec();
+    errored.push(serde_json::json!({"type": "error", "message": "boom"}));
+    for events in [opening.to_vec(), failed, errored] {
+        assert_eq!(
+            outcome(&generation, 0, ok(response_stream(&events))),
+            Returned::failed(FailureCode::Malformed)
+        );
+    }
+    // A cut reply is truncated.
+    let mut cut = response_object("incomplete", &serde_json::json!([call]));
+    cut["incomplete_details"] = serde_json::json!({"reason": "max_output_tokens"});
+    let mut events = opening.to_vec();
+    events.push(serde_json::json!({"type": "response.incomplete", "response": cut}));
+    assert_eq!(
+        outcome(&generation, 0, ok(response_stream(&events))),
+        Returned::failed(FailureCode::Truncated)
+    );
+}
