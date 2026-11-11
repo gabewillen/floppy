@@ -63,6 +63,22 @@ def frame_db(frame: bytes) -> float:
     return 10 * math.log10(power / (32768.0 * 32768.0) + 1e-12)
 
 
+def resampled(pcm: bytes, rate: int) -> bytes:
+    """Mono 16-bit PCM at `rate`, linearly resampled to RATE."""
+    if rate == RATE or not pcm:
+        return pcm
+    samples = array.array("h", pcm[: len(pcm) // 2 * 2])
+    count = len(samples) * RATE // rate
+    out = array.array("h", bytes(2 * count))
+    for index in range(count):
+        position = index * rate / RATE
+        left = int(position)
+        right = min(left + 1, len(samples) - 1)
+        fraction = position - left
+        out[index] = int(samples[left] + (samples[right] - samples[left]) * fraction)
+    return out.tobytes()
+
+
 class Utterances:
     """Cuts a PCM stream into utterances by loudness over a tracked noise floor."""
 
@@ -171,8 +187,11 @@ class Speaker:
         ref = str(sound["audio"])
         path = self.media / ref.removeprefix("/").removeprefix("media/")
         pcm = (sound.get("media_type") in ("audio/pcm", "audio/l16") or path.suffix == ".pcm")
-        if pcm and int(sound.get("sample_rate_hz") or RATE) == RATE and int(sound.get("channels") or 1) == 1:
-            audio = path.read_bytes()
+        rate = int(sound.get("sample_rate_hz") or RATE)
+        if pcm and int(sound.get("channels") or 1) == 1:
+            # Mono PCM at another rate (GPT-Live's 16 kHz, decision D285)
+            # is resampled, so it plays gaplessly too.
+            audio = resampled(path.read_bytes(), rate)
             start = max(time.monotonic(), self.until)
             self.until = start + len(audio) / 2 / RATE
             assert self.player.stdin is not None

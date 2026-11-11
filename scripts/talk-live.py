@@ -69,17 +69,18 @@ NUDGE = "Floppy is quiet now. Say something new to Floppy: react or ask it a new
 
 
 def read_sound(media: Path, sound: dict) -> bytes | None:
-    """floppy's sound as 24 kHz mono 16-bit PCM, or None when it is not."""
+    """floppy's sound as 24 kHz mono 16-bit PCM (mono PCM at another rate,
+    such as the live mouth's 16 kHz, resampled), or None when it is not."""
     ref = str(sound["audio"])
     path = media / ref.removeprefix("/").removeprefix("media/")
     if path.suffix.lower() == ".wav":
         with wave.open(str(path)) as source:
-            if (source.getframerate(), source.getnchannels(), source.getsampwidth()) != (RATE, 1, 2):
+            if (source.getnchannels(), source.getsampwidth()) != (1, 2):
                 return None
-            return source.readframes(source.getnframes())
-    if int(sound.get("sample_rate_hz") or RATE) != RATE or int(sound.get("channels") or 1) != 1:
+            return talk.resampled(source.readframes(source.getnframes()), source.getframerate())
+    if int(sound.get("channels") or 1) != 1:
         return None
-    return path.read_bytes()
+    return talk.resampled(path.read_bytes(), int(sound.get("sample_rate_hz") or RATE))
 
 
 class Transcript:

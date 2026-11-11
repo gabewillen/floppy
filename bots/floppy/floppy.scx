@@ -111,6 +111,15 @@
   2026-10-15: the copy reaches the listening first), and the sound comes
   back to the body as any sound there does (the bot hears itself).
 
+  GPT-Live (decision D285): with speech_provider "live" the listening
+  hears through a GPT-Live session (its stream_provider) and GPT-Live
+  says the bot's replies, its backchannels included: speaking hands each
+  reply on as bot.ability.live.answer {words}, which the communication
+  relays here and the body sends to the listening; the listening puts
+  GPT-Live's sound into the environment (the body passes it the
+  environment's id too). FLOPPY_LIVE_BASE_URL and FLOPPY_LIVE_API_KEY
+  bind the session.
+
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
   register (bot.ability.memory.stm.record
@@ -366,6 +375,9 @@
     <!-- The Listening abilities that receive speaking's efference copy
          (as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
+    <!-- Who hears and says the bot's speech: null, its own hearing and
+         voice; "live", a GPT-Live session (decision D285). -->
+    <data id="speech_provider" expr="null"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <!-- What reached the body while it was busy, in arrival order, for the
@@ -425,6 +437,7 @@
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="memory" expr="memoryAddress()"/>
       <param name="environment" expr="environment"/>
+      <param name="speech_provider" expr="speech_provider"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="memory" expr="memoryAddress()"/>
@@ -432,6 +445,8 @@
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx">
       <param name="memory" expr="memoryAddress()"/>
+      <param name="environment" expr="environment"/>
+      <param name="stream_provider" expr="speech_provider"/>
     </invoke>
     <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
       <param name="memory" expr="memoryAddress()"/>
@@ -689,6 +704,13 @@
               <content expr="_event.data"/>
             </send>
           </foreach>
+        </transition>
+        <!-- A reply GPT-Live says (decision D285): to the listening, which
+             holds the live session. -->
+        <transition event="bot.ability.live.answer" event:schema="../../abilities/schemas/bot.ability.live.answer.json">
+          <send event="bot.ability.live.answer" target="#_listening">
+            <content expr="_event.data"/>
+          </send>
         </transition>
         <!-- What the communication said, and its failures. -->
         <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">

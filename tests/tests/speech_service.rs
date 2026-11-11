@@ -1044,3 +1044,211 @@ fn a_drafted_encoding_streams_every_word_to_the_speech_socket() {
         .collect();
     assert_eq!(types, ["flush", "end"], "{frames:?}");
 }
+
+/// What the fake GPT-Live session received: the upgrade's authorization and
+/// each text message.
+type LiveLog = Arc<Mutex<(Option<String>, Vec<serde_json::Value>)>>;
+
+/// A fake GPT-Live session (`GET /v1/live/sessions`, decision D285): it
+/// answers `session.start` with `session.started`; the first audio it is
+/// appended with the person's words as two transcript deltas and a client
+/// delegation; and each commentary with a tenth of a second of 16 kHz
+/// mono PCM (3200 bytes) and the words it says. `session.close` closes it.
+fn live_socket() -> (String, LiveLog) {
+    use support::hearing::stream::{accept_key, read_frame, write_frame};
+    let listener = TcpListener::bind("127.0.0.1:0").expect("the mock binds a loopback port");
+    let origin = format!(
+        "http://{}",
+        listener.local_addr().expect("the mock has an address")
+    );
+    let log: LiveLog = Arc::new(Mutex::new((None, Vec::new())));
+    let seen = Arc::clone(&log);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).is_err() {
+                continue;
+            }
+            let mut key = None;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.trim_end().split_once(':') {
+                    if name.trim().eq_ignore_ascii_case("sec-websocket-key") {
+                        key = Some(value.trim().to_owned());
+                    } else if name.trim().eq_ignore_ascii_case("authorization") {
+                        seen.lock().expect("the log lock").0 = Some(value.trim().to_owned());
+                    }
+                }
+            }
+            let (Some(key), true) = (key, request_line.starts_with("GET /v1/live/sessions "))
+            else {
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                );
+                continue;
+            };
+            let _ = write!(
+                stream,
+                "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: {}\r\n\r\n",
+                accept_key(&key)
+            );
+            let mut heard = false;
+            while let Some((opcode, payload)) = read_frame(&mut stream) {
+                if opcode != 1 {
+                    break;
+                }
+                let frame: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
+                seen.lock().expect("the log lock").1.push(frame.clone());
+                let replies: Vec<&[u8]> = match frame["type"].as_str() {
+                    Some("session.start") => {
+                        vec![br#"{"type":"session.started","session":{"id":"sess_1"}}"#]
+                    }
+                    Some("session.input_audio.append") if !heard => {
+                        heard = true;
+                        vec![
+                            br#"{"type":"session.input_transcript.delta","delta":"What is the capital","start_ms":0,"end_ms":60}"#,
+                            br#"{"type":"session.input_transcript.delta","delta":" of France?","start_ms":60,"end_ms":100}"#,
+                            br#"{"type":"session.usage.updated","usage":{"seconds":1}}"#,
+                            br#"{"type":"session.delegation.created","event_id":"e1","offset_ms":120,"delegation":{"id":"item_1","type":"delegation","target":"client"}}"#,
+                        ]
+                    }
+                    Some("session.commentary.append") => vec![
+                        br#"{"type":"session.commentary.appended","client_event_id":null}"#,
+                        // 3200 zero bytes, base64.
+                        b"OUTPUT_AUDIO",
+                        br#"{"type":"session.output_transcript.delta","delta":"It's Paris.","start_ms":0,"end_ms":100}"#,
+                    ],
+                    Some("session.close") => break,
+                    _ => Vec::new(),
+                };
+                for reply in replies {
+                    if reply == b"OUTPUT_AUDIO" {
+                        let audio = format!(
+                            r#"{{"type":"session.output_audio.delta","delta":"{}"}}"#,
+                            "A".repeat(4267) + "="
+                        );
+                        write_frame(&mut stream, 1, audio.as_bytes());
+                    } else {
+                        write_frame(&mut stream, 1, reply);
+                    }
+                }
+            }
+        }
+    });
+    (origin, log)
+}
+
+/// A live session (decision D285) hears through GPT-Live as a streaming
+/// hearing session does: the person's words end a turn at the delegation,
+/// floppy's answer goes back as commentary for it, and what GPT-Live says
+/// returns as audio chunks and words.
+#[test]
+fn a_live_session_hears_a_turn_and_says_the_answer() {
+    let (origin, log) = live_socket();
+    let (media, args) = granted(
+        "live",
+        &format!("{origin}/v1"),
+        &[("heard.wav", &wav(16_000, 1))],
+    );
+    let document = format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="talking">
+  <state id="talking">
+    <invoke id="live" type="{service}" env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
+      <param name="operation" expr="'live'"/>
+      <param name="model" expr="'gpt-live-1'"/>
+      <param name="voice" expr="'marin'"/>
+      <param name="output" expr="'media/live.pcm'"/>
+    </invoke>
+    <transition event="bot.ability.hearing.speech.stream.ready">
+      <log label="event" expr="_event.name"/>
+      <send event="bot.ability.hearing.speech.stream.audio" target="#_live"><content expr="({{audio: 'media/heard.wav'}})"/></send>
+    </transition>
+    <transition event="bot.ability.hearing.speech.stream.turn_ended">
+      <log label="event" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+      <send event="bot.ability.live.answer" target="#_live"><content expr="({{words: 'Paris.'}})"/></send>
+    </transition>
+    <transition event="bot.ability.live.said" target="done">
+      <log label="event" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.*"><log label="event" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+    <transition event="done.invoke.live" target="done"/>
+  </state>
+  <final id="done"><onentry><log label="final" expr="'done'"/></onentry></final>
+</scxml>"##,
+        service = speech()
+    );
+    let finished = run_document("live.scx", &document, &args, &[], Duration::from_secs(60));
+    assert_eq!(
+        events(&finished),
+        labelled(&[
+            ("event", "bot.ability.hearing.speech.stream.ready"),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.voice_started {"at_seconds":0}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.partial {"text":"What is the capital"}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.partial {"text":"What is the capital of France?"}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.voice_ended {"at_seconds":0.1}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.transcript {"confidence":null,"end_seconds":0.1,"start_seconds":0,"text":"What is the capital of France?"}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.hearing.speech.stream.turn_ended {"at_seconds":0.12,"probability":null,"text":"What is the capital of France?"}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.live.audio {"audio":"media/live.0.pcm","channels":1,"duration":0.1,"media_type":"audio/pcm","sample_rate_hz":16000,"sequence":0}"#
+            ),
+            ("event", r#"bot.ability.live.said {"text":"It's Paris."}"#),
+            ("final", "done"),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    assert_eq!(
+        std::fs::read(media.join("live.0.pcm")).expect("the audio chunk is written"),
+        vec![0_u8; 3200]
+    );
+    let (authorization, frames) = log.lock().expect("the log lock").clone();
+    assert_eq!(
+        authorization.as_deref(),
+        Some(format!("Bearer {FAKE_KEY}").as_str())
+    );
+    let start = &frames[0];
+    assert_eq!(start["type"], "session.start", "{frames:?}");
+    assert_eq!(start["session"]["model"], "gpt-live-1");
+    assert_eq!(start["session"]["delegation"]["type"], "client");
+    assert_eq!(start["session"]["audio"]["format"]["rate"], 16_000);
+    assert_eq!(start["session"]["audio"]["output"]["voice"], "marin");
+    let appended = frames
+        .iter()
+        .find(|frame| frame["type"] == "session.input_audio.append")
+        .expect("the heard audio is appended");
+    // A tenth of a second of 16 kHz mono silence: 3200 zero bytes, base64.
+    assert_eq!(appended["audio"], "A".repeat(4267) + "=");
+    let commentary = frames
+        .iter()
+        .find(|frame| frame["type"] == "session.commentary.append")
+        .expect("the answer is commentary");
+    assert_eq!(commentary["delegation_id"], "item_1");
+    assert_eq!(commentary["content"], "Paris.");
+}

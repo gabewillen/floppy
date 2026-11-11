@@ -140,4 +140,10 @@
       <start uri="210/test210.scxml"/>
     </test>
   </assert>
+  <assert id="speaking-14" specnum="14" specid="#speaking-14">
+    <![CDATA[With `speech_provider` `live` (decision D285) an utterance is not encoded: its words go to the parent as `bot.ability.live.answer` `{words}` (for GPT-Live to say), and it is recorded as said whole (`outcome` `completed`); a draft is dropped, as GPT-Live is given the whole reply.]]>
+    <test id="220" conformance="mandatory" manual="false">
+      <start uri="220/test220.scxml"/>
+    </test>
+  </assert>
 </assertions>

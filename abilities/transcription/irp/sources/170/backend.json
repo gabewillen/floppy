@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [],
+  "websocket": [
+    [
+      [
+        {
+          "type": "session.started",
+          "session": {
+            "id": "sess_1"
+          }
+        }
+      ],
+      [
+        {
+          "type": "session.input_transcript.delta",
+          "delta": "what is",
+          "start_ms": 0,
+          "end_ms": 50
+        },
+        {
+          "type": "session.input_transcript.delta",
+          "delta": " the weather",
+          "start_ms": 50,
+          "end_ms": 100
+        },
+        {
+          "type": "session.delegation.created",
+          "offset_ms": 100,
+          "delegation": {
+            "id": "item_1",
+            "type": "delegation",
+            "target": "client"
+          }
+        }
+      ]
+    ]
+  ]
+}

@@ -188,6 +188,14 @@ the decoded stimulus carries it as `affect` `{label, scores, valence,
 confidence}` (decision D247); without that backend it carries none. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
+With the listening's `stream_provider` set to `"live"`
+(`abilities/listening/listening.scx`), the transcription hears through a
+GPT-Live session instead of the speech backend's stream (decision D285):
+OpenAI's `gpt-live-1` on `FLOPPY_LIVE_BASE_URL`
+(`https://api.openai.com/v1`) with `FLOPPY_LIVE_API_KEY`, every turn
+GPT-Live delegates becoming a turn of the bot's, which still answers in
+its own voice.
+
 Memory recalls by association (decision D256): the Embedding ability
 (`abilities/embedding/embedding.scx`) embeds each episode reflection stores
 and each turn's cue reasoning recalls with, through
