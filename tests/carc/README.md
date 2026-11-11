@@ -9,7 +9,8 @@ instance, so only what it keeps counts, not how strong its model is.
 
 `floppy_learner.py` is floppy as that learner: one floppy in its environment
 under `scx run`, every benchmark message typed to it as text from `gabe`, its
-reply read from the turn's `floppy.output`, each turn waited on until it and its
+reply read from the turn's `floppy.output` (floppy speaks, so it says its
+action and its grid as rows of digits instead of writing JSON), each turn waited on until it and its
 lessons settle. What floppy keeps is its memory and its behaviors; the reset
 deletes both. Every model call goes to the hosted gateway
 (`FLOPPY_REFLECTION_BASE_URL` when an env file sets it, else `FLOPPY_BASE_URL`;

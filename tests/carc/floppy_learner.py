@@ -7,10 +7,13 @@ floppy: the environment (`environments/environment/environment.scx`) under
 `scx run`, fed text on standard input as `bot.ability.communication.input`
 from `gabe`, as `scripts/talk.py` types a line, and read on standard output.
 
-- Every message is the benchmark's own text protocol
-  (`continual_arc_baselines.systems.protocol`): the rules on an instance's
-  first message, the instance and the feedback since the last action, and
-  one JSON action on the last line of the reply. A reply is the words of
+- Every message is the benchmark's text protocol
+  (`continual_arc_baselines.systems.protocol`), spoken: floppy's replies are
+  speech, whose words may hold no brackets or braces, so it is asked to say
+  its action ("My answer is:" and the grid's rows of digits, "Demo, please.",
+  "I give up.") rather than write JSON, and `spoken_action` hears it (the
+  JSON protocol is still read first). The rules come on an instance's first
+  message, then the instance and the feedback since the last action. A reply is the words of
   each `bot.ability.communication.respond` the turn selected (the
   `floppy.output` log, as `tests/eval/score.py` reads it), joined.
 - A message is answered once its turn settles (`bot.ability.reflection.output`
@@ -55,9 +58,104 @@ import threading
 import time
 from pathlib import Path
 
-from continual_arc.env import GiveUp, GiveUpFeedback, SubmitFeedback
+import re
+
+from continual_arc.env import GiveUp, GiveUpFeedback, RequestDemos, Submit, SubmitFeedback
 from continual_arc.learner import BaseLearner
 from continual_arc_baselines.systems import protocol
+
+
+# floppy speaks: a reply's words (bot.ability.communication.respond) may not
+# hold any of * < > [ ] { } ( ), so it can say no JSON and no bracketed grid.
+# The protocol here is the benchmark's, spoken: grids are rows of digits
+# separated by spaces, one row per line, and an action is said in words.
+def spoken_grid(grid) -> str:
+    return "\n".join(" ".join(str(cell) for cell in row) for row in grid)
+
+
+protocol.render_grid = spoken_grid   # the observation and demonstration pairs render through it
+
+SPOKEN_RULES = """\
+You are being evaluated on Continual-ARC, a lifelong stream of ARC-style grid puzzles.
+Each puzzle instance has a task id and a test input grid. Tasks recur across the
+stream with fresh inputs, so anything you learn about a task id is worth keeping.
+A grid is written as rows of digits 0-9 separated by spaces, one row per line.
+
+On every message choose exactly one action and say it in your reply:
+- to submit an output grid, say "My answer is:" and then the grid, every row as its
+  digits separated by spaces, rows separated by a slash or a new line, for example
+  "My answer is: 0 1 2 / 3 4 5" for a grid of two rows of three;
+- to ask for one more demonstration pair of the task, say "Demo, please.";
+- to give up on the instance, say "I give up."
+
+Each demo request returns one more input-output pair of the task, up to the demo cap shown
+with the input. Scoring: an instance you solve costs 1 for each wrong submission and 1 for
+each demo request. An instance ends when a submission is correct or when the attempt
+cap is reached, and one that ends unsolved costs the whole budget, 16, however many
+submissions and demo requests it used. Feedback on a submission is only correct or
+incorrect. Lower cost is better, so prefer remembering a task's rule over re-requesting
+demos, and prefer requesting demos over guessing blindly; solving at any cost is cheaper
+than not solving.
+"""
+
+_ROW = re.compile(r"^[\s,.;:]*(\d(?:[\s,]+\d)*)[\s,.;:]*$")
+_ANSWER = re.compile(r"answer\s*(?:is)?\s*:?", re.IGNORECASE)
+
+
+def spoken_rows(text: str) -> list[list[int]] | None:
+    """The grid said after the last "answer" (or in the whole reply): the longest run of
+    consecutive rows, split by slashes or lines, that hold digits alone."""
+    found = list(_ANSWER.finditer(text))
+    if found:
+        text = text[found[-1].end():]
+    best: list[list[int]] = []
+    run: list[list[int]] = []
+    for line in re.split(r"[/\n]", text):
+        match = _ROW.match(line)
+        if match:
+            run.append([int(d) for d in re.findall(r"\d", match.group(1))])
+            if len(run) > len(best):
+                best = list(run)
+        elif line.strip():
+            run = []
+    if not best or len({len(row) for row in best}) != 1 or not 1 <= len(best) <= 30 or len(best[0]) > 30:
+        return None
+    return best
+
+
+def spoken_action(reply: str):
+    """The action a spoken reply says: a grid, else a demo request, else giving up; the benchmark's
+    own JSON protocol is still read first, should a reply hold it."""
+    try:
+        return protocol.parse_action(reply)
+    except protocol.ParseError:
+        pass
+    grid = spoken_rows(reply)
+    if grid is not None and _ANSWER.search(reply):
+        return Submit(grid)
+    lower = reply.lower()
+    if re.search(r"\bdemo,? please|\b(request|requesting|want|need|like|give me|ask for|asking for|show me|see)\b"
+                 r"[^.!?]{0,40}\b(demo|demonstration|example|pair)", lower):
+        return RequestDemos()
+    if re.search(r"\bgive up\b|\bgiving up\b", lower):
+        return GiveUp()
+    if grid is not None:
+        return Submit(grid)
+    raise protocol.ParseError("no grid, demo request or give-up was said")
+
+
+def render_observation(obs, pending: list[str], first: bool) -> str:
+    lines = [SPOKEN_RULES, ""] if first else []
+    if pending:
+        lines += ["Feedback since your last action:", *pending, ""]
+    fresh = obs.attempts_used == 0 and obs.demo_requests_used == 0
+    lines.append(f"{'New instance' if fresh else 'Same instance'}. Task id: {obs.task_id}")
+    lines.append(f"Test input ({protocol.shape(obs.input)}):")
+    lines.append(spoken_grid(obs.input))
+    lines.append(f"Wrong attempts used: {obs.attempts_used}/{obs.attempt_cap}. "
+                 f"Demo requests used: {obs.demo_requests_used}/{obs.demo_cap}.")
+    lines.append('Say one action: "My answer is:" and the grid, "Demo, please.", or "I give up."')
+    return "\n".join(lines)
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SERVICES = "https://github.com/stateforward/floppy/services"
@@ -181,7 +279,7 @@ class Floppy:
 class FloppyLearner(BaseLearner):
     def __init__(self, work_dir: str | None = None, env_file: str | None = None, model: str | None = None,
                  scx: str | None = None, start_timeout_s: float = 600, turn_timeout_s: float = 1800,
-                 stream: bool = False):
+                 stream: bool = False, bounds: dict | None = None):
         self.work = Path(work_dir or os.environ.get("FLOPPY_CARC_WORK") or ROOT / "target/floppy-carc/work").resolve()
         # One env file, or several joined by the path separator; a later file's entry wins.
         self.env_files = [Path(p).resolve() for p in
@@ -198,6 +296,8 @@ class FloppyLearner(BaseLearner):
         self.start_timeout_s = start_timeout_s
         self.turn_timeout_s = turn_timeout_s
         self.stream = stream
+        self.bounds = bounds or {"child_operation_timeout_ms": 300000, "child_operation_ceiling_ms": 900000,
+                                 "reasoning_timeout_ms": 900000}
         self.floppy: Floppy | None = None
         self.first_in_instance = True
         self.pending: list[str] = []
@@ -226,6 +326,11 @@ class FloppyLearner(BaseLearner):
             start = text.index(f'<data id="{name}" expr="')
             end = text.index("/>", start) + 2
             text = text[:start] + f'<data id="{name}" expr="\'{self.model}\'"/>' + text[end:]
+        # A turn over a 30x30 grid can think for minutes: the cognition's step bounds are raised
+        # (the bot's bounds param, decision D101) from their conversational 240 s.
+        assert text.count('<data id="bounds" expr="({})"/>') == 1
+        bounds = ", ".join(f"{key}: {int(value)}" for key, value in self.bounds.items())
+        text = text.replace('<data id="bounds" expr="({})"/>', f'<data id="bounds" expr="({{{bounds}}})"/>')
         body.write_text(text)
         for document in self.layout.rglob("*.scx"):
             text = document.read_text()
@@ -322,17 +427,16 @@ class FloppyLearner(BaseLearner):
         fresh = obs.attempts_used == 0 and obs.demo_requests_used == 0
         if fresh:
             self.first_in_instance = True
-        message = protocol.render_observation(obs, pending=self.pending, demo_cost=1.0, max_cost=16.0,
-                                              first_in_session=self.first_in_instance)
+        message = render_observation(obs, self.pending, self.first_in_instance)
         self.pending = []
         self.first_in_instance = False
         for attempt in range(3):
             reply = self.ask(message)
             try:
-                return protocol.parse_action(reply)
+                return spoken_action(reply)
             except protocol.ParseError as error:
-                message = (f"I could not read an action from your reply ({error}). "
-                           "Reply with exactly one action JSON on the last line.")
+                message = (f"I could not hear an action in your reply ({error}). Say one action: "
+                           '"My answer is:" and the grid, "Demo, please.", or "I give up."')
         return GiveUp()
 
     def observe(self, obs, action, feedback) -> None:
