@@ -25,12 +25,16 @@ from `gabe`, as `scripts/talk.py` types a line, and read on standard output.
 
 Every model is hosted: in a scratch copy of the layout the bot's `model` and
 `reflection_model` are both `model`, every model call names
-`FLOPPY_REFLECTION_BASE_URL` / `_API_KEY` (the CPA gateway), and nothing
+the gateway's variables (`FLOPPY_REFLECTION_BASE_URL` / `_API_KEY` when an env
+file sets them, else `FLOPPY_BASE_URL` / `_API_KEY`, as `.env.cpa` does), and nothing
 streams (`stream=False`), since the gateway answers a streamed request with
 keep-alive comments only. The lab's embedding, speech, voice and emotion
 backends are left unconfigured (recall is by recency, and floppy replies in
-text alone). The decision service is the env file's `TYPESAFE_*`. The env file
-is given to `scx` as it is; nothing here reads or copies a value of it.
+text alone). The decision service is the env files' `TYPESAFE_*`. `FLOPPY_CARC_ENV` is one
+env file or several joined by `:` (the last file's entry wins, as in `scx`):
+`.env:.env.cpa` takes the decision key from `.env` and the gateway from
+`.env.cpa`. The files are given to `scx` as they are; nothing here reads or
+copies a value of them.
 
 Usage (from the floppy checkout, with continual-arc and its baselines
 installed in the same environment):
@@ -68,17 +72,19 @@ LESSON_OPEN = ("learning.recalled",)
 LESSON_CLOSE = ("learning.learned", "learning.failed")
 RESPOND = "bot.ability.communication.respond"
 # The variables the layout's documents name, renamed: every model call goes to
-# the hosted gateway (the reflection endpoint), nothing streams, and the
-# lab's own backends (embedding, speech, voices, emotion) are named by
-# variables no env file sets, so they are unconfigured. The base env file is
-# passed to scx as it is; no value of it is read or copied here.
-SLOTS = {
-    "FLOPPY_BASE_URL": "FLOPPY_REFLECTION_BASE_URL",
-    "FLOPPY_API_KEY": "FLOPPY_REFLECTION_API_KEY",
-    "FLOPPY_STREAM": "FLOPPY_CARC_UNSET_STREAM",
-    **{f"FLOPPY_{kind}_{slot}": f"FLOPPY_CARC_UNSET_{kind}_{slot}"
-       for kind in ("EMBEDDING", "SPEECH", "VOICE", "EMOTION") for slot in ("BASE_URL", "API_KEY")},
-}
+# the hosted gateway (`<gateway>_BASE_URL` / `_API_KEY`), nothing streams, and
+# the lab's own backends (embedding, speech, voices, emotion) are named by
+# variables no env file sets, so they are unconfigured. The env files are
+# passed to scx as they are (the last file's entry wins); no value of them is
+# read or copied here.
+def slots(gateway: str) -> dict[str, str]:
+    return {
+        **{f"{prefix}_{slot}": f"{gateway}_{slot}"
+           for prefix in ("FLOPPY", "FLOPPY_REFLECTION") for slot in ("BASE_URL", "API_KEY")},
+        "FLOPPY_STREAM": "FLOPPY_CARC_UNSET_STREAM",
+        **{f"FLOPPY_{kind}_{slot}": f"FLOPPY_CARC_UNSET_{kind}_{slot}"
+           for kind in ("EMBEDDING", "SPEECH", "VOICE", "EMOTION") for slot in ("BASE_URL", "API_KEY")},
+    }
 
 
 def read_names(path: Path) -> set[str]:
@@ -111,11 +117,11 @@ def reply_words(text: str) -> list[str] | None:
 class Floppy:
     """One running environment with floppy in it."""
 
-    def __init__(self, layout: Path, memory: Path, media: Path, env_file: Path, scx: str, log: Path):
+    def __init__(self, layout: Path, memory: Path, media: Path, env_files: list[Path], scx: str, log: Path):
         command = [
             scx, "run", "--offline",
             "--cache-dir", str(ROOT / "target/components/package-cache"),
-            "--env-file", str(env_file),
+            *[arg for env_file in env_files for arg in ("--env-file", str(env_file))],
             "--dir", f"{SERVICES}/sql={memory}::/memory",
             "--wasi", f"{SERVICES}/pgsql=inherit-network",
             *[arg for service in ("generate", "speech", "vision")
@@ -177,7 +183,16 @@ class FloppyLearner(BaseLearner):
                  scx: str | None = None, start_timeout_s: float = 600, turn_timeout_s: float = 1800,
                  stream: bool = False):
         self.work = Path(work_dir or os.environ.get("FLOPPY_CARC_WORK") or ROOT / "target/floppy-carc/work").resolve()
-        self.env_file = Path(env_file or os.environ.get("FLOPPY_CARC_ENV") or ROOT / ".env")
+        # One env file, or several joined by the path separator; a later file's entry wins.
+        self.env_files = [Path(p).resolve() for p in
+                          str(env_file or os.environ.get("FLOPPY_CARC_ENV") or ROOT / ".env").split(os.pathsep)]
+        names = set().union(*(read_names(p) for p in self.env_files))
+        # The variables naming the hosted gateway: FLOPPY_CARC_GATEWAY, else the reflection
+        # endpoint's when an env file sets it, else FLOPPY_BASE_URL's (an env file such as .env.cpa).
+        self.gateway = os.environ.get("FLOPPY_CARC_GATEWAY") or (
+            "FLOPPY_REFLECTION" if "FLOPPY_REFLECTION_BASE_URL" in names else "FLOPPY")
+        if f"{self.gateway}_BASE_URL" not in names:
+            raise RuntimeError(f"no env file sets {self.gateway}_BASE_URL (the hosted gateway)")
         self.model = model or os.environ.get("FLOPPY_CARC_MODEL") or "gpt-6-luna"
         self.scx = scx or os.environ.get("FLOPPY_CARC_SCX") or shutil.which("scx") or "scx"
         self.start_timeout_s = start_timeout_s
@@ -214,15 +229,13 @@ class FloppyLearner(BaseLearner):
         body.write_text(text)
         for document in self.layout.rglob("*.scx"):
             text = document.read_text()
-            for old, new in SLOTS.items():
+            for old, new in slots(self.gateway).items():
                 for quote in ('"', "'"):
                     text = text.replace(f"{quote}{old}{quote}", f"{quote}{new}{quote}")
             if not self.stream and document.name == "reasoning.scx":
                 assert text.count('<data id="stream" expr="true"/>') == 1
                 text = text.replace('<data id="stream" expr="true"/>', '<data id="stream" expr="false"/>')
             document.write_text(text)
-        if "FLOPPY_REFLECTION_BASE_URL" not in read_names(self.env_file):
-            raise RuntimeError(f"{self.env_file} names no FLOPPY_REFLECTION_BASE_URL (the hosted gateway)")
 
     def _start(self) -> Floppy:
         if self.floppy is not None and self.floppy.process.poll() is None:
@@ -231,7 +244,7 @@ class FloppyLearner(BaseLearner):
         self._lay_out()
         for directory in (self.memory, self.layout / "behaviors", self.work / "media"):
             directory.mkdir(parents=True, exist_ok=True)
-        self.floppy = Floppy(self.layout, self.memory, self.work / "media", self.env_file.resolve(), self.scx,
+        self.floppy = Floppy(self.layout, self.memory, self.work / "media", self.env_files, self.scx,
                              self.work / "floppy.log")
         self.turns = (self.work / "turns.jsonl").open("a")
         deadline = time.monotonic() + self.start_timeout_s

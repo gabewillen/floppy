@@ -12,7 +12,9 @@ under `scx run`, every benchmark message typed to it as text from `gabe`, its
 reply read from the turn's `floppy.output`, each turn waited on until it and its
 lessons settle. What floppy keeps is its memory and its behaviors; the reset
 deletes both. Every model call goes to the hosted gateway
-(`FLOPPY_REFLECTION_BASE_URL`), with one model, `FLOPPY_CARC_MODEL` (default
+(`FLOPPY_REFLECTION_BASE_URL` when an env file sets it, else `FLOPPY_BASE_URL`;
+`FLOPPY_CARC_ENV=.env:.env.cpa` takes the decision key from `.env` and the
+gateway from `.env.cpa`), with one model, `FLOPPY_CARC_MODEL` (default
 `gpt-6-luna`, the model of the paper's harness rows); the lab's embedding,
 speech, voice and emotion backends are left unconfigured. The module docstring
 has the details.

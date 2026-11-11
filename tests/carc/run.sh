@@ -6,8 +6,9 @@
 #   sh tests/carc/run.sh reset    # the same stream, floppy wiped before every instance
 #   sh tests/carc/run.sh learned  # the share learned: stream against reset
 #
-# FLOPPY_CARC_ENV (default .env) is the base env file: its FLOPPY_REFLECTION_BASE_URL
-# and key (the hosted gateway) and TYPESAFE_* are all floppy is given.
+# FLOPPY_CARC_ENV (default .env) is the env file, or several joined by `:` with the
+# last entry winning (`.env:.env.cpa`): the hosted gateway (FLOPPY_REFLECTION_* when
+# set, else FLOPPY_BASE_URL / FLOPPY_API_KEY) and TYPESAFE_* are all floppy uses.
 # FLOPPY_CARC_MODEL (default gpt-6-luna) is every model floppy calls.
 # FLOPPY_CARC_CONFIG (default arc1-smoke) and FLOPPY_CARC_SEED (default 0).
 set -eu
