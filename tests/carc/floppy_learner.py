@@ -144,26 +144,6 @@ def spoken_action(reply: str):
     raise protocol.ParseError("no grid, demo request or give-up was said")
 
 
-# FLOPPY_CARC_SELECT=self: reflection's select prompt (decision D136) asks it to learn only from an explicit
-# instruction and never from repetition, so on ARC turns, which hold none, it rightly selects nothing. This
-# variant, put in the scratch layout's reflection only, lets it learn a recurring task's rule unasked, as a
-# turn behavior whose program computes the answer. No apostrophes or quotes: it sits in a JS string in XML.
-SELF_DIRECTED = (
-    "Select at most one offered behavior inventory event (bot.behavior.create, change, or break). Besides "
-    "implementing an explicit user instruction for future behavior, you learn on your own from your work: when "
-    "a turn or prior_episodes show a recurring task, such as a puzzle with a task id that keeps coming back, and "
-    "you can state the rule that solves it, or a verdict shows the rule you used was right or wrong, create a "
-    "turn behavior that handles that task, or change the one you have. Its trigger is the task id, and its "
-    "program applies the rule to the input it is given and answers in the form the task asks for, so the next "
-    "time the task comes you answer it at once without being shown it again. Name the rule exactly in the spec, "
-    "with an example input and output from what you were shown. Change a behavior whose answer was judged "
-    "wrong, to the corrected rule, and break it when you cannot correct it. Do not create a behavior for a task "
-    "whose rule you cannot yet state. Reuse matching inventory: change rather than duplicate, and repair a DRAFT "
-    "left by a failed build. A DRAFT is not successful learning. Otherwise return an empty selection. Use only "
-    "offered events; data must match the event schema.\\n"
-)
-
-
 def render_observation(obs, pending: list[str], first: bool) -> str:
     lines = [SPOKEN_RULES, ""] if first else []
     if pending:
@@ -299,7 +279,7 @@ class Floppy:
 class FloppyLearner(BaseLearner):
     def __init__(self, work_dir: str | None = None, env_file: str | None = None, model: str | None = None,
                  scx: str | None = None, start_timeout_s: float = 600, turn_timeout_s: float = 1800,
-                 stream: bool = False, bounds: dict | None = None, select: str | None = None):
+                 stream: bool = False, bounds: dict | None = None):
         self.work = Path(work_dir or os.environ.get("FLOPPY_CARC_WORK") or ROOT / "target/floppy-carc/work").resolve()
         # One env file, or several joined by the path separator; a later file's entry wins.
         self.env_files = [Path(p).resolve() for p in
@@ -316,9 +296,6 @@ class FloppyLearner(BaseLearner):
         self.start_timeout_s = start_timeout_s
         self.turn_timeout_s = turn_timeout_s
         self.stream = stream
-        self.select = select or os.environ.get("FLOPPY_CARC_SELECT") or "taught"
-        if self.select not in ("taught", "self"):
-            raise ValueError(f"select is taught or self, not {self.select!r}")
         self.bounds = bounds or {"child_operation_timeout_ms": 300000, "child_operation_ceiling_ms": 900000,
                                  "reasoning_timeout_ms": 900000}
         self.floppy: Floppy | None = None
@@ -360,12 +337,6 @@ class FloppyLearner(BaseLearner):
             for old, new in slots(self.gateway).items():
                 for quote in ('"', "'"):
                     text = text.replace(f"{quote}{old}{quote}", f"{quote}{new}{quote}")
-            if self.select == "self" and document.name == "reflection.scx":
-                start = text.index("<data id=\"select_instructions\" expr=\"'")
-                head = start + len("<data id=\"select_instructions\" expr=\"'")
-                # Keep the inventory's description (from its second paragraph on); replace the policy before it.
-                cut = text.index("\\nbehaviors lists installed inventory", head)
-                text = text[:head] + SELF_DIRECTED + text[cut + 2:]
             if not self.stream and document.name == "reasoning.scx":
                 assert text.count('<data id="stream" expr="true"/>') == 1
                 text = text.replace('<data id="stream" expr="true"/>', '<data id="stream" expr="false"/>')
