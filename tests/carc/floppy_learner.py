@@ -300,6 +300,9 @@ class FloppyLearner(BaseLearner):
         if f"{self.gateway}_API_KEY" not in names:
             raise RuntimeError(f"no env file sets {self.gateway}_API_KEY (the hosted gateway's key)")
         self.model = model or os.environ.get("FLOPPY_CARC_MODEL") or "gpt-6-luna"
+        # OpenAI's Responses API reasons beside function tools; Chat Completions forces effort none there.
+        self.api = os.environ.get("FLOPPY_CARC_API") or ("responses" if "OPENAI" in self.gateway else "chat")
+        self.effort = os.environ.get("FLOPPY_CARC_EFFORT") or None
         self.scx = scx or os.environ.get("FLOPPY_CARC_SCX") or shutil.which("scx") or "scx"
         self.start_timeout_s = start_timeout_s
         self.turn_timeout_s = turn_timeout_s
@@ -330,10 +333,16 @@ class FloppyLearner(BaseLearner):
                 shutil.copytree(ROOT / sub, self.layout / sub, ignore=shutil.ignore_patterns("target"))
         body = self.layout / "bots/floppy/floppy.scx"
         text = body.read_text()
-        for name in ("model", "reflection_model"):
+        # The model, the API it is asked through (`api`: chat or responses, #168) and its reasoning
+        # effort (null: the API's default) for the bot and for its reflection alike.
+        settings = {"model": self.model, "reflection_model": self.model,
+                    "api": self.api, "reflection_api": self.api}
+        if self.effort:
+            settings.update(reasoning_effort=self.effort, reflection_reasoning_effort=self.effort)
+        for name, value in settings.items():
             start = text.index(f'<data id="{name}" expr="')
             end = text.index("/>", start) + 2
-            text = text[:start] + f'<data id="{name}" expr="\'{self.model}\'"/>' + text[end:]
+            text = text[:start] + f'<data id="{name}" expr="\'{value}\'"/>' + text[end:]
         # A turn over a 30x30 grid can think for minutes: the cognition's step bounds are raised
         # (the bot's bounds param, decision D101) from their conversational 240 s.
         assert text.count('<data id="bounds" expr="({})"/>') == 1
