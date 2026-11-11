@@ -258,6 +258,13 @@ fn selection(route: &str) -> Option<Json> {
             revise_selection("I am a warm greeter.")[0].clone(),
             revise_selection("I am a quiet greeter.")[0].clone()
         ])),
+        "noexample" => Some(create_selection()),
+        "defaultanswer" => {
+            let mut create = create_selection();
+            create[0]["data"]["example"] = json!("Knock knock.");
+            create[0]["data"]["counterexample"] = json!("What time is it?");
+            Some(create)
+        }
         _ => None,
     }
 }
@@ -1750,4 +1757,76 @@ fn two_persona_revisions_are_refused() {
         ]
     );
     assert_eq!(mock.requests("dispatch").len(), 2);
+}
+
+/// The conversation's turn of the tests below (decision D293).
+fn conversation_input(turn: u64) -> Json {
+    let mut input = input(turn);
+    input["cognition_input"]["stimulus"] = json!({
+        "event": "bot.ability.conversation.output",
+        "data": {
+            "messages": [{"direction": "inbound", "content": "That was right.", "content_type": "text/plain"}],
+            "parent": {"event": "bot.ability.conversation.input", "data": {"content": "That was right."}},
+        },
+    });
+    input
+}
+
+/// On a conversation's turn, a turn behavior's create with no example and
+/// counterexample is refused as the model's to repair, and the same
+/// refusal again fails the turn: the builder could not check that it
+/// answers what it should and declines the rest (decision D293).
+#[test]
+fn a_conversation_turns_create_without_an_example_is_refused() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "noexample", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &conversation_input(1));
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "reflection.rejected"),
+        ["attempt 0: missing-example", "attempt 1: missing-example"],
+        "{records:?}"
+    );
+    assert!(
+        texts(&records, "reflection.inventory").is_empty(),
+        "{records:?}"
+    );
+    assert_eq!(mock.requests("dispatch").len(), 2);
+}
+
+/// An untaught create with an example and a counterexample is run on both
+/// (decision D293): a draft that answers every turn by default answers the
+/// example but not by declining the counterexample, so it is abandoned as
+/// a DRAFT, with the refusal that names the counterexample.
+#[test]
+fn an_untaught_create_that_answers_by_default_is_refused_on_its_counterexample() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "defaultanswer", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &conversation_input(1));
+    drop(run.close(WAIT));
+    assert!(
+        texts(&records, "reflection.rejected").is_empty(),
+        "{records:?}"
+    );
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with("Reflection change abandoned: attempts exhausted:")
+            && failed[0].contains("turn behavior handled the input it must decline (its counterexample, a message it must not answer)"),
+        "{failed:?}"
+    );
+    let inventory = json_log(&records, "inventory");
+    assert_eq!(inventory[0]["status"], "DRAFT", "{inventory}");
+    let drafts = mock.requests("scxml_draft");
+    let prompt = read(&drafts[0].message("user"));
+    let contract = prompt["constraints"][0]
+        .as_str()
+        .expect("the turn behavior contract");
+    assert!(
+        contract.contains("The intent names an example"),
+        "{contract}"
+    );
+    assert!(contract.contains("Knock knock."), "{contract}");
 }

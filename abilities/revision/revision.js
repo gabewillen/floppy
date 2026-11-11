@@ -77,13 +77,14 @@ function builderRequest() {
   return ({spec: change_instructions, context: write, name: intent.name, model: reflection_model === null ? model : reflection_model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
 }
 
-// Whether the lesson's intent carries an example and this turn's input
-// holds the message it replaces (a conversation's parent.data.content,
-// decision D228).
+// Whether the intent carries an example and this turn's input holds the
+// message it replaces (a conversation's parent.data.content): a lesson's
+// (decision D228), or an untaught revision's, which reflection requires
+// on a conversation's turn (decision D293).
 function isProbe() {
   var example = intent === null ? undefined : intent.example;
   var parent = behavior_input === null ? undefined : behavior_input.parent;
-  return instruction !== null && typeof example === 'string' && example.length > 0 && parent !== null && typeof parent === 'object' && parent.data !== null && typeof parent.data === 'object' && typeof parent.data.content === 'string';
+  return typeof example === 'string' && example.length > 0 && parent !== null && typeof parent === 'object' && parent.data !== null && typeof parent.data === 'object' && typeof parent.data.content === 'string';
 }
 
 // This turn's input with the lesson's message replaced by its example,
@@ -111,8 +112,8 @@ function withMessage(text) {
   return probe;
 }
 
-// Whether the lesson's intent carries a counterexample to decline
-// beside its example (decision D229).
+// Whether the intent carries a counterexample to decline beside its
+// example (decisions D229, D293).
 function hasCounterexample() {
   return probing && typeof intent.counterexample === 'string' && intent.counterexample.length > 0 && intent.counterexample !== intent.example;
 }
@@ -146,7 +147,10 @@ function builderConstraints() {
 // builds it, in model-facing XML: decision D201).
 function turnContract() {
   var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? turnTargets() : triggers); });
-  return instruction === null ? contract : contract + ' ' + (probing ? probe_contract : lesson_contract);
+  if (instruction === null) {
+    return probing ? contract + ' ' + example_contract : contract;
+  }
+  return contract + ' ' + (probing ? probe_contract : lesson_contract);
 }
 
 // Names as a parenthesized, comma-separated list.

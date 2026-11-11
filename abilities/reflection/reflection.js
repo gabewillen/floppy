@@ -167,6 +167,50 @@ function isDeclinedChange(_event) {
   });
 }
 
+// Whether this turn is a conversation's: its stimulus data's parent.data
+// holds the message it answers, which a counterexample replaces.
+function isConversationTurn() {
+  var stimulus = cognition_input === null || typeof cognition_input !== 'object' ? null : cognition_input.stimulus;
+  var data = stimulus === null || typeof stimulus !== 'object' ? null : stimulus.data;
+  var parent = data === null || typeof data !== 'object' ? null : data.parent;
+  return parent !== null && typeof parent === 'object' && parent.data !== null && typeof parent.data === 'object' && typeof parent.data.content === 'string';
+}
+
+// Whether a selection revises a turn behavior: a create with triggers, or
+// a change of a row whose lifetime is turn (a routine has neither).
+function isTurnRevision(s) {
+  var d = s.data;
+  if (d === undefined || d === null) {
+    return false;
+  }
+  if (s.event === 'bot.behavior.create') {
+    return Array.isArray(d.triggers) && d.triggers.length > 0;
+  }
+  return s.event === 'bot.behavior.change' && behaviors.some(function (b) { return b.name === d.name && b.lifetime === 'turn'; });
+}
+
+function isText(v) {
+  return typeof v === 'string' && v.length > 0;
+}
+
+// Whether the reply revises a turn behavior on a conversation's turn
+// without an example to answer and a counterexample to decline (decision
+// D293): reflection's revisions are untaught, and the turn it learns from
+// (a verdict, say) is not one the behavior answers, so the builder's run
+// is on the example and must decline the counterexample.
+function isMissingExample(_event) {
+  if (!isGenerate(_event) || !isConversationTurn()) {
+    return false;
+  }
+  return replySelections(_event).some(function (s) {
+    return isTurnRevision(s) && !(isText(s.data.example) && isText(s.data.counterexample) && s.data.example !== s.data.counterexample);
+  });
+}
+
+function missingExampleRejection() {
+  return ({key: 'missing-example', message: 'a create or change of a turn behavior needs example, one message it must answer, and counterexample, a different message it must not answer (for a behavior that answers one task, a message of another task): it is run on both, must answer the example and must decline the counterexample'});
+}
+
 function declinedChangeRejection() {
   return ({key: 'declined-change', message: 'bot.behavior.change may not name ' + declined.join(', ') + ': it rightly declined this turn'});
 }
