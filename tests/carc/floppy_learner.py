@@ -14,10 +14,15 @@ from `gabe`, as `scripts/talk.py` types a line, and read on standard output.
   "I give up.") rather than write JSON, and `spoken_action` hears it (the
   JSON protocol is still read first). The rules come on an instance's first
   message, then the instance and the feedback since the last action. A reply is the words of
-  each `bot.ability.communication.respond` the turn selected (the
-  `floppy.output` log, as `tests/eval/score.py` reads it), joined.
-- A message is answered once its turn settles (`bot.ability.reflection.output`
-  or a failure, as `tests/tests/floppy_eval.rs`'s SETTLED) and every lesson
+  each `bot.ability.communication.respond` the message's own turn selected
+  (the `floppy.output` log, as `tests/eval/score.py` reads it), joined: the
+  turn autonomy names first after the message's `communication.product`.
+  What floppy says on a turn no message opened (a lesson's
+  `learning.output`, a perception) answers nothing and is only counted
+  (`unpaired_speech`); taken as the next reply, it had shifted every later
+  reply onto the wrong message.
+- A message is answered once its own turn settles (its
+  `bot.ability.reflection.output`, or a failure, as `tests/tests/floppy_eval.rs`'s SETTLED) and every lesson
   the learning ability opened meanwhile is learned or failed: what floppy
   learns from a turn is part of the turn.
 - An instance ends with a closing message carrying its verdict, so the
@@ -52,6 +57,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -195,6 +201,15 @@ def read_names(path: Path) -> set[str]:
     return names
 
 
+def output_turn(text: str) -> int | None:
+    """The turn a floppy.output record answers."""
+    try:
+        turn = json.loads(text).get("turn")
+    except (ValueError, AttributeError):
+        return None
+    return turn if isinstance(turn, int) else None
+
+
 def reply_words(text: str) -> list[str] | None:
     try:
         output = json.loads(text).get("output")
@@ -312,7 +327,7 @@ class FloppyLearner(BaseLearner):
         self.floppy: Floppy | None = None
         self.first_in_instance = True
         self.pending: list[str] = []
-        self.counts = {"turns": 0, "unsettled_turns": 0, "lessons": 0, "restarts": 0, "seconds": 0.0}
+        self.counts = {"turns": 0, "unsettled_turns": 0, "lessons": 0, "restarts": 0, "unpaired_speech": 0, "seconds": 0.0}
         self.turns = None
 
     # -- layout and process ---------------------------------------------------
@@ -402,22 +417,41 @@ class FloppyLearner(BaseLearner):
         replies: list[str] = []
         settled = False
         open_lessons = 0
-        labels: list[str] = []
+        # The reply is what floppy says on this message's own turn: the turn autonomy names
+        # first after the message's communication.product. floppy also speaks on turns no
+        # message opened (a lesson's learning.output, a perception), and one message's late
+        # turn can still be settling when the next is sent; that speech answers no message,
+        # so it is left out and counted.
+        produced = False
+        turn: int | None = None
         while True:
             record = floppy.next(deadline)
             if record is None:
                 break
             label = record.get("label")
-            labels.append(label)
-            if label == "floppy.output":
-                replies += reply_words(str(record.get("text"))) or []
+            text = str(record.get("text"))
+            if label == "communication.product" and not produced and text.endswith(":turn:gabe"):
+                produced = True
+            elif label == "autonomy" and produced and turn is None:
+                match = re.match(r"turn (\d+):", text)
+                if match:
+                    turn = int(match.group(1))
+            elif label == "floppy.output":
+                words = reply_words(text) or []
+                if turn is not None and output_turn(text) == turn:
+                    replies += words
+                elif words:
+                    self.counts["unpaired_speech"] += 1
             elif label in LESSON_OPEN:
                 open_lessons += 1
                 self.counts["lessons"] += 1
             elif label in LESSON_CLOSE:
                 open_lessons = max(0, open_lessons - 1)
+            elif label == "bot.ability.reflection.output":
+                settled = settled or (turn is not None and text.startswith(f"turn {turn}"))
             elif label in SETTLED:
-                settled = True
+                # A failure settles whichever turn it ends; a reflection failure names no turn.
+                settled = settled or turn is not None or label != "cognition.reflection.failed"
             if settled and open_lessons == 0 and label in SETTLED + LESSON_CLOSE:
                 # A lesson's result comes back as a turn of its own; its settling ends the wait.
                 break
@@ -428,7 +462,8 @@ class FloppyLearner(BaseLearner):
         reply = "\n".join(replies)
         if self.turns is not None:
             self.turns.write(json.dumps({"message": message, "reply": reply, "settled": settled,
-                                         "seconds": round(seconds, 1), "lessons_open": open_lessons}) + "\n")
+                                         "seconds": round(seconds, 1), "lessons_open": open_lessons,
+                                         "turn": turn}) + "\n")
             self.turns.flush()
         return reply
 
