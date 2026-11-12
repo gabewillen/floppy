@@ -1859,8 +1859,15 @@ mod live {
                 Some(deadline) => object.number("next_deadline_ms", deadline),
                 None => object.null("next_deadline_ms"),
             };
-            self.sink
-                .emit(&object.number("commands", step.commands).finish())?;
+            self.sink.emit(
+                &object
+                    .number("commands", step.commands)
+                    .number(
+                        "data_model_memory_peak_bytes",
+                        step.data_model_memory_peak_bytes,
+                    )
+                    .finish(),
+            )?;
             let finished = step.status == LiveStatus::Finished;
             if self.snapshot_on == SnapshotOn::Call
                 || (self.snapshot_on == SnapshotOn::Done && finished && !self.snapshot_done)
@@ -2621,6 +2628,7 @@ mod live {
             status: session.status(),
             next_deadline: session.next_deadline()?,
             commands: 0,
+            data_model_memory_peak_bytes: session.data_model_memory_peak_bytes(),
         };
         let mut driver = Driver {
             session,

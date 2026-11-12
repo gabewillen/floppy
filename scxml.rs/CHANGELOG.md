@@ -1446,6 +1446,35 @@ hard cutover.
 
 ### Fixed
 
+- A long ECMAScript session no longer runs out of memory on its events'
+  strings. Boa starts a collection by the bytes its own collector
+  allocated, and a string's characters are not among them, so each event's
+  data (garbage once the next event is bound) stayed until the data
+  model's memory reached the store's 64 MiB and the session failed with
+  `platform`: a session receiving events with 200 KB of text reached it in
+  300 events, and floppy's bot in about 200 turns. The data model now
+  collects after an operation that bound `_event` to a new event, or whose
+  linear memory grew since its last collection: once per event, not per
+  evaluation, at the same operations on a replay. Proven by
+  `a_long_sessions_event_strings_are_collected` (the same 300 events peak
+  under 16 MiB, where they reached 65.6 MB). The ECMAScript IRP baselines
+  are regenerated: every case result is unchanged, and only the data
+  model's source digest and the report digests moved.
+- Every `scx run` `call` record, and `LiveCallResult`, carries
+  `data_model_memory_peak_bytes`: the largest linear memory any data model
+  of the session has grown to. A long session's data grows toward the
+  store's 64 MiB memory size, and reaching it ends the session with
+  `platform`; this shows the approach call by call. Proven by
+  `each_call_reports_the_data_models_memory_peak`.
+- A session that fails with `platform` because its data model trapped now
+  says why: the failure's detail (and the message `scx run` writes, which
+  now carries the detail) names whether the call exhausted its fuel, its
+  memory growth copy allowance, or reached the store's memory size, or the
+  guest trapped (unreachable or a stack overflow). The machine only sees
+  `platform` from a trapped data model, so the session host notes the trap's
+  cause and reports it with the session's failure; before, every such
+  failure read `machine session failed: platform` with nothing more.
+  Proven by `a_data_model_out_of_memory_names_its_cause`.
 - A data-model call under the session host may spend the whole fuel of the
   host call it runs in. It was capped at `DEFAULT_DATA_MODEL_CALL_FUEL`
   (one billion) whatever `--fuel` said, so one ECMAScript expression that
