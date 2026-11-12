@@ -470,7 +470,13 @@ impl std::fmt::Display for SessionHostError {
             RunFailure::CommandBound => formatter.write_str(
                 "a root machine call stopped at its per-call command bound before a stable configuration",
             ),
-            RunFailure::Machine { code, .. } => write!(formatter, "machine session failed: {code}"),
+            RunFailure::Machine {
+                code,
+                detail: Some(detail),
+            } => write!(formatter, "machine session failed: {code}: {detail}"),
+            RunFailure::Machine { code, detail: None } => {
+                write!(formatter, "machine session failed: {code}")
+            }
             RunFailure::Harness { code, message } => write!(formatter, "[{code}] {message}"),
             RunFailure::Host(error) => error.fmt(formatter),
             RunFailure::Snapshot(failure) => write!(formatter, "session snapshot: {failure}"),

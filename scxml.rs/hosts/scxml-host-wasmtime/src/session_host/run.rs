@@ -96,6 +96,9 @@ pub(crate) struct RunShared {
     /// The session and processor type URI of each processor instance, by
     /// its run-unique id, while it is open.
     pub(crate) processor_owners: RefCell<BTreeMap<u64, (SessionKey, String)>>,
+    /// What ended the last data-model call that trapped, until a machine
+    /// failure reports it: the machine itself only sees `platform`.
+    data_model_trap: crate::data_model::TrapNote,
 }
 
 /// One session's (or invoked service's) identity and completion.
@@ -270,7 +273,14 @@ impl RunShared {
             machines: RefCell::new(BTreeMap::new()),
             last_instance: std::cell::Cell::new(0),
             processor_owners: RefCell::new(BTreeMap::new()),
+            data_model_trap: crate::data_model::TrapNote::default(),
         }
+    }
+
+    /// Joins a session's data model to this run: its clock reads the
+    /// session's `time`, and its traps are noted for the session's failure.
+    fn join(&self, model: &mut ComponentDataModel, time: &crate::data_model::SessionTime) {
+        model.join_run(self.start_epoch_ms, Arc::clone(time), &self.data_model_trap);
     }
 
     /// The next run-unique id of an invocation or processor instance.
@@ -543,9 +553,9 @@ impl MachineHandle {
             )?),
             None => None,
         };
-        let data_model = data_model.map(|mut data_model| {
-            data_model.share_session_time(shared.start_epoch_ms, std::sync::Arc::clone(&time));
-            data_model
+        let data_model = data_model.map(|mut model| {
+            shared.join(&mut model, &time);
+            model
         });
         let mut clock = crate::capability_graph::instantiate_clock_compiled(
             &core.engine,
@@ -775,9 +785,14 @@ pub(crate) fn settle(
     let step = match result {
         Err(error) => return Err(RunFailure::Host(error)),
         Ok(Err(failure)) => {
+            // A data-model trap reaches the machine as `platform`: name
+            // what ended the call instead of the engine's generic text.
+            let trap = (failure.error.code == ErrorCode::Platform)
+                .then(|| shared.data_model_trap.take())
+                .flatten();
             return Err(RunFailure::Machine {
                 code: crate::component::error_code_label(failure.error.code),
-                detail: failure.error.detail,
+                detail: trap.map(str::to_owned).or(failure.error.detail),
             });
         }
         Ok(Ok(step)) => step,

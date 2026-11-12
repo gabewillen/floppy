@@ -36,6 +36,17 @@ pub(crate) struct MeteredLimits {
     /// Whether `budget` is the store's own (it shares no call budget).
     own: bool,
     copied_bytes: u64,
+    /// The last growth this store refused, and why, until taken.
+    refused: Option<GrowthRefusal>,
+}
+
+/// Why a store refused a linear memory growth.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GrowthRefusal {
+    /// The memory would exceed the store's memory size.
+    MemorySize,
+    /// The call's copy allowance cannot hold the growth's copy.
+    CopyAllowance,
 }
 
 impl MeteredLimits {
@@ -47,6 +58,7 @@ impl MeteredLimits {
             budget,
             own: false,
             copied_bytes: 0,
+            refused: None,
         }
     }
 
@@ -91,6 +103,12 @@ impl MeteredLimits {
         &self.budget
     }
 
+    /// The last growth this store refused since the last call, and why
+    /// (cleared by the call).
+    pub(crate) const fn take_refusal(&mut self) -> Option<GrowthRefusal> {
+        self.refused.take()
+    }
+
     /// The bytes every growth of this store's memories copied so far.
     pub(crate) const fn copied_bytes(&self) -> u64 {
         self.copied_bytes
@@ -104,13 +122,20 @@ impl wasmtime::ResourceLimiter for MeteredLimits {
         desired: usize,
         maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        if !self.limits.memory_growing(current, desired, maximum)? {
+        // A store that traps on a refused growth answers with an error.
+        if !self
+            .limits
+            .memory_growing(current, desired, maximum)
+            .inspect_err(|_| self.refused = Some(GrowthRefusal::MemorySize))?
+        {
+            self.refused = Some(GrowthRefusal::MemorySize);
             return Ok(false);
         }
         if !self
             .budget
             .try_copy(u64::try_from(current).unwrap_or(u64::MAX))
         {
+            self.refused = Some(GrowthRefusal::CopyAllowance);
             return Err(wasmtime::Trap::OutOfFuel.into());
         }
         self.copied_bytes = self
