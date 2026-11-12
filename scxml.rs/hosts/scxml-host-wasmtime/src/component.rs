@@ -436,6 +436,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         event: Option<Event>,
     ) -> Result<bool, ComponentError> {
         if self.component_data_model().is_some() {
+        crate::data_model::debug_op("cond", &expression);
             return self.forward_data_model(|api, store| {
                 api.call_evaluate_condition(store, &expression, event.as_ref())
             });
@@ -455,6 +456,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         event: Option<Event>,
     ) -> Result<DataValue, ComponentError> {
         if self.component_data_model().is_some() {
+        crate::data_model::debug_op("value", &expression);
             return self.forward_data_model(|api, store| {
                 api.call_evaluate_value(store, &expression, event.as_ref())
             });
@@ -478,6 +480,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         context: Option<WitTraceContext>,
     ) -> Result<(), ComponentError> {
         if self.component_data_model().is_some() {
+        crate::data_model::debug_op("assign", &location);
             return self.forward_data_model(|api, store| {
                 api.call_assign(
                     store,
@@ -506,6 +509,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         event: Option<Event>,
     ) -> Result<(), ComponentError> {
         if self.component_data_model().is_some() {
+            crate::data_model::debug_op("script", &script);
             return self
                 .forward_data_model(|api, store| api.call_execute(store, &script, event.as_ref()));
         }
@@ -783,6 +787,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         location: String,
         event: Option<Event>,
     ) -> Result<DataValue, ComponentError> {
+        crate::data_model::debug_op("location", &location);
         self.forward_data_model(|api, store| {
             api.call_evaluate_location(store, &location, event.as_ref())
         })
@@ -794,6 +799,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         expression: String,
         event: Option<Event>,
     ) -> Result<Option<String>, ComponentError> {
+        crate::data_model::debug_op("text", &expression);
         self.forward_data_model(|api, store| {
             api.call_evaluate_text(store, &expression, event.as_ref())
         })
@@ -806,6 +812,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         event: Option<Event>,
     ) -> Result<String, ComponentError> {
         if self.component_data_model().is_some() {
+        crate::data_model::debug_op("log", &expression);
             return self.forward_data_model(|api, store| {
                 api.call_evaluate_log(store, &expression, event.as_ref())
             });
@@ -825,6 +832,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         location: bool,
         event: Option<Event>,
     ) -> Result<DataValue, ComponentError> {
+        crate::data_model::debug_op("form", &source);
         self.forward_data_model(|api, store| {
             api.call_evaluate_form_value(store, &source, location, event.as_ref())
         })
@@ -836,6 +844,7 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         expression: String,
         event: Option<Event>,
     ) -> Result<ForeachResult, ComponentError> {
+        crate::data_model::debug_op("foreach", &expression);
         self.forward_data_model(|api, store| {
             api.call_foreach_items(store, &expression, event.as_ref())
         })

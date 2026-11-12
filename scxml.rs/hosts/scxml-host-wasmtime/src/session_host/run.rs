@@ -562,6 +562,7 @@ impl MachineHandle {
         };
         let data_model = data_model.map(|mut model| {
             shared.join(&mut model, &time);
+            model.debug_label = Some(spec.session_id.clone());
             model
         });
         let mut clock = crate::capability_graph::instantiate_clock_compiled(

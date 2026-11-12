@@ -166,6 +166,9 @@ pub struct ComponentDataModel {
     lost: bool,
     /// Where a trap's cause is noted for the run that holds this data model.
     notes: Option<DataModelNotes>,
+    /// Diagnostic: the session this data model serves.
+    pub(crate) debug_label: Option<String>,
+    debug_noted: usize,
 }
 
 impl std::fmt::Debug for ComponentDataModel {
@@ -354,6 +357,8 @@ impl ComponentDataModel {
                 DEFAULT_DATA_MODEL_CALL_FUEL
             },
             last_call: crate::CallFuel::default(),
+            debug_label: None,
+            debug_noted: 0,
             lost: false,
             notes: None,
         })
@@ -418,6 +423,18 @@ impl ComponentDataModel {
         let limits = &mut self.store.data_mut().limits;
         if let Some(notes) = &self.notes {
             notes.note_memory(limits.memory_bytes());
+        }
+        if limits.memory_bytes() > self.debug_noted {
+            self.debug_noted = limits.memory_bytes();
+            if std::env::var_os("SCX_DEBUG_DATA_MODEL_MEMORY").is_some() {
+                eprintln!(
+                    "scx-debug data-model-memory session={} bytes={} call_fuel={:?} op={}",
+                    self.debug_label.as_deref().unwrap_or("?"),
+                    self.debug_noted,
+                    self.last_call,
+                    DEBUG_OP.with(|op| op.borrow().clone())
+                );
+            }
         }
         limits.take_refusal()
     }
@@ -620,6 +637,18 @@ impl MachineDataModel for ComponentDataModel {
     ) -> Result<String, DataModelFailure> {
         let event = event.map(wit_event);
         self.call(|api, store| api.call_evaluate_log(store, expression, event.as_ref()))
+    }
+}
+
+thread_local! {
+    static DEBUG_OP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// Diagnostic: names the data-model operation about to run.
+pub(crate) fn debug_op(kind: &str, text: &str) {
+    if std::env::var_os("SCX_DEBUG_DATA_MODEL_MEMORY").is_some() {
+        let cut: String = text.chars().take(160).collect();
+        DEBUG_OP.with(|op| *op.borrow_mut() = format!("{kind}:{}", cut.replace('\n', " ")));
     }
 }
 
