@@ -730,6 +730,14 @@ pub(crate) struct Session {
     event: Option<(Event, String, JsValue)>,
     random: RandomPosition,
     foreach: Vec<ForeachFrame>,
+    /// The linear memory size, in Wasm pages, after the last collection
+    /// [`collect_garbage`] ran.
+    #[cfg(target_arch = "wasm32")]
+    collected_pages: usize,
+    /// Whether `_event` was bound to a newly built value since the last
+    /// collection (the event it was bound to before is garbage).
+    #[cfg(target_arch = "wasm32")]
+    rebound: bool,
     context: Context,
 }
 
@@ -804,6 +812,10 @@ impl Session {
             event: None,
             random: RandomPosition::default(),
             foreach: Vec::new(),
+            #[cfg(target_arch = "wasm32")]
+            collected_pages: 0,
+            #[cfg(target_arch = "wasm32")]
+            rebound: false,
             context,
         })
     }
@@ -857,6 +869,10 @@ impl Session {
                             };
                             let value = self.guard_fresh(value)?;
                             self.event = Some((event.clone(), source, value.clone()));
+                            #[cfg(target_arch = "wasm32")]
+                            {
+                                self.rebound = true;
+                            }
                             value
                         }
                     }
@@ -1883,6 +1899,7 @@ fn run_in<T>(
     let session = slot.as_mut().ok_or(DataModelError::NotInitialized)?;
     begin_operation(answerer, session.random);
     let result = session.bind_event(event).and_then(|()| work(session));
+    collect_garbage(session);
     let (random, failed) = finish_operation();
     if let Some(random) = random {
         session.random = random;
@@ -1892,6 +1909,32 @@ fn run_in<T>(
         None => result,
     }
 }
+
+/// Collects the realm's garbage after an operation that bound `_event` to a
+/// new event, or whose linear memory grew since the last collection. Boa
+/// starts a collection by the bytes its own collector allocated, and a
+/// string's characters are not among them: a session whose events carry
+/// large strings (or whose scripts make them) left them, held by
+/// unreachable objects, until the memory reached the store's memory size
+/// and the session failed (`platform`), while the collector still saw
+/// little to collect. A new event makes the last one garbage, and growth is
+/// the memory pressure the store's bound sees, so collecting then keeps a
+/// long session's memory at what it holds: once per event, not per
+/// evaluation. Both follow the session's inputs, so a replay collects at the
+/// same operations.
+#[cfg(target_arch = "wasm32")]
+fn collect_garbage(session: &mut Session) {
+    if session.rebound || core::arch::wasm32::memory_size(0) > session.collected_pages {
+        boa_engine::gc::force_collect();
+        session.rebound = false;
+        session.collected_pages = core::arch::wasm32::memory_size(0);
+    }
+}
+
+/// A native realm's memory is the process's, which no store bounds: Boa's
+/// own collection trigger is left as it is.
+#[cfg(not(target_arch = "wasm32"))]
+const fn collect_garbage(_session: &mut Session) {}
 
 /// The realm owner of one data-model instance; see the module contract.
 #[derive(Default)]
