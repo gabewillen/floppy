@@ -25,9 +25,9 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `2cfec19fc15c8830f42171b5e1a64a7de300637fc870b2095f6f6c8a96d7fabb`,
+  `57138ac3a7cf4f42b520681de85cccbb2085c8095619cd1d081f4416acb22765`,
   and canonical artifact SHA-256
-  `e8082e669b27a14a1fc658cb1595f72c2e45c4f76fbd21d2c30f3509af55d24f`.
+  `31b5def36be3ee9efc887805151423db5371480e17d9bf9404c7f7692f179f5e`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
