@@ -38,6 +38,8 @@ pub(crate) struct MeteredLimits {
     copied_bytes: u64,
     /// The last growth this store refused, and why, until taken.
     refused: Option<GrowthRefusal>,
+    /// The size its memories last grew to, in bytes.
+    memory_bytes: usize,
 }
 
 /// Why a store refused a linear memory growth.
@@ -59,6 +61,7 @@ impl MeteredLimits {
             own: false,
             copied_bytes: 0,
             refused: None,
+            memory_bytes: 0,
         }
     }
 
@@ -109,6 +112,12 @@ impl MeteredLimits {
         self.refused.take()
     }
 
+    /// The largest size, in bytes, a memory of this store has grown to (a
+    /// data model's store has one memory: its size).
+    pub(crate) const fn memory_bytes(&self) -> usize {
+        self.memory_bytes
+    }
+
     /// The bytes every growth of this store's memories copied so far.
     pub(crate) const fn copied_bytes(&self) -> u64 {
         self.copied_bytes
@@ -141,6 +150,7 @@ impl wasmtime::ResourceLimiter for MeteredLimits {
         self.copied_bytes = self
             .copied_bytes
             .saturating_add(u64::try_from(current).unwrap_or(u64::MAX));
+        self.memory_bytes = self.memory_bytes.max(desired);
         Ok(true)
     }
 

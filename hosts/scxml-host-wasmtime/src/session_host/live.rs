@@ -247,6 +247,10 @@ pub struct LiveCallResult {
     pub next_deadline: Option<u64>,
     /// Engine commands the call charged.
     pub commands: u64,
+    /// The largest linear memory, in bytes, any data model of the run has
+    /// reached by the end of the call: how near the store's memory size
+    /// (`WasmtimeStoreConfig::memory_bytes`) a long session's data has grown.
+    pub data_model_memory_peak_bytes: u64,
 }
 
 /// One input of a live session, as recorded for replay. Times are the
@@ -730,6 +734,7 @@ impl LiveSession {
                     status: self.status,
                     next_deadline,
                     commands: self.engine.shared().step_commands(),
+                    data_model_memory_peak_bytes: self.engine.shared().data_model_memory_peak(),
                 })
             }
             Ok(Err(rejection)) => {
@@ -804,6 +809,13 @@ impl LiveSession {
     pub fn now_ms(&mut self) -> Result<u64, SessionHostError> {
         self.require_open()?;
         self.engine.now().map_err(|failure| self.fatal(failure))
+    }
+
+    /// The largest linear memory, in bytes, any data model of the session
+    /// has reached so far.
+    #[must_use]
+    pub fn data_model_memory_peak_bytes(&self) -> u64 {
+        self.engine.shared().data_model_memory_peak()
     }
 
     /// The earliest pending deadline across every session, in logical ms

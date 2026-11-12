@@ -165,7 +165,7 @@ pub struct ComponentDataModel {
     last_call: crate::CallFuel,
     lost: bool,
     /// Where a trap's cause is noted for the run that holds this data model.
-    trap_note: Option<TrapNote>,
+    notes: Option<DataModelNotes>,
 }
 
 impl std::fmt::Debug for ComponentDataModel {
@@ -355,7 +355,7 @@ impl ComponentDataModel {
             },
             last_call: crate::CallFuel::default(),
             lost: false,
-            trap_note: None,
+            notes: None,
         })
     }
 
@@ -405,11 +405,21 @@ impl ComponentDataModel {
             )
         });
         self.last_call = budget.spent().since(before);
-        let refusal = self.store.data_mut().limits.take_refusal();
+        let refusal = self.after_call();
         outcome.unwrap_or_else(|error| {
             let detail = self.lose(&error, refusal);
             Err(component_error(ErrorCode::Platform, detail))
         })
+    }
+
+    /// Ends one call: notes the data model's memory in the run's notes and
+    /// takes the growth the call's store refused, if any.
+    fn after_call(&mut self) -> Option<crate::memory_growth::GrowthRefusal> {
+        let limits = &mut self.store.data_mut().limits;
+        if let Some(notes) = &self.notes {
+            notes.note_memory(limits.memory_bytes());
+        }
+        limits.take_refusal()
     }
 
     /// Poisons the instance after a trap, noting and returning its cause.
@@ -420,8 +430,8 @@ impl ComponentDataModel {
     ) -> &'static str {
         self.lost = true;
         let detail = trap_detail(error, refusal);
-        if let Some(note) = &self.trap_note {
-            note.0.set(Some(detail));
+        if let Some(notes) = &self.notes {
+            notes.trap.set(Some(detail));
         }
         detail
     }
@@ -429,10 +439,10 @@ impl ComponentDataModel {
     /// Joins the run of the session this data model belongs to: answers
     /// `execution-host.now-ms` from that session's clock (its start epoch
     /// `epoch_ms`, Unix epoch ms, plus its logical time `time`), and notes
-    /// each later trap's cause in the run's `trap_note`, which the session's
+    /// each later trap's cause in the run's `notes`, which the session's
     /// `platform` failure then reports.
-    pub(crate) fn join_run(&mut self, epoch_ms: u64, time: SessionTime, trap_note: &TrapNote) {
-        self.trap_note = Some(trap_note.clone());
+    pub(crate) fn join_run(&mut self, epoch_ms: u64, time: SessionTime, notes: &DataModelNotes) {
+        self.notes = Some(notes.clone());
         let data = self.store.data_mut();
         data.session_epoch_ms = epoch_ms;
         data.session_time = time;
@@ -462,7 +472,7 @@ impl ComponentDataModel {
                 &mut self.store,
             )
         });
-        let refusal = self.store.data_mut().limits.take_refusal();
+        let refusal = self.after_call();
         outcome.unwrap_or_else(|error| {
             self.lose(&error, refusal);
             None
@@ -613,15 +623,30 @@ impl MachineDataModel for ComponentDataModel {
     }
 }
 
-/// Where the data models of one run note what ended a call that trapped
-/// (one session host run, which is single-threaded).
+/// What the data models of one run note for it (one session host run,
+/// which is single-threaded): what ended a call that trapped, and the
+/// largest linear memory any of them has reached.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct TrapNote(std::rc::Rc<std::cell::Cell<Option<&'static str>>>);
+pub(crate) struct DataModelNotes {
+    trap: std::rc::Rc<std::cell::Cell<Option<&'static str>>>,
+    memory_peak: std::rc::Rc<std::cell::Cell<u64>>,
+}
 
-impl TrapNote {
-    /// The last noted cause, cleared.
-    pub(crate) fn take(&self) -> Option<&'static str> {
-        self.0.take()
+impl DataModelNotes {
+    /// The last noted trap cause, cleared.
+    pub(crate) fn take_trap(&self) -> Option<&'static str> {
+        self.trap.take()
+    }
+
+    /// The largest linear memory, in bytes, any data model of the run has
+    /// reached.
+    pub(crate) fn memory_peak(&self) -> u64 {
+        self.memory_peak.get()
+    }
+
+    fn note_memory(&self, bytes: usize) {
+        let bytes = u64::try_from(bytes).unwrap_or(u64::MAX);
+        self.memory_peak.set(self.memory_peak.get().max(bytes));
     }
 }
 
