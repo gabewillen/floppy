@@ -97,8 +97,9 @@ pub(crate) struct RunShared {
     /// its run-unique id, while it is open.
     pub(crate) processor_owners: RefCell<BTreeMap<u64, (SessionKey, String)>>,
     /// What ended the last data-model call that trapped, until a machine
-    /// failure reports it: the machine itself only sees `platform`.
-    data_model_trap: crate::data_model::TrapNote,
+    /// failure reports it (the machine itself only sees `platform`), and
+    /// the largest data-model memory of the run.
+    data_models: crate::data_model::DataModelNotes,
 }
 
 /// One session's (or invoked service's) identity and completion.
@@ -273,14 +274,20 @@ impl RunShared {
             machines: RefCell::new(BTreeMap::new()),
             last_instance: std::cell::Cell::new(0),
             processor_owners: RefCell::new(BTreeMap::new()),
-            data_model_trap: crate::data_model::TrapNote::default(),
+            data_models: crate::data_model::DataModelNotes::default(),
         }
     }
 
     /// Joins a session's data model to this run: its clock reads the
     /// session's `time`, and its traps are noted for the session's failure.
     fn join(&self, model: &mut ComponentDataModel, time: &crate::data_model::SessionTime) {
-        model.join_run(self.start_epoch_ms, Arc::clone(time), &self.data_model_trap);
+        model.join_run(self.start_epoch_ms, Arc::clone(time), &self.data_models);
+    }
+
+    /// The largest linear memory, in bytes, any data model of the run has
+    /// reached.
+    pub(crate) fn data_model_memory_peak(&self) -> u64 {
+        self.data_models.memory_peak()
     }
 
     /// The next run-unique id of an invocation or processor instance.
@@ -788,7 +795,7 @@ pub(crate) fn settle(
             // A data-model trap reaches the machine as `platform`: name
             // what ended the call instead of the engine's generic text.
             let trap = (failure.error.code == ErrorCode::Platform)
-                .then(|| shared.data_model_trap.take())
+                .then(|| shared.data_models.take_trap())
                 .flatten();
             return Err(RunFailure::Machine {
                 code: crate::component::error_code_label(failure.error.code),
