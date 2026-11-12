@@ -433,8 +433,11 @@ class FloppyLearner(BaseLearner):
             if label == "communication.product" and not produced and text.endswith(":turn:gabe"):
                 produced = True
             elif label == "autonomy" and produced and turn is None:
-                match = re.match(r"turn (\d+):", text)
-                if match:
+                # A routine's tick, a lesson's result or a perception is a turn of its own
+                # that can start between the message and its turn: the message's turn is
+                # the first one autonomy names for a conversation's output.
+                match = re.match(r"turn (\d+): (?:.* for (\S+))?", text)
+                if match and match.group(2) in (None, "bot.ability.conversation.output"):
                     turn = int(match.group(1))
             elif label == "floppy.output":
                 words = reply_words(text) or []
@@ -447,12 +450,14 @@ class FloppyLearner(BaseLearner):
                 self.counts["lessons"] += 1
             elif label in LESSON_CLOSE:
                 open_lessons = max(0, open_lessons - 1)
-            elif label == "bot.ability.reflection.output":
-                settled = settled or (turn is not None and text.startswith(f"turn {turn}"))
+            elif label in ("bot.ability.reflection.output", "reflection.stored"):
+                # reflection.output is stamped with the turn in hand, which a routine's tick
+                # can have moved on; reflection.stored names the turn it reflected on.
+                settled = settled or (turn is not None and re.match(rf"turn {turn}\b", text) is not None)
             elif label in SETTLED:
                 # A failure settles whichever turn it ends; a reflection failure names no turn.
                 settled = settled or turn is not None or label != "cognition.reflection.failed"
-            if settled and open_lessons == 0 and label in SETTLED + LESSON_CLOSE:
+            if settled and open_lessons == 0 and label in SETTLED + LESSON_CLOSE + ("reflection.stored",):
                 # A lesson's result comes back as a turn of its own; its settling ends the wait.
                 break
         seconds = time.monotonic() - began
