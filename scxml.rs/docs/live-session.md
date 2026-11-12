@@ -313,10 +313,10 @@ scx run pong.scx \
 scx run ping.scx \
   --session-id b --http-listen 8402 --http-allow http://127.0.0.1:8401 < /dev/null
 {"type":"opened","session":"b","clock":"wall","ioprocessors":{"basichttp":{"location":"http://127.0.0.1:8402/sessions/b/basichttp"},…}}
-{"type":"call","cause":"start","at_ms":0,"status":"running","configuration":["waiting"],"next_deadline_ms":null,"commands":0}
+{"type":"call","cause":"start","at_ms":0,"status":"running","configuration":["waiting"],"next_deadline_ms":null,"commands":0,"data_model_memory_peak_bytes":0}
 {"type":"log","session":"b","label":"pong","text":"7"}
 {"type":"done"}
-{"type":"call","cause":"http","at_ms":252,"status":"finished","configuration":["done"],"next_deadline_ms":null,"commands":1}
+{"type":"call","cause":"http","at_ms":252,"status":"finished","configuration":["done"],"next_deadline_ms":null,"commands":1,"data_model_memory_peak_bytes":0}
 {"type":"closed","reason":"done","status":"finished","cancelled_sends":0,"cancelled_children":0}
 ```
 
@@ -353,7 +353,7 @@ delivered.
 | --- | --- |
 | `opened` | `session`, `clock`, `ioprocessors` (`{uri: {"location": …}}`) |
 | `log` | `session`, `parent` (children only), `label` (when present), `text` |
-| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`, `http-response`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands` |
+| `call` | `cause` (`start`, `event`, `timer`, `idle`, `http`, `communication-error`, `http-response`), `at_ms`, `status`, `configuration`, `next_deadline_ms`, `commands`, `data_model_memory_peak_bytes` (the largest linear memory any data model of the session has grown to: how near the store's 64 MiB memory size its data is) |
 | `snapshot` | `document`: the canonical snapshot document, embedded byte for byte |
 | `done` | the root reached a top-level final state; when that final state has `<donedata>`, its evaluated value as `data` (JSON kinds) or `xml` (SCXML 5.5: the processor "SHOULD return the data to the environment in an implementation-dependent manner") |
 | `error` | `code`, `message`, `fatal`, `line` (input errors) |

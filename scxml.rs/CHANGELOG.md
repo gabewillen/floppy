@@ -1446,6 +1446,12 @@ hard cutover.
 
 ### Fixed
 
+- Every `scx run` `call` record, and `LiveCallResult`, carries
+  `data_model_memory_peak_bytes`: the largest linear memory any data model
+  of the session has grown to. A long session's data grows toward the
+  store's 64 MiB memory size, and reaching it ends the session with
+  `platform`; this shows the approach call by call. Proven by
+  `each_call_reports_the_data_models_memory_peak`.
 - A session that fails with `platform` because its data model trapped now
   says why: the failure's detail (and the message `scx run` writes, which
   now carries the detail) names whether the call exhausted its fuel, its

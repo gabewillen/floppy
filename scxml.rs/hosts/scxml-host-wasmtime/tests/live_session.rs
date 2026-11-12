@@ -754,3 +754,38 @@ fn input_the_root_document_does_not_accept_is_rejected() {
     assert_eq!(step.status, LiveStatus::Finished);
     assert_eq!(log_labels(&live.take_outputs()), ["data"]);
 }
+
+/// Each call reports the largest memory any data model of the session has
+/// grown to, so an embedder sees a long session's data near the store's
+/// memory size before it is reached: data kept across events raises it,
+/// and it never falls.
+#[test]
+fn each_call_reports_the_data_models_memory_peak() {
+    let host = host();
+    let source = scxml(
+        "ecmascript",
+        r#"<datamodel><data id="kept" expr="[]"/></datamodel><state id="s0"><transition event="grow"><assign location="kept" expr="kept.concat((function () { var a = []; for (var i = 0; i &lt; 20000; i++) { a.push('kept ' + i + ' of the growing data'); } return a; })())"/><log label="kept" expr="kept.length"/></transition><transition event="drop"><assign location="kept" expr="[]"/></transition></state>"#,
+    );
+    let mut live = Opened::new(&source).open(&host, LiveClock::Logical, Recording::Off);
+    let mut peaks = Vec::new();
+    for _ in 0..4 {
+        peaks.push(
+            live.send(&ScriptedEvent::named("grow"))
+                .expect("grow")
+                .data_model_memory_peak_bytes,
+        );
+    }
+    let dropped = live
+        .send(&ScriptedEvent::named("drop"))
+        .expect("drop")
+        .data_model_memory_peak_bytes;
+    assert!(peaks[0] > 0, "{peaks:?}");
+    assert!(peaks.windows(2).all(|pair| pair[0] <= pair[1]), "{peaks:?}");
+    assert!(
+        peaks[3] > peaks[0],
+        "the kept data grew the memory: {peaks:?}"
+    );
+    assert_eq!(dropped, peaks[3], "a peak never falls");
+    assert_eq!(live.data_model_memory_peak_bytes(), peaks[3]);
+    live.close().expect("close");
+}
