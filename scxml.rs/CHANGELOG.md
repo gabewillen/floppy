@@ -1446,6 +1446,15 @@ hard cutover.
 
 ### Fixed
 
+- A session that fails with `platform` because its data model trapped now
+  says why: the failure's detail (and the message `scx run` writes, which
+  now carries the detail) names whether the call exhausted its fuel, its
+  memory growth copy allowance, or reached the store's memory size, or the
+  guest trapped (unreachable or a stack overflow). The machine only sees
+  `platform` from a trapped data model, so the session host notes the trap's
+  cause and reports it with the session's failure; before, every such
+  failure read `machine session failed: platform` with nothing more.
+  Proven by `a_data_model_out_of_memory_names_its_cause`.
 - A data-model call under the session host may spend the whole fuel of the
   host call it runs in. It was capped at `DEFAULT_DATA_MODEL_CALL_FUEL`
   (one billion) whatever `--fuel` said, so one ECMAScript expression that
