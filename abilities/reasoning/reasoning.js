@@ -39,7 +39,28 @@ function isSameFrame(given) {
   var frame = {focus: focus, focus_candidates: focus_candidates, choices: choices, held: held,
     environment: environment, self: self, acted: acted, recent: recent};
   return Object.keys(frame).every(function (key) {
-    return JSON.stringify(given[key]) === JSON.stringify(frame[key]);
+    return isSameJson(given[key], frame[key]);
+  });
+}
+
+// Whether two JSON values are the same: what JSON.stringify writes for
+// each, compared without writing it. A frame holds the conversation, so
+// writing both sides made strings the data model's collector does not
+// count, and one guard grew its memory by megabytes.
+function isSameJson(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  if (Array.isArray(a)) {
+    return a.length === b.length && a.every(function (each, i) { return isSameJson(each, b[i]); });
+  }
+  var keys = Object.keys(a);
+  var others = Object.keys(b);
+  return keys.length === others.length && keys.every(function (key, i) {
+    return key === others[i] && isSameJson(a[key], b[key]);
   });
 }
 
