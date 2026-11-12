@@ -118,6 +118,12 @@ function hasCounterexample() {
   return probing && typeof intent.counterexample === 'string' && intent.counterexample.length > 0 && intent.counterexample !== intent.example;
 }
 
+// Whether an untaught revision's intent names the reply its example must
+// get, which the builder's run on the example must give (decision D294).
+function hasAnswer() {
+  return probing && instruction === null && typeof intent.answer === 'string' && intent.answer.length > 0;
+}
+
 // The live turn the builder runs a turn behavior on (the live-turn
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
@@ -125,6 +131,9 @@ function liveTurn() {
   var live = {turn: turn, input: behavior_input, targets: turnTargets(), choices: turn_choices, handled: instruction === null || probing};
   if (hasCounterexample()) {
     live.decline = withMessage(intent.counterexample);
+  }
+  if (hasAnswer()) {
+    live.answer = intent.answer;
   }
   return live;
 }

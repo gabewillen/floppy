@@ -24,6 +24,7 @@
         "targets": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 32},
         "choices": {"type": "array", "items": {"type": "object", "properties": {"event": {"type": "string", "minLength": 1}, "schema": {}, "target": {"type": "string", "minLength": 1}}, "required": ["event", "schema"]}, "description": "The live turn's choices: each selection must be an event its target takes on that turn, with data its schema admits, as the dispatch is checked (decision D221)."},
         "handled": {"type": "boolean", "description": "Whether the run must handle the live turn (default true); false for a turn that taught the behavior, whose message is the lesson (decision D222)."},
+        "answer": {"type": "string", "minLength": 1, "description": "The reply the live run must say, its respond selections' words joined (white space folded): an untaught revision's answer to its example (decision D294)."},
         "decline": {"type": "object", "description": "A second input of the same turn the behavior must decline (handled false with no selections): a lesson's counterexample, beside a live input that is the lesson's example (decision D229), or an untaught revision's, beside this turn (decision D293)."}
       },
       "required": ["turn", "input", "targets"],

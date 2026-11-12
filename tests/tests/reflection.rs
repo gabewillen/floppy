@@ -263,6 +263,14 @@ fn selection(route: &str) -> Option<Json> {
             let mut create = create_selection();
             create[0]["data"]["example"] = json!("Knock knock.");
             create[0]["data"]["counterexample"] = json!("What time is it?");
+            create[0]["data"]["answer"] = json!("Hello!");
+            Some(create)
+        }
+        "wronganswer" => {
+            let mut create = create_selection();
+            create[0]["data"]["example"] = json!("Knock knock.");
+            create[0]["data"]["counterexample"] = json!("What time is it?");
+            create[0]["data"]["answer"] = json!("Who is there?");
             Some(create)
         }
         _ => None,
@@ -1829,4 +1837,27 @@ fn an_untaught_create_that_answers_by_default_is_refused_on_its_counterexample()
         "{contract}"
     );
     assert!(contract.contains("Knock knock."), "{contract}");
+}
+
+/// An untaught create names the answer its example must get, and the
+/// builder's run on the example must say it (decision D294): a draft that
+/// says anything else, such as asking for help, is abandoned with the
+/// refusal that names both replies.
+#[test]
+fn an_untaught_create_that_does_not_give_its_answer_is_refused() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "wronganswer", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &conversation_input(1));
+    drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].contains(
+            "turn behavior answered its example with \"Hello!\", but the reply it must give is \"Who is there?\""
+        ),
+        "{failed:?}"
+    );
+    let inventory = json_log(&records, "inventory");
+    assert_eq!(inventory[0]["status"], "DRAFT", "{inventory}");
 }

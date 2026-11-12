@@ -83,6 +83,23 @@
       ],
       "title": "Example"
     },
+    "answer": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a turn behavior learned without a lesson: the reply it must give to the example, word for word: the one the user asked for, or the one a verdict judged correct when the bot gave it. The behavior is run on the example before it is accepted and must give this reply. Null for a routine.",
+      "examples": [
+        "pong"
+      ],
+      "title": "Answer"
+    },
     "counterexample": {
       "anyOf": [
         {

@@ -53,7 +53,7 @@ function isOptionalBound(value) {
 
 // An absent live turn, or {turn, input, targets, choices?} as schemas/builder.request.json has it.
 function isOptionalApply(value) {
-  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets', 'choices', 'handled', 'decline'].indexOf(k) >= 0; }) && (value.handled === undefined || typeof value.handled === 'boolean') && (value.decline === undefined || (value.decline !== null && typeof value.decline === 'object' && !Array.isArray(value.decline))) && (value.choices === undefined || (Array.isArray(value.choices) && value.choices.every(function (c) { return c !== null && typeof c === 'object' && typeof c.event === 'string'; }))) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
+  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets', 'choices', 'handled', 'decline', 'answer'].indexOf(k) >= 0; }) && (value.handled === undefined || typeof value.handled === 'boolean') && (value.answer === undefined || (typeof value.answer === 'string' && value.answer.length > 0)) && (value.decline === undefined || (value.decline !== null && typeof value.decline === 'object' && !Array.isArray(value.decline))) && (value.choices === undefined || (Array.isArray(value.choices) && value.choices.every(function (c) { return c !== null && typeof c === 'object' && typeof c.event === 'string'; }))) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
 }
 
 // The request's live turn, else null (a turn behavior runs only its own tests).
@@ -235,7 +235,7 @@ function fileName() {
 // turn's turn, targets, choice events and handled.
 function requestLog() {
   return JSON.stringify({name: name, spec: spec, constraints: constraints, context: Object.keys(context || {}), min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms,
-    apply: live_turn === null ? null : {turn: live_turn.turn, targets: live_turn.targets, choices: (live_turn.choices || []).map(function (c) { return c.event; }), handled: live_turn.handled !== false, decline: live_turn.decline !== undefined}});
+    apply: live_turn === null ? null : {turn: live_turn.turn, targets: live_turn.targets, choices: (live_turn.choices || []).map(function (c) { return c.event; }), handled: live_turn.handled !== false, decline: live_turn.decline !== undefined, answer: live_turn.answer !== undefined}});
 }
 
 // One attempt's draft (decision D226): the attempt, its path, and each
@@ -616,7 +616,7 @@ function isLiveTurnChecked() {
 // The run on the live turn (sim_apply): expect_events [] admits any outputs, and
 // <behavior:verify_apply> judges its donedata.
 function liveTurnTest() {
-  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, choices: live_turn.choices === undefined ? null : live_turn.choices, handled: live_turn.handled !== false};
+  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, choices: live_turn.choices === undefined ? null : live_turn.choices, handled: live_turn.handled !== false, answer: live_turn.answer === undefined ? null : live_turn.answer};
 }
 
 // The live run, then, with the request's decline, a run on that input
@@ -626,7 +626,7 @@ function liveTurnTests() {
   if (live_turn.decline === undefined) {
     return [live];
   }
-  return [live, Object.assign({}, live, {name: 'declined turn', input: live_turn.decline, handled: false, decline: true})];
+  return [live, Object.assign({}, live, {name: 'declined turn', input: live_turn.decline, handled: false, decline: true, answer: null})];
 }
 
 // The 2 s verify timeout (decision D131), within the turn's silence bound when the request names it.
@@ -735,6 +735,30 @@ function declinedApply() {
   }
   var events = d.selected.map(function (s) { return s !== null && typeof s === 'object' ? String(s.event) : String(s); });
   return apply.concat(['turn behavior handled the input it must decline (its counterexample, a message it must not answer), selecting ' + events.join(', ') + ': it answers only the messages its rule describes and ends handled false with selected [] on every other turn, ignoring included.']);
+}
+
+// The words a live run's respond selections say, joined, with runs of white
+// space as one space.
+function spokenWords(d) {
+  var selected = d !== null && typeof d === 'object' && Array.isArray(d.selected) ? d.selected : [];
+  return selected.map(function (s) {
+    var parts = s !== null && typeof s === 'object' && s.data !== null && typeof s.data === 'object' && Array.isArray(s.data.parts) ? s.data.parts : [];
+    return parts.map(function (p) { return p !== null && typeof p === 'object' && typeof p.words === 'string' ? p.words : ''; }).join(' ');
+  }).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// A live run's messages and, when the request names the answer the run
+// must give and it gave another, why that is refused (decision D294).
+function answeredApply() {
+  var expected = currentTest().answer;
+  if (typeof expected !== 'string' || currentTest().decline === true) {
+    return apply;
+  }
+  var said = spokenWords(child_data);
+  if (said === expected.replace(/\s+/g, ' ').trim()) {
+    return apply;
+  }
+  return apply.concat(['turn behavior answered its example with "' + said.slice(0, 200) + '", but the reply it must give is "' + expected.slice(0, 200) + '": it computes that reply from the input, never asks, defers or gives up in its place, and declines a turn it cannot answer.']);
 }
 
 // done.invoke's donedata, which scxml.rs does not check; none is {}, which

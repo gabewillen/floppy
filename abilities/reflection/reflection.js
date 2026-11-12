@@ -203,12 +203,12 @@ function isMissingExample(_event) {
     return false;
   }
   return replySelections(_event).some(function (s) {
-    return isTurnRevision(s) && !(isText(s.data.example) && isText(s.data.counterexample) && s.data.example !== s.data.counterexample);
+    return isTurnRevision(s) && !(isText(s.data.example) && isText(s.data.counterexample) && isText(s.data.answer) && s.data.example !== s.data.counterexample);
   });
 }
 
 function missingExampleRejection() {
-  return ({key: 'missing-example', message: 'a create or change of a turn behavior needs example, one message it must answer, and counterexample, a different message it must not answer (for a behavior that answers one task, a message of another task): it is run on both, must answer the example and must decline the counterexample'});
+  return ({key: 'missing-example', message: 'a create or change of a turn behavior needs example, one message it must answer, answer, the reply it must give to the example (the one asked for, or one a verdict judged correct), and counterexample, a different message it must not answer (for a behavior that answers one task, a message of another task): it is run on both, must give the answer to the example and must decline the counterexample'});
 }
 
 function declinedChangeRejection() {

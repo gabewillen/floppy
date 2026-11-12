@@ -790,6 +790,7 @@
               input="testInput()" targets="testTargets()" error="applyError()"
               choices="testChoices()" handled="testHandled()"/>
           <assign location="apply" expr="declinedApply()"/>
+          <assign location="apply" expr="answeredApply()"/>
         </if>
         <assign location="sim_results" expr="nextSimResults()"/>
         <assign location="sim_index" expr="increment(sim_index)"/>
