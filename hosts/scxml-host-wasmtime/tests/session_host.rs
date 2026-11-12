@@ -931,6 +931,36 @@ fn a_data_model_call_still_runs_out_of_its_host_calls_fuel() {
     );
 }
 
+/// An `<assign>` that keeps growing a live array until the data model's
+/// memory reaches the store's memory size.
+const HUNGRY_ASSIGN: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s"><datamodel><data id="kept" expr="[]"/></datamodel><state id="s"><onentry><assign location="kept" expr="(function () { var a = []; for (var i = 0; i &lt; 20000000; i++) { a.push('kept ' + i + ' of a growing array'); } return a; })()"/></onentry></state></scxml>"#;
+
+/// A data-model call that traps because its memory reached the store's
+/// memory size fails the session with `platform`, and the failure names
+/// that cause instead of the engine's generic text.
+#[test]
+fn a_data_model_out_of_memory_names_its_cause() {
+    let fueled = host_with(&WasmtimeHostConfig {
+        store: WasmtimeStoreConfig {
+            fuel: 1_000_000_000_000,
+            ..WasmtimeStoreConfig::default()
+        },
+        ..WasmtimeHostConfig::default()
+    });
+    let error = run_with(&fueled, HUNGRY_ASSIGN, &[], Vec::new(), MAX_COMMANDS)
+        .expect_err("the array outgrows the data model's memory");
+    assert!(
+        matches!(
+            &error.failure,
+            RunFailure::Machine { code: "platform", detail: Some(detail) }
+                if detail.contains("memory size")
+        ),
+        "{:?}",
+        error.failure
+    );
+    assert!(error.to_string().contains("memory size"), "{error}");
+}
+
 /// States in the inline child of the copy allowance proof.
 const LARGE_CHILD_STATES: usize = 4_000;
 

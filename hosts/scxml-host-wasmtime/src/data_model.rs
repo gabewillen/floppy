@@ -164,6 +164,8 @@ pub struct ComponentDataModel {
     /// What the last call spent.
     last_call: crate::CallFuel,
     lost: bool,
+    /// Where a trap's cause is noted for the run that holds this data model.
+    trap_note: Option<TrapNote>,
 }
 
 impl std::fmt::Debug for ComponentDataModel {
@@ -353,6 +355,7 @@ impl ComponentDataModel {
             },
             last_call: crate::CallFuel::default(),
             lost: false,
+            trap_note: None,
         })
     }
 
@@ -402,19 +405,34 @@ impl ComponentDataModel {
             )
         });
         self.last_call = budget.spent().since(before);
-        outcome.unwrap_or_else(|_| {
-            self.lost = true;
-            Err(component_error(
-                ErrorCode::Platform,
-                "data-model component trapped or exhausted its fuel",
-            ))
+        let refusal = self.store.data_mut().limits.take_refusal();
+        outcome.unwrap_or_else(|error| {
+            let detail = self.lose(&error, refusal);
+            Err(component_error(ErrorCode::Platform, detail))
         })
     }
 
-    /// Answers `execution-host.now-ms` from the clock of the session this
-    /// data model belongs to: its start epoch `epoch_ms` (Unix epoch ms)
-    /// plus its logical time `time`.
-    pub(crate) fn share_session_time(&mut self, epoch_ms: u64, time: SessionTime) {
+    /// Poisons the instance after a trap, noting and returning its cause.
+    fn lose(
+        &mut self,
+        error: &wasmtime::Error,
+        refusal: Option<crate::memory_growth::GrowthRefusal>,
+    ) -> &'static str {
+        self.lost = true;
+        let detail = trap_detail(error, refusal);
+        if let Some(note) = &self.trap_note {
+            note.0.set(Some(detail));
+        }
+        detail
+    }
+
+    /// Joins the run of the session this data model belongs to: answers
+    /// `execution-host.now-ms` from that session's clock (its start epoch
+    /// `epoch_ms`, Unix epoch ms, plus its logical time `time`), and notes
+    /// each later trap's cause in the run's `trap_note`, which the session's
+    /// `platform` failure then reports.
+    pub(crate) fn join_run(&mut self, epoch_ms: u64, time: SessionTime, trap_note: &TrapNote) {
+        self.trap_note = Some(trap_note.clone());
         let data = self.store.data_mut();
         data.session_epoch_ms = epoch_ms;
         data.session_time = time;
@@ -444,8 +462,9 @@ impl ComponentDataModel {
                 &mut self.store,
             )
         });
-        outcome.unwrap_or_else(|_| {
-            self.lost = true;
+        let refusal = self.store.data_mut().limits.take_refusal();
+        outcome.unwrap_or_else(|error| {
+            self.lose(&error, refusal);
             None
         })
     }
@@ -591,6 +610,44 @@ impl MachineDataModel for ComponentDataModel {
     ) -> Result<String, DataModelFailure> {
         let event = event.map(wit_event);
         self.call(|api, store| api.call_evaluate_log(store, expression, event.as_ref()))
+    }
+}
+
+/// Where the data models of one run note what ended a call that trapped
+/// (one session host run, which is single-threaded).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TrapNote(std::rc::Rc<std::cell::Cell<Option<&'static str>>>);
+
+impl TrapNote {
+    /// The last noted cause, cleared.
+    pub(crate) fn take(&self) -> Option<&'static str> {
+        self.0.take()
+    }
+}
+
+/// The bounded detail of a data-model call that trapped: what ended it,
+/// so a run's failure names the cause (fuel, memory, or the guest itself).
+fn trap_detail(
+    error: &wasmtime::Error,
+    refusal: Option<crate::memory_growth::GrowthRefusal>,
+) -> &'static str {
+    use crate::memory_growth::GrowthRefusal;
+    match (error.downcast_ref::<wasmtime::Trap>(), refusal) {
+        (_, Some(GrowthRefusal::CopyAllowance)) => {
+            "data-model component exhausted its call's memory growth copy allowance"
+        }
+        (Some(wasmtime::Trap::OutOfFuel), _) => "data-model component exhausted its fuel",
+        (_, Some(GrowthRefusal::MemorySize)) => {
+            "data-model component trapped after its memory reached the store's memory size"
+        }
+        (Some(wasmtime::Trap::UnreachableCodeReached), None) => {
+            "data-model component trapped: unreachable (a guest panic or abort)"
+        }
+        (Some(wasmtime::Trap::StackOverflow), None) => {
+            "data-model component trapped: stack overflow"
+        }
+        (Some(_), None) => "data-model component trapped",
+        (None, None) => "data-model component call failed in the host",
     }
 }
 
