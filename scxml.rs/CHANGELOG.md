@@ -1446,6 +1446,17 @@ hard cutover.
 
 ### Fixed
 
+- A data-model call under the session host may spend the whole fuel of the
+  host call it runs in. It was capped at `DEFAULT_DATA_MODEL_CALL_FUEL`
+  (one billion) whatever `--fuel` said, so one ECMAScript expression that
+  ran longer (about 100,000 small allocations, or a few thousand regex
+  matches over a long string, in one `<assign>`) trapped out of fuel and
+  ended the whole run as `machine-platform`, even under
+  `--fuel 9223372036854775807`. The shared call budget still bounds it
+  (`a_data_model_call_may_spend_its_host_calls_whole_fuel` and
+  `a_data_model_call_still_runs_out_of_its_host_calls_fuel` in
+  hosts/scxml-host-wasmtime/tests/session_host.rs).
+
 - A live session's send whose processing trapped (out of fuel, for one)
   fails with that trap: the host asked the trapped root's status to
   classify the failure, and Wasmtime refuses to enter a trapped instance,

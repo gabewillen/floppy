@@ -18,6 +18,7 @@ COMPONENT_CRATES = (
     "scxml-extension-example",
     "scxml-ioprocessor-basichttp",
     "scxml-ioprocessor-scxml",
+    "scxml-ioprocessor-websocket",
     "scxml-machine",
     "scxml-package-validator-example",
     "scxml-reporter-rustc",

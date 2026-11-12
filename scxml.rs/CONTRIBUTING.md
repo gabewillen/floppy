@@ -310,7 +310,18 @@ for model in ecmascript xpath; do
 done
 # `scx snapshot run` end to end through the same release.
 SCXML_COMPONENTS_DIR="$RELEASE" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
-  cargo test --locked -p scxml-cli --features wasmtime --test snapshot_run --test live_run
+  cargo test --locked -p scxml-cli --features wasmtime --test snapshot_run
+# `scx run` live sessions, which also invoke the example and files services
+# and send through the WebSocket processor: live_run's own component list.
+LIVE="$CARGO_TARGET_DIR/wasm-artifacts/live-run"
+sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$LIVE" \
+  scxml_clock scxml_service_example scxml_service_files \
+  scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
+  scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_ioprocessor_websocket \
+  scxml_compiler scxml_machine
+SCXML_COMPONENTS_DIR="$LIVE" \
+  SCXML_COMPONENTS_MANIFEST_SHA256="$(sha256sum "$LIVE/manifest.tsv" | cut -d ' ' -f 1)" \
+  cargo test --locked -p scxml-cli --features wasmtime --test live_run
 ```
 
 On a system without `sha256sum` (older macOS), use
