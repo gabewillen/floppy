@@ -123,7 +123,11 @@ The Wasmtime session host bounds every host call with one fuel budget
 reaches: the machine and each data-model, I/O processor, clock, BasicHTTP,
 compiler, script, and child-machine call it makes are charged to the same budget
 (Wasmtime call hooks move the remaining fuel between stores), so one call never
-executes more instructions than that, deterministically. A session command is
+executes more instructions than that, deterministically. A data-model call has no
+smaller cap of its own under the session host: it may spend all the fuel its
+host call has left, so `scx run --fuel N` raises what one expression may run
+(`DEFAULT_DATA_MODEL_CALL_FUEL`, one billion, caps only a data model used
+outside a session host). A session command is
 one host call even when it defers `<invoke>` starts or cancels to the host's
 loop: the command, every child start, cancel, and continuation carried out for
 it, and the command's own continuation spend one budget, as the same work done

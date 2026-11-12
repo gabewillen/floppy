@@ -878,6 +878,59 @@ fn a_document_that_grows_memory_in_small_steps_runs_out_of_fuel() {
     );
 }
 
+/// An `<assign>` whose one expression allocates 150,000 small objects: in
+/// the ECMAScript component that is more Wasm than
+/// `DEFAULT_DATA_MODEL_CALL_FUEL` (one billion) allows one data-model call.
+const BUSY_ASSIGN: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s"><datamodel><data id="n" expr="0"/></datamodel><state id="s"><onentry><assign location="n" expr="(function () { var n = 0; for (var i = 0; i &lt; 150000; i++) { var o = {a: [i, i + 1], b: 'x' + i}; n += o.a.length; } return n; })()"/><log label="n" expr="n"/></onentry></state></scxml>"#;
+
+/// A data-model call may spend the whole fuel of the host call it runs in:
+/// with ten billion fuel, an expression that needs more than one billion
+/// (the data model's default per-call cap) finishes, where it used to trap
+/// out of fuel and end the session (`machine-platform`).
+#[test]
+fn a_data_model_call_may_spend_its_host_calls_whole_fuel() {
+    let fueled = host_with(&WasmtimeHostConfig {
+        store: WasmtimeStoreConfig {
+            fuel: 10_000_000_000,
+            ..WasmtimeStoreConfig::default()
+        },
+        ..WasmtimeHostConfig::default()
+    });
+    let outcome = run_with(&fueled, BUSY_ASSIGN, &[], Vec::new(), MAX_COMMANDS)
+        .expect("the expression runs within the host call's fuel");
+    assert_eq!(outcome.terminal, Terminal::Running);
+    let n = outcome
+        .root_logs
+        .iter()
+        .find(|log| log.label.as_deref() == Some("n"))
+        .expect("n is logged");
+    assert!(format!("{n:?}").contains("300000"), "{n:?}");
+}
+
+/// The host call's fuel still bounds a data-model call: with one billion,
+/// the same expression traps out of fuel.
+#[test]
+fn a_data_model_call_still_runs_out_of_its_host_calls_fuel() {
+    let starved = host_with(&WasmtimeHostConfig {
+        store: WasmtimeStoreConfig {
+            fuel: 1_000_000_000,
+            ..WasmtimeStoreConfig::default()
+        },
+        ..WasmtimeHostConfig::default()
+    });
+    let error = run_with(&starved, BUSY_ASSIGN, &[], Vec::new(), MAX_COMMANDS)
+        .expect_err("the expression exhausts the host call's fuel");
+    assert!(
+        matches!(
+            &error.failure,
+            RunFailure::Host(HostError::Wasmtime(trap))
+                if trap.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel)
+        ),
+        "{:?}",
+        error.failure
+    );
+}
+
 /// States in the inline child of the copy allowance proof.
 const LARGE_CHILD_STATES: usize = 4_000;
 

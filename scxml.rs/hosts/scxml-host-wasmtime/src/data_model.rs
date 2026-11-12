@@ -17,8 +17,9 @@
 //! * `initialize` and each later call run with a fresh instruction-fuel
 //!   budget ([`DEFAULT_DATA_MODEL_CALL_FUEL`] unless changed with
 //!   [`ComponentDataModel::with_call_fuel`]), so one call is bounded without
-//!   coupling unrelated calls. The ECMAScript provider creates one guarded
-//!   interpreter realm per instance, at `initialize`, and keeps it for the
+//!   coupling unrelated calls (a data model sharing a host call's budget,
+//!   as the session host's do, gets that call's whole fuel). The
+//!   ECMAScript provider creates one guarded interpreter realm per instance, at `initialize`, and keeps it for the
 //!   whole session (`components/scxml-data-model-ecmascript/src/session.rs`);
 //!   the fuel its workloads take is measured where [`crate::DEFAULT_FUEL`]
 //!   is sized. Under the session host this budget is only a per-call cap:
@@ -343,7 +344,13 @@ impl ComponentDataModel {
             store,
             bindings,
             name,
-            call_fuel: DEFAULT_DATA_MODEL_CALL_FUEL,
+            // Sharing a host call's budget (the session host), one call may
+            // spend that call's whole fuel, which the budget already bounds.
+            call_fuel: if call_budget.is_some() {
+                config.store.fuel
+            } else {
+                DEFAULT_DATA_MODEL_CALL_FUEL
+            },
             last_call: crate::CallFuel::default(),
             lost: false,
         })
