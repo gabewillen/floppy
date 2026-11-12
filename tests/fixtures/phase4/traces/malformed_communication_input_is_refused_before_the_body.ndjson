@@ -1,4 +1,4 @@
-{"code":"machine-invalid-input","fatal":false,"line":1,"message":"machine session failed: invalid-input","type":"error"}
+{"code":"machine-invalid-input","fatal":false,"line":1,"message":"machine session failed: invalid-input: the root document does not accept the event's data","type":"error"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
