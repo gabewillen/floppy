@@ -789,3 +789,41 @@ fn each_call_reports_the_data_models_memory_peak() {
     assert_eq!(live.data_model_memory_peak_bytes(), peaks[3]);
     live.close().expect("close");
 }
+
+/// A long session's events that carry large strings do not pile up in the
+/// ECMAScript data model's memory. Boa starts a collection by the bytes its
+/// own collector allocated, which a string's characters are not among, so
+/// each event's data, garbage once the next event is bound, used to stay
+/// until the memory reached the store's 64 MiB and the session failed with
+/// `platform` (about 0.2 MiB per event here, past 64 MiB by event 300).
+#[test]
+fn a_long_sessions_event_strings_are_collected() {
+    let host = host();
+    let source = scxml(
+        "ecmascript",
+        r#"<datamodel><data id="n" expr="0"/></datamodel><state id="s0"><transition event="work"><assign location="n" expr="n + _event.data.k"/></transition></state>"#,
+    );
+    let mut live = Opened::new(&source).open(&host, LiveClock::Logical, Recording::Off);
+    let text = "x".repeat(200_000);
+    let mut peak = 0;
+    for k in 0..300 {
+        let data = scxml_types::DataValue::canonical_json_object(&format!(
+            r#"{{"k":{},"text":"{text}"}}"#,
+            k % 2
+        ))
+        .expect("json");
+        peak = live
+            .send(&ScriptedEvent {
+                data,
+                ..ScriptedEvent::named("work")
+            })
+            .expect("work")
+            .data_model_memory_peak_bytes;
+    }
+    assert_eq!(live.status(), LiveStatus::Running);
+    assert!(
+        peak < 16 * 1024 * 1024,
+        "the data model's memory peaked at {peak} bytes"
+    );
+    live.close().expect("close");
+}

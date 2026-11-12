@@ -52,7 +52,7 @@ the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 31 / 31 | 16 | 0 | `14f2e7b643902c2a1ecec6792a6f6c2114ad457ca59db8daa1b6d99e0811f464` | `ed5a3cce0def72f72ff23adb37345d0c750a5d0448b0cf30a385b1f461cbb722` | `0fef5fbdfb97ca306254fe035f2a4b55ef482ad3640f020eb7df6370d465e32f` |
+| ECMAScript | 31 / 31 | 16 | 0 | `14f2e7b643902c2a1ecec6792a6f6c2114ad457ca59db8daa1b6d99e0811f464` | `ed5a3cce0def72f72ff23adb37345d0c750a5d0448b0cf30a385b1f461cbb722` | `14659d432662900f55844ba324b44d98a3b24c05f7ec5ed095ba2e668948b06b` |
 | XPath | 31 / 31 | 16 | 0 | `61a6243340c5699cfc62bd982740a125d33591eab5cf5ea95645fe3eed2ba920` | `7f676cca1776a9d3948acfa8f699d5bf988673379538927074b83da368b08215` | `8c0cac69c973ea3e1880a8639e2e5612b462aaa4d9df89a31c3617f8e08e3c54` |
 
 The report identity lists no extension component. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
